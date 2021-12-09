@@ -1,0 +1,8 @@
+[submodule "dep/libcoap"]
+	path = dep/libcoap
+	url = https://github.com/obgm/libcoap.git
+	branch = develop
+[submodule "libcoap-sys/dep/libcoap"]
+	path = libcoap-sys/dep/libcoap
+	url = https://github.com/obgm/libcoap.git
+	branch = develop

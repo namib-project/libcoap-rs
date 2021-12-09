@@ -1,0 +1,28 @@
+unstable_features = true
+
+edition = "2018"
+
+# Maximum width of each line
+max_width = 120
+
+# Use field initialize shorthand if possible.
+use_field_init_shorthand = true
+
+# Put a trailing comma after a block based match arm (non-block arms are not affected)
+match_block_trailing_comma = true
+
+# Error if unable to get all lines within max_width
+error_on_line_overflow = false
+
+# Merge multiple imports into a single nested import.
+imports_granularity = "Crate"
+
+reorder_imports = true
+
+group_imports = "StdExternalCrate"
+
+# Reorder impl items. type and const are put first, then macros and methods.
+reorder_impl_items = true
+
+# Determines if + or = are wrapped in spaces in the punctuation of types
+type_punctuation_density = "Compressed"

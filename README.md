@@ -1,17 +1,26 @@
 # libcoap-rs
 
-Raw binding and safe wrapper for the libcoap CoAP libary.
+Raw binding and safe wrapper for the [libcoap CoAP libary](https://github.com/obgm/libcoap).
 
 ## License
 
-Licensed under either of
+Except for the libcoap-sys crate contained in the libcoap-sys subdirectory of this repository, the content of this 
+repository is licensed under either of
 
+* 2-Clause BSD License
+  ([LICENSE-BSD-2-Clause](LICENSE-BSD-2-CLAUSE) or https://opensource.org/licenses/BSD-2-Clause)
 * Apache License, Version 2.0
   ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 * MIT license
   ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 
 at your option.
+
+The libcoap-sys binding is licensed under the 2-Clause/Simplified BSD License, matching the license of the libcoap C 
+library it is a binding to.
+Note that for the libcoap-sys binding and generated binaries, the license terms of the libcoap C library as well as 
+linked dependencies (e.g. TLS libraries) may apply.
+See https://github.com/obgm/libcoap/blob/develop/LICENSE for more information.
 
 ## Contribution
 

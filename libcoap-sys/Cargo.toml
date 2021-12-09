@@ -2,7 +2,54 @@
 name = "libcoap-sys"
 version = "0.1.0"
 edition = "2021"
+license = "BSD-2-CLAUSE"
+links = "coap-3"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+# The default features match those of libcoaps configure script, except for dtls, which is disabled here because it
+# requires a backend to be set manually.
+default = ["server", "client", "tcp", "async"]
+# While not specified here due to limitations in Cargo's syntax, the DTLS feature depends on one of the DTLS backends
+# being enabled.
+# If you are developing a library based on libcoap-sys and do not care about the DTLS backend, enable the dtls feature
+# and let the user decide on the backend to use, either by re-exporting these features (see
+# https://doc.rust-lang.org/cargo/reference/features.html#dependency-features) or by assuming that the user will use
+# libcoap-sys as a dependency and enable the corresponding backend feature themselves, relying on Cargo's feature
+# unification to enable it for your crate as well.
+# Also note that the backends are **mutually exclusive** due to the C library having these backends as mutually
+# exclusive features. If multiple backends are enabled (e.g. because multiple dependencies use libcoap-sys and use
+# different backends), we select one based on the auto-detection order specified in
+# https://github.com/obgm/libcoap/blob/develop/configure.ac#L494 (gnutls > openssl > mbedtls > tinydtls).
+dtls = []
+dtls_backend_openssl = ["openssl-sys"]
+dtls_backend_gnutls = ["gnutls-sys"]
+dtls_backend_mbedtls = ["mbedtls-sys-auto"]
+dtls_backend_tinydtls = []
+# Enabling this feature will force libcoap-sys to be built with and statically linked to a vendored version of libcoap,
+# which will be built by the build-script before building libcoap-sys.
+# This way, it is no longer required to have libcoap installed to use this crate.
+vendored = ["static"]
+# Enable this feature to use static linking to libcoap instead of dynamic linking.
+static = []
+# Enable this feature to support CoAP over TCP
+tcp = []
+# Enable this feature to enable async functionality in libcoap.
+# Note that this does not generate async-functions as they are used in Rust, just the necessary functions in the C
+# library to make asynchronous requests.
+async = []
+# Enable this feature for server functionality.
+server = []
+# Enable this feature for client functionality.
+client = []
+# Enable this feature to enable epoll usage in the C library.
+epoll = []
 
 [dependencies]
+gnutls-sys = {version = "0.1", optional = true}
+openssl-sys = {version = "0.9", optional = true}
+mbedtls-sys-auto = {version = "2.26", optional = true}
+
+[build-dependencies]
+bindgen = "0.59.2"
+pkg-config = "0.3.23"
+autotools = "0.2.3"
