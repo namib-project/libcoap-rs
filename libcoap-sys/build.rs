@@ -1,5 +1,7 @@
 use std::{env, path::PathBuf, process::Command};
 
+use bindgen::EnumVariation;
+
 #[derive(Debug)]
 enum DtlsBackend {
     GnuTls,
@@ -143,20 +145,34 @@ fn main() {
         let dst = build_config.build();
 
         // Add the built library to the search path
-        println!("cargo:rustc-link-search=native={}", dst.to_str().unwrap());
-
-        println!(
-            "cargo:rustc-link-lib=coap3-{}",
-            dtls_backend.map(|v| v.to_string()).unwrap_or("notls".to_string())
-        );
-
-        let bindings = bindgen_builder
-            .header("libcoap_wrapper.h")
-            .parse_callbacks(Box::new(bindgen::CargoCallbacks))
-            .generate()
-            .unwrap();
-
-        let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
-        bindings.write_to_file(out_path.join("bindings.rs")).unwrap();
+        println!("cargo:rustc-link-search=native={}/lib", dst.to_str().unwrap());
+        println!("cargo:include={}/include", dst.to_str().unwrap());
+        //bindgen_builder = bindgen_builder.detect_include_paths(false);
+        bindgen_builder = bindgen_builder.clang_arg(format!("-I\"{}/include\"", dst.to_str().unwrap()))
     }
+
+    println!(
+        "cargo:rustc-link-lib={}coap-3-{}",
+        cfg!(feature = "static").then(|| "static=").unwrap_or(""),
+        &dtls_backend
+            .as_ref()
+            .map(|v| v.to_string())
+            .unwrap_or("notls".to_string())
+    );
+
+    let bindings = bindgen_builder
+        .header("libcoap_wrapper.h")
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks))
+        .allowlist_function("coap_.*")
+        .allowlist_type("coap_.*")
+        .allowlist_var("coap_.*")
+        .allowlist_function("COAP_.*")
+        .allowlist_type("COAP_.*")
+        .allowlist_var("COAP_.*")
+        .default_enum_style(EnumVariation::Rust { non_exhaustive: true })
+        .dynamic_link_require_all(true);
+    let bindings = bindings.generate().unwrap();
+
+    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+    bindings.write_to_file(out_path.join("bindings.rs")).unwrap();
 }

@@ -31,6 +31,9 @@ dtls_backend_tinydtls = []
 vendored = ["static"]
 # Enable this feature to use static linking to libcoap instead of dynamic linking.
 static = []
+# --- FEATURE FLAGS ---
+# Note that setting the feature flags currently has no effect on the generated Rust code, because the libcoap headers do
+# not use these feature flags. They only affect the features built into the vendored C library (if enabled).
 # Enable this feature to support CoAP over TCP
 tcp = []
 # Enable this feature to enable async functionality in libcoap.
