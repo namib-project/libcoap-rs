@@ -160,7 +160,7 @@ fn main() {
             .unwrap_or("notls".to_string())
     );
 
-    let bindings = bindgen_builder
+    bindgen_builder = bindgen_builder
         .header("libcoap_wrapper.h")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
         .allowlist_function("coap_.*")
@@ -170,8 +170,9 @@ fn main() {
         .allowlist_type("COAP_.*")
         .allowlist_var("COAP_.*")
         .default_enum_style(EnumVariation::Rust { non_exhaustive: true })
+        .rustfmt_bindings(false)
         .dynamic_link_require_all(true);
-    let bindings = bindings.generate().unwrap();
+    let bindings = bindgen_builder.generate().unwrap();
 
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     bindings.write_to_file(out_path.join("bindings.rs")).unwrap();
