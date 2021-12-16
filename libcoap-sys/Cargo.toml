@@ -51,6 +51,7 @@ epoll = []
 gnutls-sys = {version = "0.1", optional = true}
 openssl-sys = {version = "0.9", optional = true}
 mbedtls-sys-auto = {version = "2.26", optional = true}
+libc = "0.2.109"
 
 [build-dependencies]
 bindgen = "0.59.2"

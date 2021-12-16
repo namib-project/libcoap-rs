@@ -171,7 +171,23 @@ fn main() {
         .allowlist_var("COAP_.*")
         .default_enum_style(EnumVariation::Rust { non_exhaustive: true })
         .rustfmt_bindings(false)
-        .dynamic_link_require_all(true);
+        .dynamic_link_require_all(true)
+        // We use the definitions made by the libc crate instead
+        .blocklist_type("sockaddr(_in|_in6)?")
+        .blocklist_type("in6?_(addr|port)(_t)?")
+        .blocklist_type("epoll_event")
+        .blocklist_type("in6_addr__bindgen_ty_1")
+        .blocklist_type("(__)?socklen_t")
+        .blocklist_type("fd_set")
+        .blocklist_type("sa_family_t")
+        .blocklist_type("(__)?time_t")
+        .blocklist_type("__fd_mask")
+        // Are generated because they are typedef-ed inside of the C headers, blocklisting them
+        // will instead replace them with the appropriate rust types.
+        // See https://github.com/rust-lang/rust-bindgen/issues/1215 for an open issue concerning
+        // this problem.
+        .blocklist_type("__(u)?int(8|16|32|64|128)_t")
+        .size_t_is_usize(true);
     let bindings = bindgen_builder.generate().unwrap();
 
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
