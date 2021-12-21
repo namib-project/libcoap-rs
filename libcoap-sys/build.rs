@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-2-CLAUSE
 use std::{
     env,
     path::{Path, PathBuf},

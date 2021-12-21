@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: BSD-2-Clause
+# SPDX-License-Identifier: BSD-2-CLAUSE
 
 [package]
 name = "libcoap-sys"
@@ -51,11 +51,11 @@ client = []
 epoll = []
 
 [dependencies]
-gnutls-sys = {version = "0.1", optional = true}
-openssl-sys = {version = "0.9", optional = true}
-mbedtls-sys-auto = {version = "2.26", optional = true}
+gnutls-sys = {version = "^0.1", optional = true}
+openssl-sys = {version = "^0.9", optional = true}
+mbedtls-sys-auto = {version = "^2.26", optional = true}
 libc = "^0.2"
-tinydtls-sys = {version = "0.1.0-alpha.1", optional = true, path = "../../tinydtls-rs/tinydtls-sys"}
+tinydtls-sys = {version = "0.1.0-alpha.1", optional = true, git = "ssh://git@gitlab.informatik.uni-bremen.de/namib-master/libraries/tinydtls-rs.git", branch="raw_bindings"}
 
 [build-dependencies]
 bindgen = "0.59.2"

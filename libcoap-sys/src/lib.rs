@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-2-CLAUSE
 //! Auto-generated unsafe bindings to [libcoap](https://github.com/obgm/libcoap), generated using
 //! [bindgen](https://crates.io/crates/bindgen).
 //!
