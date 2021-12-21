@@ -2,8 +2,7 @@
 #![allow(clippy::all)]
 #![allow(non_camel_case_types)]
 
-// Used in coap_address_t
-use libc::{epoll_event, fd_set, in_addr_t, sockaddr, sockaddr_in, sockaddr_in6, socklen_t, time_t};
+use libc::{epoll_event, fd_set, sockaddr, sockaddr_in, sockaddr_in6, socklen_t, time_t};
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 

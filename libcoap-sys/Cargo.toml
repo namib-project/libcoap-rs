@@ -1,14 +1,17 @@
+# SPDX-License-Identifier: BSD-2-Clause
+
 [package]
 name = "libcoap-sys"
-version = "0.1.0"
+version = "0.1.0+libcoap4.3.0"
 edition = "2021"
-license = "BSD-2-CLAUSE"
+license = "BSD-2-CLAUSE AND BSD-1-CLAUSE"
 links = "coap-3"
+exclude = ["src/libcoap/ext/"]
 
 [features]
 # The default features match those of libcoaps configure script, except for dtls, which is disabled here because it
 # requires a backend to be set manually.
-default = ["server", "client", "tcp", "async"]
+default = ["server", "client", "tcp", "async", "epoll"]
 # While not specified here due to limitations in Cargo's syntax, the DTLS feature depends on one of the DTLS backends
 # being enabled.
 # If you are developing a library based on libcoap-sys and do not care about the DTLS backend, enable the dtls feature
@@ -24,8 +27,8 @@ dtls = []
 dtls_backend_openssl = ["openssl-sys"]
 dtls_backend_gnutls = ["gnutls-sys"]
 dtls_backend_mbedtls = ["mbedtls-sys-auto"]
-dtls_backend_tinydtls = []
-# Enabling this feature will force libcoap-sys to be built with and statically linked to a vendored version of libcoap,
+dtls_backend_tinydtls = ["tinydtls-sys"]
+# Enabling this feature will force libcoap-sys to be built  with and statically linked to a vendored version of libcoap,
 # which will be built by the build-script before building libcoap-sys.
 # This way, it is no longer required to have libcoap installed to use this crate.
 vendored = ["static"]
@@ -51,9 +54,9 @@ epoll = []
 gnutls-sys = {version = "0.1", optional = true}
 openssl-sys = {version = "0.9", optional = true}
 mbedtls-sys-auto = {version = "2.26", optional = true}
-libc = "0.2.109"
+libc = "^0.2"
+tinydtls-sys = {version = "0.1.0-alpha.1", optional = true, path = "../../tinydtls-rs/tinydtls-sys"}
 
 [build-dependencies]
 bindgen = "0.59.2"
-pkg-config = "0.3.23"
 autotools = "0.2.3"

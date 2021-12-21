@@ -1,15 +1,18 @@
-use std::{env, path::PathBuf, process::Command};
+use std::{
+    env,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 use bindgen::EnumVariation;
 
-#[derive(Debug)]
-enum DtlsBackend {
+#[derive(Debug, PartialEq, Eq)]
+pub enum DtlsBackend {
     GnuTls,
     OpenSsl,
     MbedTls,
     TinyDtls,
 }
-
 impl ToString for DtlsBackend {
     fn to_string(&self) -> String {
         match self {
@@ -69,7 +72,6 @@ fn main() {
     // Build vendored library if feature was set.
     if cfg!(feature = "vendored") {
         // Read required environment variables.
-        let pkg_dir = std::env::var_os("CARGO_MANIFEST_DIR").unwrap();
         let out_dir = std::env::var_os("OUT_DIR").unwrap();
         // Read Makeflags into vector of strings
         let make_flags = std::env::var_os("CARGO_MAKEFLAGS")
@@ -80,14 +82,45 @@ fn main() {
             .map(String::from)
             .collect();
         // Run autogen to create configure-script and Makefile
-        //Command::new("./dep/libcoap/autogen.sh")
-        //    .arg("--clean")
-        //    .status()
-        //    .unwrap();
-        Command::new("./dep/libcoap/autogen.sh").status().unwrap();
-        // Run build for libcoap.
-        let mut build_config = autotools::Config::new("./dep/libcoap");
+        let libcoap_src_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join("libcoap");
+        Command::new(libcoap_src_dir.join("autogen.sh")).status().unwrap();
 
+        let mut build_config = autotools::Config::new(libcoap_src_dir);
+        build_config.out_dir(out_dir);
+        if let Some(dtls_backend) = dtls_backend.as_ref() {
+            build_config
+                .enable("dtls", None)
+                .with(dtls_backend.to_string().as_str(), None);
+
+            if dtls_backend == &DtlsBackend::TinyDtls {
+                // We do not ship tinydtls with our source distribution. Instead, we use tinydtls-sys.
+                build_config.with("system-tinydtls", None);
+                // If tinydtls-sys is built with the vendored feature, the library is built alongside
+                // the Rust crate. To use the version built by the tinydtls-sys build script, we use the
+                // environment variables set by the build script.
+                if let Some(tinydtls_libs) = env::var_os("DEP_TINYDTLS_LIBS") {
+                    build_config.env(
+                        "TinyDTLS_LIBS",
+                        format!("-L{} -l:libtinydtls.a", tinydtls_libs.to_str().unwrap(),),
+                    );
+                }
+                if let Some(tinydtls_include) = env::var_os("DEP_TINYDTLS_INCLUDE") {
+                    build_config.env(
+                        "TinyDTLS_CFLAGS",
+                        format!(
+                            "-I{} -I{}",
+                            tinydtls_include.to_str().unwrap(),
+                            Path::new(tinydtls_include.to_str().unwrap())
+                                .join("tinydtls")
+                                .to_str()
+                                .unwrap()
+                        ),
+                    );
+                }
+            }
+        } else {
+            build_config.disable("dtls", None);
+        }
         build_config
             // Set Makeflags
             .make_args(make_flags)
@@ -106,6 +139,14 @@ fn main() {
             .disable("examples", None)
             .disable("gcov", None);
 
+        // Enable debug symbols if enabled in Rust
+        match std::env::var_os("DEBUG").unwrap().to_str().unwrap() {
+            "0" | "false" => {},
+            _ => {
+                build_config.with("debug", None);
+            },
+        }
+
         // Enable dependency features based on selected cargo features.
         build_config
             .enable("async", Some(if cfg!(feature = "async") { "yes" } else { "no" }))
@@ -114,40 +155,12 @@ fn main() {
             .enable("client-mode", Some(if cfg!(feature = "client") { "yes" } else { "no" }))
             .with("epoll", Some(if cfg!(feature = "epoll") { "yes" } else { "no" }));
 
-        if cfg!(feature = "dtls") {
-            build_config.enable("dtls", None);
-            match &dtls_backend {
-                // If the dtls feature is enabled we have already checked whether a backend was set.
-                None => unreachable!(),
-                Some(be) => build_config.with(be.to_string().as_str(), None),
-            };
-            // TinyDTLS does not like being built out-of-source, while libcoap doesn't like
-            // installing its headers into the source directory (which would be the case for
-            // in-source builds). Therefore, we apply this really ugly workaround.
-            if let Some(DtlsBackend::TinyDtls) = dtls_backend {
-                Command::new("mkdir")
-                    .arg("-p")
-                    .arg(format!("{}/build/ext", out_dir.to_str().unwrap()))
-                    .status()
-                    .unwrap();
-                Command::new("ln")
-                    .arg("-s")
-                    .arg("--force")
-                    .arg(format!("{}/dep/libcoap/ext/tinydtls", pkg_dir.to_str().unwrap()))
-                    .arg(format!("{}/build/ext/tinydtls", out_dir.to_str().unwrap()))
-                    .status()
-                    .unwrap();
-            }
-        } else {
-            build_config.disable("dtls", None);
-        }
         // Run build
         let dst = build_config.build();
 
         // Add the built library to the search path
         println!("cargo:rustc-link-search=native={}/lib", dst.to_str().unwrap());
         println!("cargo:include={}/include", dst.to_str().unwrap());
-        //bindgen_builder = bindgen_builder.detect_include_paths(false);
         bindgen_builder = bindgen_builder.clang_arg(format!("-I\"{}/include\"", dst.to_str().unwrap()))
     }
 
@@ -161,17 +174,17 @@ fn main() {
     );
 
     bindgen_builder = bindgen_builder
-        .header("libcoap_wrapper.h")
+        .header("src/wrapper.h")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
+        .default_enum_style(EnumVariation::Rust { non_exhaustive: true })
+        .rustfmt_bindings(false)
+        .dynamic_link_require_all(true)
         .allowlist_function("coap_.*")
         .allowlist_type("coap_.*")
         .allowlist_var("coap_.*")
         .allowlist_function("COAP_.*")
         .allowlist_type("COAP_.*")
         .allowlist_var("COAP_.*")
-        .default_enum_style(EnumVariation::Rust { non_exhaustive: true })
-        .rustfmt_bindings(false)
-        .dynamic_link_require_all(true)
         // We use the definitions made by the libc crate instead
         .blocklist_type("sockaddr(_in|_in6)?")
         .blocklist_type("in6?_(addr|port)(_t)?")
