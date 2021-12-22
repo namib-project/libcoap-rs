@@ -1,4 +1,9 @@
 // SPDX-License-Identifier: BSD-2-CLAUSE
+/*
+ * lib.rs - Main library entry point for raw libcoap bindings.
+ * Copyright (c) 2021 The NAMIB Project Developers, all rights reserved.
+ * See the README as well as the LICENSE file for more information.
+ */
 //! Auto-generated unsafe bindings to [libcoap](https://github.com/obgm/libcoap), generated using
 //! [bindgen](https://crates.io/crates/bindgen).
 //!
@@ -7,7 +12,7 @@
 //! to use them, refer to the [libcoap documentation](https://libcoap.net/documentation.html).
 //!
 //! In most cases you probably want to use the safe wrapper provided by the libcoap crate (or
-//! another coap library written in pure rust like [coap-rs](https://github.com/covertness/coap-rs)
+//! another coap library written in pure rust such as [coap-rs](https://github.com/covertness/coap-rs))
 //! instead.
 //!
 //! Cargo Features
@@ -37,34 +42,33 @@
 //!   - `dtls_backend_(openssl|gnutls|mbedtls|tinydtls)`: Enable the corresponding DTLS backend.
 //!      
 //!      Note that enabling the OpenSSL, GnuTLS, TinyDTLS or MbedTLS backend will also require the
-//!      appropiate library to be available (hence the dependency on the corresponding sys-crate).
+//!      appropriate library to be available (hence the dependency on the corresponding sys-crate).
 //!      The TinyDTLS backend is built using a vendored (and statically linked) version of TinyDTLS
 //!      by default, see the tinydtls-sys crate for more info.
 //!      Choosing a DTLS backend also means that the license terms of these libraries may apply to
 //!      you. See the relevant parts of the [libcoap license file](https://github.com/obgm/libcoap/blob/develop/LICENSE)
 //!      for more information.
-//! - `tcp`: Enable CoAP over TCP support
-//! - `async`: Enable async functionality.
+//! - `tcp` (default): Enable CoAP over TCP support
+//! - `async` (default): Enable async functionality.
 //!   
-//!   Note that this async functionality is not translated to Rusts async language functionality,
+//!   Note that this async functionality is not translated to Rust's async language functionality,
 //!   but instead adds functionality to the underlying C library to allow for making asynchronous
 //!   requests (i.e. function calls that return before the response has arrived).
 //!
 //!   Integrating libcoap into Rusts async language features is out of scope for this crate, but
-//!   might be implemented in the libcoap (safe abstraction) crate.
-//! - `server`: Enable code related to server functionality
-//! - `client`: Enable code related to client functionality
-//! - `epoll`: Allow the underlying C library to perform IO operations using epoll.
+//!   might be implemented later on in the libcoap (safe abstraction) crate.
+//! - `server` (default): Enable code related to server functionality
+//! - `client` (default): Enable code related to client functionality
+//! - `epoll` (default): Allow the underlying C library to perform IO operations using epoll.
 //!
 //! Other features:
-//! - `vendored`: Use a vendored version of libcoap instead of the system-provided one
+//! - `vendored` (default): Use a vendored version of libcoap instead of the system-provided one.
 //!   Note that `vendored` implies `static`.
-//! - `static`: Perform static linking to the libcoap C library.
+//! - `static` (default): Perform static linking to the libcoap C library.
 //!
 //! ### Note on features affecting functionality
-//! The features that add or remove functionality currently do not change the generated bindings
-//! as libcoap's headers (unlike the source files themselves are not affected by the corresponding
-//! `#define`s.
+//! The features that add or remove functionality do not change the generated bindings as libcoap's
+//! headers (unlike the source files themselves) are not affected by the corresponding `#define`s.
 //!
 //! For library users that link to a shared version of libcoap, this means that the feature flags
 //! do not have any effect and the supported features will correspond directly to the features
@@ -72,10 +76,6 @@
 //!
 //! For users of the vendored version of libcoap (see the `vendored` feature), the supported
 //! features of the vendored libcoap will be set to match the cargo features during build.
-//!
-//! However, in both cases, the generated bindings will always assume all features to be present,
-//! which will cause a linking error if a function is used that is not included in the linked
-//! version of libcoap.
 
 // Bindgen translates the C headers, clippy's and rustfmt's recommendations are not applicable here.
 #![allow(clippy::all)]
@@ -83,6 +83,9 @@
 
 use libc::{epoll_event, fd_set, sockaddr, sockaddr_in, sockaddr_in6, socklen_t, time_t};
 
+#[cfg(target_family = "windows")]
+include!(concat!(env!("OUT_DIR"), "\\bindings.rs"));
+#[cfg(not(target_family = "windows"))]
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 #[cfg(test)]
@@ -91,6 +94,7 @@ mod tests {
     /// Test case that creates a basic coap server and makes a request to it from a separate context
     #[test]
     fn test_coap_client_server_basic() {
+        // TODO test cases
         //let server_addr = coap_new_server_address();
         //let server_ctx = coap_new_context();
     }

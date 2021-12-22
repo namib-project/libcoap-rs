@@ -1,4 +1,10 @@
 // SPDX-License-Identifier: BSD-2-CLAUSE
+/*
+ * build.rs - build script for libcoap Rust bindings.
+ * Copyright (c) 2021 The NAMIB Project Developers, all rights reserved.
+ * See the README as well as the LICENSE file for more information.
+ */
+
 use std::{
     env,
     path::{Path, PathBuf},
@@ -27,8 +33,8 @@ impl ToString for DtlsBackend {
 }
 
 fn main() {
-    println!("cargo:rerun-if-changed=dep/");
-    println!("cargo:rerun-if-changed=libcoap_wrapper.h");
+    println!("cargo:rerun-if-changed=src/libcoap/");
+    println!("cargo:rerun-if-changed=src/wrapper.h");
     let mut bindgen_builder = bindgen::Builder::default();
 
     let mut dtls_backend = Option::None;
@@ -82,8 +88,20 @@ fn main() {
             .split(" ")
             .map(String::from)
             .collect();
-        // Run autogen to create configure-script and Makefile
-        let libcoap_src_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join("libcoap");
+
+        // Even though libcoap supports out-of-source builds, autogen.sh (or the corresponding
+        // autotools) modify files in the source tree, which causes verification problems when
+        // running cargo package.
+        // Therefore, we copy the libcoap source over to the output directory and build from there.
+        let mut copy_options = fs_extra::dir::CopyOptions::default();
+        copy_options.overwrite = true;
+        fs_extra::dir::copy(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join("libcoap"),
+            Path::new(&out_dir),
+            &copy_options,
+        )
+        .unwrap();
+        let libcoap_src_dir = Path::new(&out_dir).join("libcoap");
         Command::new(libcoap_src_dir.join("autogen.sh")).status().unwrap();
 
         let mut build_config = autotools::Config::new(libcoap_src_dir);

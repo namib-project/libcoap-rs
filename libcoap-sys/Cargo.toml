@@ -2,16 +2,22 @@
 
 [package]
 name = "libcoap-sys"
+description = "Raw bindings to the libcoap CoAP library."
 version = "0.1.0+libcoap4.3.0"
 edition = "2021"
 license = "BSD-2-CLAUSE AND BSD-1-CLAUSE"
 links = "coap-3"
+readme = "README.md"
+homepage = "https://namib.me/"
+authors = ["Hugo Hakim Damer <hdamer@uni-bremen.de>"]
+categories = ["external-ffi-bindings", "network-progrmaming", "embedded"]
+keywords = ["coap", "libcoap"]
 exclude = ["src/libcoap/ext/"]
 
 [features]
 # The default features match those of libcoaps configure script, except for dtls, which is disabled here because it
 # requires a backend to be set manually.
-default = ["server", "client", "tcp", "async", "epoll"]
+default = ["server", "client", "tcp", "async", "epoll", "vendored", "static"]
 # While not specified here due to limitations in Cargo's syntax, the DTLS feature depends on one of the DTLS backends
 # being enabled.
 # If you are developing a library based on libcoap-sys and do not care about the DTLS backend, enable the dtls feature
@@ -28,7 +34,7 @@ dtls_backend_openssl = ["openssl-sys"]
 dtls_backend_gnutls = ["gnutls-sys"]
 dtls_backend_mbedtls = ["mbedtls-sys-auto"]
 dtls_backend_tinydtls = ["tinydtls-sys"]
-# Enabling this feature will force libcoap-sys to be built  with and statically linked to a vendored version of libcoap,
+# Enabling this feature will force libcoap-sys to be built with and statically linked to a vendored version of libcoap,
 # which will be built by the build-script before building libcoap-sys.
 # This way, it is no longer required to have libcoap installed to use this crate.
 vendored = ["static"]
@@ -60,3 +66,4 @@ tinydtls-sys = {version = "0.1.0-alpha.1", optional = true, git = "ssh://git@git
 [build-dependencies]
 bindgen = "0.59.2"
 autotools = "0.2.3"
+fs_extra = "1.2.0"
