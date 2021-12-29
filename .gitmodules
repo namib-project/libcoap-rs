@@ -1,0 +1,4 @@
+[submodule "libcoap"]
+	path = libcoap-sys/src/libcoap
+	url = https://github.com/namib-project/libcoap.git
+	branch = develop

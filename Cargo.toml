@@ -1,6 +1,6 @@
+# SPDX-License-Identifier: EPL-1.0 OR BSD-3-CLAUSE
 [workspace]
-
 members = [
     "libcoap",
-    "libcoap-sys"
+    "libcoap-sys",
 ]
