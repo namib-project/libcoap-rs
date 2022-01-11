@@ -1,10 +1,10 @@
 # libcoap-rs
 
-Raw binding and safe wrapper for the [libcoap CoAP libary](https://github.com/obgm/libcoap).
+Idiomatic wrapper around the [libcoap CoAP libary](https://github.com/obgm/libcoap) for Rust.
 
 ## License
 
-Matching the license of the libcoap C library, the libcoap-sys and the libcoap crates are licensed under the 
+Matching the license of the libcoap C library, the libcoap crate is licensed under the 
 2-Clause/Simplified BSD License ([LICENSE-BSD-2-Clause](LICENSE-BSD-2-CLAUSE) or https://opensource.org/licenses/BSD-2-Clause).
 
 ### Note on Third-Party-Code

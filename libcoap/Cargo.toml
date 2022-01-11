@@ -1,9 +1,20 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# wrapper.h - wrapper header to generate libcoap Rust bindings using bindgen
+# Copyright (c) 2022 The NAMIB Project Developers, all rights reserved.
+# See the README as well as the LICENSE file for more information.
+
 [package]
 name = "libcoap"
+description = "An idiomatic wrapper around the libcoap CoAP library for Rust."
 version = "0.1.0"
 edition = "2021"
-license = "BSD-2-CLAUSE OR MIT OR Apache-2.0"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+license = "BSD-2-Clause"
+readme = "README.md"
+homepage = "https://github.com/namib-project/libcoap-rs"
+repository = "https://github.com/namib-project/libcoap-rs"
+authors = ["Hugo Hakim Damer <hdamer@uni-bremen.de>"]
+categories = ["api-bindings", "network-progrmaming", "embedded"]
+keywords = ["coap", "libcoap"]
 
 [dependencies]
+libcoap-sys = {path = "../libcoap-sys"}
