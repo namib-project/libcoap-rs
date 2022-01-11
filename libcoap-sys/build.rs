@@ -6,6 +6,7 @@
  */
 
 use std::{
+    default::Default,
     env,
     path::{Path, PathBuf},
     process::Command,
@@ -85,7 +86,7 @@ fn main() {
             .unwrap()
             .into_string()
             .unwrap()
-            .split(" ")
+            .split(' ')
             .map(String::from)
             .collect();
 
@@ -93,8 +94,10 @@ fn main() {
         // autotools) modify files in the source tree, which causes verification problems when
         // running cargo package.
         // Therefore, we copy the libcoap source over to the output directory and build from there.
-        let mut copy_options = fs_extra::dir::CopyOptions::default();
-        copy_options.overwrite = true;
+        let copy_options = fs_extra::dir::CopyOptions {
+            overwrite: true,
+            ..Default::default()
+        };
         fs_extra::dir::copy(
             Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join("libcoap"),
             Path::new(&out_dir),
@@ -191,7 +194,7 @@ fn main() {
         &dtls_backend
             .as_ref()
             .map(|v| v.to_string())
-            .unwrap_or("notls".to_string())
+            .unwrap_or_else(|| "notls".to_string())
     );
 
     bindgen_builder = bindgen_builder
