@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BSD-2-CLAUSE
+// SPDX-License-Identifier: BSD-2-Clause
 /*
  * wrapper.h - wrapper header to generate libcoap Rust bindings using bindgen
  * Copyright (c) 2021 The NAMIB Project Developers, all rights reserved.

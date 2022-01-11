@@ -1,14 +1,18 @@
-# SPDX-License-Identifier: BSD-2-CLAUSE
+# SPDX-License-Identifier: BSD-2-Clause
+# wrapper.h - wrapper header to generate libcoap Rust bindings using bindgen
+# Copyright (c) 2021-2022 The NAMIB Project Developers, all rights reserved.
+# See the README as well as the LICENSE file for more information.
 
 [package]
 name = "libcoap-sys"
 description = "Raw bindings to the libcoap CoAP library."
 version = "0.1.0+libcoap-4.3.0-44068b0"
 edition = "2021"
-license = "BSD-2-CLAUSE AND BSD-1-CLAUSE"
+license = "BSD-2-Clause AND BSD-1-Clause"
 links = "coap-3"
 readme = "README.md"
-homepage = "https://namib.me/"
+homepage = "https://github.com/namib-project/libcoap-rs"
+repository = "https://github.com/namib-project/libcoap-rs"
 authors = ["Hugo Hakim Damer <hdamer@uni-bremen.de>"]
 categories = ["external-ffi-bindings", "network-progrmaming", "embedded"]
 keywords = ["coap", "libcoap"]
@@ -61,7 +65,7 @@ gnutls-sys = {version = "^0.1", optional = true}
 openssl-sys = {version = "^0.9", optional = true}
 mbedtls-sys-auto = {version = "^2.26", optional = true}
 libc = "^0.2"
-tinydtls-sys = {version = "0.1.0-alpha.1", optional = true, git = "ssh://git@gitlab.informatik.uni-bremen.de/namib-master/libraries/tinydtls-rs.git", branch="raw_bindings"}
+tinydtls-sys = {version = "0.1.0", optional = true}
 
 [build-dependencies]
 bindgen = "0.59.2"

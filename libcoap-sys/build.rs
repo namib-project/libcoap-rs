@@ -6,6 +6,7 @@
  */
 
 use std::{
+    default::Default,
     env,
     path::{Path, PathBuf},
     process::Command,
@@ -85,7 +86,7 @@ fn main() {
             .unwrap()
             .into_string()
             .unwrap()
-            .split(" ")
+            .split(' ')
             .map(String::from)
             .collect();
 
@@ -93,8 +94,10 @@ fn main() {
         // autotools) modify files in the source tree, which causes verification problems when
         // running cargo package.
         // Therefore, we copy the libcoap source over to the output directory and build from there.
-        let mut copy_options = fs_extra::dir::CopyOptions::default();
-        copy_options.overwrite = true;
+        let copy_options = fs_extra::dir::CopyOptions {
+            overwrite: true,
+            ..Default::default()
+        };
         fs_extra::dir::copy(
             Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join("libcoap"),
             Path::new(&out_dir),
@@ -160,10 +163,10 @@ fn main() {
 
         // Enable debug symbols if enabled in Rust
         match std::env::var_os("DEBUG").unwrap().to_str().unwrap() {
-            "0" | "false" => {},
+            "0" | "false" => {}
             _ => {
                 build_config.with("debug", None);
-            },
+            }
         }
 
         // Enable dependency features based on selected cargo features.
@@ -178,9 +181,11 @@ fn main() {
         let dst = build_config.build();
 
         // Add the built library to the search path
-        println!("cargo:rustc-link-search=native={}/lib", dst.to_str().unwrap());
-        println!("cargo:include={}/include", dst.to_str().unwrap());
-        bindgen_builder = bindgen_builder.clang_arg(format!("-I\"{}/include\"", dst.to_str().unwrap()))
+        println!("cargo:rustc-link-search=native={}", dst.join("lib").to_str().unwrap());
+        println!("cargo:include={}", dst.join("include").to_str().unwrap());
+        bindgen_builder = bindgen_builder
+            .clang_arg(format!("-I{}", dst.join("include").to_str().unwrap()))
+            .clang_arg(format!("-L{}", dst.join("lib").to_str().unwrap()));
     }
 
     println!(
@@ -189,7 +194,7 @@ fn main() {
         &dtls_backend
             .as_ref()
             .map(|v| v.to_string())
-            .unwrap_or("notls".to_string())
+            .unwrap_or_else(|| "notls".to_string())
     );
 
     bindgen_builder = bindgen_builder
@@ -197,6 +202,8 @@ fn main() {
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
         .default_enum_style(EnumVariation::Rust { non_exhaustive: true })
         .rustfmt_bindings(false)
+        // Causes invalid syntax for some reason, so we have to disable it.
+        .generate_comments(false)
         .dynamic_link_require_all(true)
         .allowlist_function("coap_.*")
         .allowlist_type("coap_.*")
