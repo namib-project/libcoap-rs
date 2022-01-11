@@ -160,10 +160,10 @@ fn main() {
 
         // Enable debug symbols if enabled in Rust
         match std::env::var_os("DEBUG").unwrap().to_str().unwrap() {
-            "0" | "false" => {},
+            "0" | "false" => {}
             _ => {
                 build_config.with("debug", None);
-            },
+            }
         }
 
         // Enable dependency features based on selected cargo features.
@@ -178,9 +178,11 @@ fn main() {
         let dst = build_config.build();
 
         // Add the built library to the search path
-        println!("cargo:rustc-link-search=native={}/lib", dst.to_str().unwrap());
-        println!("cargo:include={}/include", dst.to_str().unwrap());
-        bindgen_builder = bindgen_builder.clang_arg(format!("-I\"{}/include\"", dst.to_str().unwrap()))
+        println!("cargo:rustc-link-search=native={}", dst.join("lib").to_str().unwrap());
+        println!("cargo:include={}", dst.join("include").to_str().unwrap());
+        bindgen_builder = bindgen_builder
+            .clang_arg(format!("-I{}", dst.join("include").to_str().unwrap()))
+            .clang_arg(format!("-L{}", dst.join("lib").to_str().unwrap()));
     }
 
     println!(
@@ -197,6 +199,8 @@ fn main() {
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
         .default_enum_style(EnumVariation::Rust { non_exhaustive: true })
         .rustfmt_bindings(false)
+        // Causes invalid syntax for some reason, so we have to disable it.
+        .generate_comments(false)
         .dynamic_link_require_all(true)
         .allowlist_function("coap_.*")
         .allowlist_type("coap_.*")
