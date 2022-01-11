@@ -74,5 +74,5 @@ linked dependencies (e.g. TLS libraries) may apply.
 
 Additionally, the libcoap C library contains some third-party code, for which different licensing terms apply.
 
-See https://github.com/obgm/libcoap/blob/develop/LICENSE as well as the licenses of dependency crates for more
+See https://github.com/obgm/libcoap/blob/develop/LICENSE as well as the licenses of dependencies for more
 information and terms.
