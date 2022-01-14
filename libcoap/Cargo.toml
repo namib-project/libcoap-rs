@@ -13,8 +13,24 @@ readme = "README.md"
 homepage = "https://github.com/namib-project/libcoap-rs"
 repository = "https://github.com/namib-project/libcoap-rs"
 authors = ["Hugo Hakim Damer <hdamer@uni-bremen.de>"]
-categories = ["api-bindings", "network-progrmaming", "embedded"]
+categories = ["api-bindings", "network-programming", "embedded"]
 keywords = ["coap", "libcoap"]
+
+[features]
+default = ["client", "server", "dtls", "tcp"]
+client = []
+server = []
+dtls = ["libcoap-sys/dtls"]
+tcp = []
+nightly = []
 
 [dependencies]
 libcoap-sys = {path = "../libcoap-sys"}
+libc = {version = "^0.2.95"}
+num-derive = {version = "^0.3.3"}
+num-traits = {version = "^0.2.14"}
+url = {version = "^2.2"}
+rand = {version = "^0.8.4"}
+
+[dev-dependencies]
+libcoap-sys = {path = "../libcoap-sys", features = ["dtls_backend_mbedtls"]}
