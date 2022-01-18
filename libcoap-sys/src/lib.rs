@@ -85,23 +85,40 @@
 
 use libc::{epoll_event, fd_set, sockaddr, sockaddr_in, sockaddr_in6, socklen_t, time_t};
 
+use crate::coap_pdu_type_t::COAP_MESSAGE_RST;
+
 #[cfg(target_family = "windows")]
 include!(concat!(env!("OUT_DIR"), "\\bindings.rs"));
 #[cfg(not(target_family = "windows"))]
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
+#[inline]
+pub unsafe fn coap_send_rst(
+    session: *mut coap_session_t,
+    request: *const coap_pdu_t,
+    type_: coap_pdu_type_t,
+) -> coap_mid_t {
+    coap_send_message_type(session, request, COAP_MESSAGE_RST)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::coap_pdu_code_t::{COAP_REQUEST_CODE_GET, COAP_RESPONSE_CODE_CONTENT};
-    use crate::coap_proto_t::COAP_PROTO_UDP;
-    use crate::coap_request_t::COAP_REQUEST_GET;
-    use crate::coap_response_t::COAP_RESPONSE_OK;
+    use std::{
+        ffi::c_void,
+        net::{SocketAddr, UdpSocket},
+        os::raw::c_int,
+        sync::{Arc, Barrier},
+    };
+
     use libc::{in6_addr, in_addr, sa_family_t, size_t, AF_INET, AF_INET6};
-    use std::ffi::c_void;
-    use std::net::{SocketAddr, UdpSocket};
-    use std::os::raw::c_int;
-    use std::sync::{Arc, Barrier};
+
+    use super::*;
+    use crate::{
+        coap_pdu_code_t::{COAP_REQUEST_CODE_GET, COAP_RESPONSE_CODE_CONTENT},
+        coap_proto_t::COAP_PROTO_UDP,
+        coap_request_t::COAP_REQUEST_GET,
+        coap_response_t::COAP_RESPONSE_OK,
+    };
 
     const COAP_TEST_RESOURCE_URI: &str = "test";
     const COAP_TEST_RESOURCE_RESPONSE: &str = "Hello World!";
@@ -128,7 +145,7 @@ mod tests {
                     };
                     coap_addr
                 }
-            }
+            },
             SocketAddr::V6(addr) => {
                 // addr is a bindgen-type union wrapper, so we can't assign to it directly and have
                 // to use a pointer instead.
@@ -149,7 +166,7 @@ mod tests {
                     };
                     coap_addr
                 }
-            }
+            },
         }
     }
 

@@ -14,7 +14,7 @@ use std::{
 
 use bindgen::EnumVariation;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum DtlsBackend {
     GnuTls,
     OpenSsl,
@@ -36,6 +36,7 @@ impl ToString for DtlsBackend {
 fn main() {
     println!("cargo:rerun-if-changed=src/libcoap/");
     println!("cargo:rerun-if-changed=src/wrapper.h");
+    let mut pkgconf = pkg_config::Config::new();
     let mut bindgen_builder = bindgen::Builder::default();
 
     let mut dtls_backend = Option::None;
@@ -109,14 +110,15 @@ fn main() {
 
         let mut build_config = autotools::Config::new(libcoap_src_dir);
         build_config.out_dir(out_dir);
-        if let Some(dtls_backend) = dtls_backend.as_ref() {
+        if dtls_backend.is_some() {
             build_config
                 .enable("dtls", None)
-                .with(dtls_backend.to_string().as_str(), None);
+                .with(dtls_backend.unwrap().to_string().as_str(), None);
 
-            if dtls_backend == &DtlsBackend::TinyDtls {
+            if dtls_backend == Some(DtlsBackend::TinyDtls) {
                 // We do not ship tinydtls with our source distribution. Instead, we use tinydtls-sys.
                 build_config.with("system-tinydtls", None);
+                build_config.without("vendored-tinydtls", None);
                 // If tinydtls-sys is built with the vendored feature, the library is built alongside
                 // the Rust crate. To use the version built by the tinydtls-sys build script, we use the
                 // environment variables set by the build script.
@@ -186,16 +188,33 @@ fn main() {
         bindgen_builder = bindgen_builder
             .clang_arg(format!("-I{}", dst.join("include").to_str().unwrap()))
             .clang_arg(format!("-L{}", dst.join("lib").to_str().unwrap()));
+        pkgconf.arg(format!(
+            "--with-path={}",
+            dst.join("lib").join("pkgconfig").to_str().unwrap()
+        ));
     }
 
-    println!(
-        "cargo:rustc-link-lib={}coap-3-{}",
-        cfg!(feature = "static").then(|| "static=").unwrap_or(""),
-        &dtls_backend
-            .as_ref()
-            .map(|v| v.to_string())
-            .unwrap_or_else(|| "notls".to_string())
-    );
+    pkgconf.statik(cfg!(feature = "static"));
+    for link_lib in pkgconf
+        .probe(
+            format!(
+                "libcoap-3-{}",
+                &dtls_backend
+                    .as_ref()
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| "notls".to_string())
+            )
+            .as_str(),
+        )
+        .unwrap()
+        .libs
+    {
+        println!(
+            "cargo:rustc-link-lib={}{}",
+            cfg!(feature = "static").then(|| "static=").unwrap_or(""),
+            &link_lib
+        );
+    }
 
     bindgen_builder = bindgen_builder
         .header("src/wrapper.h")
