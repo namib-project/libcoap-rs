@@ -11,10 +11,9 @@ use std::{
 };
 
 use libcoap_sys::{
-    coap_delete_resource, coap_new_str_const, coap_pdu_t,
-    coap_pdu_type_t::COAP_MESSAGE_RST, coap_register_request_handler, coap_resource_get_uri_path,
-    coap_resource_get_userdata, coap_resource_init, coap_resource_set_userdata, coap_resource_t, coap_send_rst,
-    coap_session_t, coap_string_t,
+    coap_delete_resource, coap_new_str_const, coap_pdu_t, coap_pdu_type_t::COAP_MESSAGE_RST,
+    coap_register_request_handler, coap_resource_get_uri_path, coap_resource_get_userdata, coap_resource_init,
+    coap_resource_set_userdata, coap_resource_t, coap_send_rst, coap_session_t, coap_string_t,
 };
 
 use crate::{
@@ -22,7 +21,7 @@ use crate::{
     message::CoapMessage,
     protocol::CoapRequestCode,
     request::{CoapRequest, CoapResponse},
-    session::CoapSession,
+    session::{CoapClientSession, CoapServerSession},
     types::CoapAppDataRef,
 };
 
@@ -45,7 +44,7 @@ macro_rules! resource_handler {
                 ($f::<D>)(
                     user_data.as_ref(),
                     &mut resource,
-                    session.borrow_mut(),
+                    &mut session.borrow_mut(),
                     &incoming_pdu,
                     outgoing_pdu,
                 )
@@ -66,7 +65,7 @@ pub unsafe fn prepare_resource_handler_data<D: Any+?Sized>(
     (
         Rc<D>,
         CoapResource<D>,
-        CoapAppDataRef<CoapSession>,
+        CoapAppDataRef<CoapServerSession>,
         CoapRequest,
         CoapResponse,
     ),
@@ -78,7 +77,7 @@ pub unsafe fn prepare_resource_handler_data<D: Any+?Sized>(
             .upgrade()
             .expect("CoAP resource method handler called after resource was destroyed"),
     );
-    let session = CoapSession::restore_from_raw(raw_session);
+    let session = CoapServerSession::restore_from_raw(raw_session);
     coap_resource_set_userdata(raw_resource, Weak::into_raw(resource_tmp) as *mut c_void);
     let request = CoapMessage::from_raw_pdu(raw_incoming_pdu).and_then(|v| CoapRequest::from_pdu(v));
     let response = CoapMessage::from_raw_pdu(raw_response_pdu).and_then(|v| CoapResponse::from_pdu(v));
@@ -239,7 +238,7 @@ impl<D: Any+?Sized> CoapResource<D> {
     fn call_dynamic_handler(
         &self,
         data: &D,
-        session: &mut CoapSession,
+        session: &mut CoapServerSession,
         req_message: &CoapRequest,
         rsp_message: CoapResponse,
     ) {
@@ -313,12 +312,12 @@ pub struct CoapRequestHandler<D: Any+?Sized> {
         response_pdu: *mut coap_pdu_t,
     ),
     dynamic_handler_function:
-        Option<Box<dyn FnMut(&D, &CoapResource<D>, &mut CoapSession, &CoapRequest, CoapResponse)>>,
+        Option<Box<dyn FnMut(&D, &CoapResource<D>, &mut CoapServerSession, &CoapRequest, CoapResponse)>>,
     __handler_data_type: PhantomData<D>,
 }
 
 impl<D: 'static+?Sized> CoapRequestHandler<D> {
-    pub fn new<F: 'static+FnMut(&D, &CoapResource<D>, &mut CoapSession, &CoapRequest, CoapResponse)>(
+    pub fn new<F: 'static+FnMut(&D, &CoapResource<D>, &mut CoapServerSession, &CoapRequest, CoapResponse)>(
         handler: F,
     ) -> CoapRequestHandler<D> {
         let mut wrapped_handler = resource_handler!(coap_resource_handler_dynamic_wrapper, D);
@@ -336,7 +335,7 @@ impl<D: 'static+?Sized> CoapRequestHandler<D> {
         ),
     ) -> CoapRequestHandler<D> {
         let handler_fn: Option<
-            Box<dyn for<'a> FnMut(&'a D, &CoapResource<D>, &mut CoapSession, &CoapRequest, CoapResponse)>,
+            Box<dyn for<'a> FnMut(&'a D, &CoapResource<D>, &mut CoapServerSession, &CoapRequest, CoapResponse)>,
         > = None;
         CoapRequestHandler {
             raw_handler,
@@ -355,7 +354,7 @@ impl<D: 'static+?Sized> Debug for CoapRequestHandler<D> {
 fn coap_resource_handler_dynamic_wrapper<D: Any+?Sized>(
     data: &D,
     resource: &CoapResource<D>,
-    session: &mut CoapSession,
+    session: &mut CoapServerSession,
     req_message: &CoapRequest,
     rsp_message: CoapResponse,
 ) {

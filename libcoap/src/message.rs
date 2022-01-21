@@ -4,8 +4,7 @@ use libcoap_sys::{
     coap_add_data, coap_add_data_large_request, coap_add_optlist_pdu, coap_add_token, coap_delete_optlist,
     coap_delete_pdu, coap_get_data, coap_insert_optlist, coap_new_optlist, coap_opt_length, coap_opt_t, coap_opt_value,
     coap_option_iterator_init, coap_option_next, coap_option_num_t, coap_optlist_t, coap_pdu_get_code,
-    coap_pdu_get_mid, coap_pdu_get_token, coap_pdu_get_type, coap_pdu_init, coap_pdu_t,
-    coap_session_t,
+    coap_pdu_get_mid, coap_pdu_get_token, coap_pdu_get_type, coap_pdu_init, coap_pdu_t, coap_session_t,
 };
 use num_traits::FromPrimitive;
 
@@ -13,13 +12,14 @@ use crate::{
     error::{MessageConversionError, OptionValueError},
     protocol::{
         decode_var_len_u16, decode_var_len_u32, encode_var_len_u16, encode_var_len_u32, encode_var_len_u8, Block,
-        CoapMatch, CoapMessageCode, CoapMessageType, CoapOptionNum, CoapOptionType, ContentFormat, ETag,
-        HopLimit, MaxAge, NoResponse, ProxyScheme, ProxyUri, Size, UriHost, UriPath, UriPort, UriQuery,
+        CoapMatch, CoapMessageCode, CoapMessageType, CoapOptionNum, CoapOptionType, ContentFormat, ETag, HopLimit,
+        MaxAge, NoResponse, ProxyScheme, ProxyUri, Size, UriHost, UriPath, UriPort, UriQuery,
     },
-    session::{CoapSessionCommon},
+    session::CoapSessionCommon,
     types::CoapMessageId,
 };
 
+#[derive(Debug)]
 pub enum CoapOption {
     IfMatch(CoapMatch),
     IfNoneMatch,
@@ -227,6 +227,7 @@ pub trait CoapMessageCommon {
     fn as_message_mut(&mut self) -> &mut CoapMessage;
 }
 
+#[derive(Debug)]
 pub struct CoapMessage {
     type_: CoapMessageType,
     code: CoapMessageCode,

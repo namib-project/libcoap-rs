@@ -1,4 +1,4 @@
-use std::{net::SocketAddr};
+use std::net::SocketAddr;
 
 use libcoap_sys::{coap_endpoint_t, coap_free_endpoint, coap_new_endpoint, coap_proto_t::COAP_PROTO_UDP};
 
