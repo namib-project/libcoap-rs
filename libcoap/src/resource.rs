@@ -11,8 +11,8 @@ use std::{
 };
 
 use libcoap_sys::{
-    coap_delete_resource, coap_method_handler_t, coap_new_str_const, coap_pdu_code_t, coap_pdu_t,
-    coap_pdu_type_t::COAP_MESSAGE_RST, coap_register_request_handler, coap_request_t, coap_resource_get_uri_path,
+    coap_delete_resource, coap_new_str_const, coap_pdu_t,
+    coap_pdu_type_t::COAP_MESSAGE_RST, coap_register_request_handler, coap_resource_get_uri_path,
     coap_resource_get_userdata, coap_resource_init, coap_resource_set_userdata, coap_resource_t, coap_send_rst,
     coap_session_t, coap_string_t,
 };
@@ -39,7 +39,7 @@ macro_rules! resource_handler {
             query: *const coap_string_t,
             response_pdu: *mut coap_pdu_t,
         ) {
-            if let Ok((user_data, mut resource, mut session, incoming_pdu, mut outgoing_pdu)) =
+            if let Ok((user_data, mut resource, mut session, incoming_pdu, outgoing_pdu)) =
                 prepare_resource_handler_data::<$t>(resource, session, incoming_pdu, query, response_pdu)
             {
                 ($f::<D>)(
@@ -226,7 +226,7 @@ impl<D: Any+?Sized> CoapResource<D> {
 
     pub fn set_method_handler<H: Into<CoapRequestHandler<D>>>(&self, code: CoapRequestCode, handler: Option<H>) {
         let mut inner = RefCell::borrow_mut(self.inner.as_ref());
-        std::mem::replace(inner.handlers.handler_ref_mut(code), handler.map(|v| v.into()));
+        *inner.handlers.handler_ref_mut(code) = handler.map(|v| v.into());
         unsafe {
             coap_register_request_handler(
                 inner.raw_resource,
@@ -269,7 +269,7 @@ impl<D: Any+?Sized> UntypedCoapResource for CoapResource<D> {
     }
 
     fn as_any(&self) -> &dyn Any {
-        (self as &(dyn Any))
+        self as &(dyn Any)
     }
 
     unsafe fn drop_inner_exclusive(&mut self) {
@@ -335,7 +335,7 @@ impl<D: 'static+?Sized> CoapRequestHandler<D> {
             response_pdu: *mut coap_pdu_t,
         ),
     ) -> CoapRequestHandler<D> {
-        let mut handler_fn: Option<
+        let handler_fn: Option<
             Box<dyn for<'a> FnMut(&'a D, &CoapResource<D>, &mut CoapSession, &CoapRequest, CoapResponse)>,
         > = None;
         CoapRequestHandler {

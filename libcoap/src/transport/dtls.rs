@@ -1,8 +1,8 @@
-use std::{net::SocketAddr, os::raw::c_uint};
+use std::{net::SocketAddr};
 
 use libcoap_sys::{
     coap_endpoint_t, coap_free_endpoint, coap_new_endpoint,
-    coap_proto_t::{COAP_PROTO_DTLS, COAP_PROTO_UDP},
+    coap_proto_t::{COAP_PROTO_DTLS},
 };
 
 use crate::{context::CoapContext, error::EndpointCreationError, transport::EndpointCommon, types::CoapAddress};

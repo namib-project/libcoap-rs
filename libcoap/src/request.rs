@@ -1,18 +1,17 @@
-use std::{collections::HashMap, fmt::format, str::FromStr};
+use std::{str::FromStr};
 
-use libcoap_sys::{coap_option, coap_option_num_t, coap_option_t};
-use rand::Rng;
+
+
 use url::Url;
 
 use crate::{
     error::{MessageConversionError, OptionValueError},
     message::{CoapMessage, CoapMessageCommon, CoapOption},
     protocol::{
-        CoapContentFormat, CoapMatch, CoapMessageCode, CoapMessageType, CoapOptionType, CoapRequestCode,
-        CoapResponseCode, CoapToken, ContentFormat, ETag, HopLimit, MaxAge, NoResponse, Observe,
+        CoapMatch, CoapMessageType, CoapOptionType, CoapRequestCode,
+        CoapResponseCode, ContentFormat, ETag, HopLimit, MaxAge, NoResponse, Observe,
     },
-    session::{CoapClientSession, CoapSession, CoapSessionCommon},
-    types::{CoapMessageId, CoapUri, CoapUriHost, CoapUriScheme},
+    types::{CoapUri, CoapUriHost, CoapUriScheme},
 };
 
 #[derive(Clone)]
@@ -73,7 +72,7 @@ impl CoapRequestUri {
         proxy_uri_string
     }
 
-    pub fn into_options(mut self) -> Vec<CoapOption> {
+    pub fn into_options(self) -> Vec<CoapOption> {
         let mut options = Vec::new();
         match self {
             CoapRequestUri::Request(mut uri) => {
@@ -117,7 +116,7 @@ impl CoapResponseLocation {
         Ok(CoapResponseLocation(uri))
     }
 
-    pub fn into_options(mut self) -> Vec<CoapOption> {
+    pub fn into_options(self) -> Vec<CoapOption> {
         let mut options = Vec::new();
         let mut uri = self.0;
         if let Some(path) = uri.drain_path_iter() {
@@ -379,7 +378,7 @@ impl CoapRequest {
                     }
                     etag.as_mut().unwrap().push(value.clone());
                 },
-                CoapOption::MaxAge(value) => {
+                CoapOption::MaxAge(_value) => {
                     return Err(MessageConversionError::InvalidOptionForMessageType(
                         CoapOptionType::MaxAge,
                     ));

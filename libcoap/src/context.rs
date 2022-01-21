@@ -1,22 +1,20 @@
 use std::{
     any::Any,
     borrow::{Borrow, BorrowMut},
-    cell::RefCell,
     collections::HashMap,
     ffi::c_void,
     net::SocketAddr,
     ops::Sub,
-    rc::Rc,
     time::Duration,
 };
 
 use libcoap_sys::{
     coap_add_resource, coap_bin_const_t, coap_can_exit, coap_context_set_block_mode, coap_context_set_psk2,
-    coap_context_t, coap_dtls_cpsk_info_t, coap_dtls_cpsk_t, coap_dtls_id_callback_t, coap_dtls_spsk_info_t,
-    coap_dtls_spsk_t, coap_free_context, coap_io_process, coap_mid_t, coap_new_client_session,
-    coap_new_client_session_psk2, coap_new_context, coap_pdu_t,
+    coap_context_t, coap_dtls_cpsk_info_t, coap_dtls_cpsk_t, coap_dtls_spsk_info_t,
+    coap_dtls_spsk_t, coap_free_context, coap_io_process, coap_new_client_session,
+    coap_new_client_session_psk2, coap_new_context,
     coap_proto_t::{COAP_PROTO_DTLS, COAP_PROTO_UDP},
-    coap_register_response_handler, coap_resource_t, coap_session_t, COAP_BLOCK_SINGLE_BODY, COAP_BLOCK_USE_LIBCOAP,
+    coap_register_response_handler, COAP_BLOCK_SINGLE_BODY, COAP_BLOCK_USE_LIBCOAP,
     COAP_DTLS_SPSK_SETUP_VERSION, COAP_IO_WAIT,
 };
 
@@ -25,10 +23,10 @@ use crate::{
     error::{ContextCreationError, EndpointCreationError, IoProcessError, SessionCreationError},
     resource::{CoapResource, UntypedCoapResource},
     session::{
-        dtls_ih_callback, dtls_server_id_callback, session_response_handler, CoapClientSession, CoapSession,
+        dtls_ih_callback, dtls_server_id_callback, session_response_handler, CoapSession,
         CoapSessionHandle,
     },
-    transport::{udp::CoapUdpEndpoint, CoapEndpoint},
+    transport::{dtls::CoapDtlsEndpoint, udp::CoapUdpEndpoint, CoapEndpoint},
     types::{CoapAddress, CoapAppDataRef},
 };
 
@@ -66,15 +64,18 @@ impl CoapContext {
         Ok(self.endpoints.last_mut().unwrap())
     }
 
-    pub fn add_endpoint_tcp(&mut self, addr: SocketAddr) -> Result<&mut CoapEndpoint, EndpointCreationError> {
+    pub fn add_endpoint_tcp(&mut self, _addr: SocketAddr) -> Result<&mut CoapEndpoint, EndpointCreationError> {
         todo!()
     }
 
     pub fn add_endpoint_dtls(&mut self, addr: SocketAddr) -> Result<&mut CoapEndpoint, EndpointCreationError> {
-        todo!()
+        let endpoint = unsafe { CoapDtlsEndpoint::new(self, addr)? }.into();
+        self.endpoints.push(endpoint);
+        // Cannot fail, we just pushed to the Vec.
+        Ok(self.endpoints.last_mut().unwrap())
     }
 
-    pub fn add_endpoint_tls(&mut self, addr: SocketAddr) -> Result<&mut CoapEndpoint, EndpointCreationError> {
+    pub fn add_endpoint_tls(&mut self, _addr: SocketAddr) -> Result<&mut CoapEndpoint, EndpointCreationError> {
         todo!()
     }
 
@@ -203,9 +204,9 @@ impl CoapContext {
 
     pub fn do_io(&mut self, timeout: Option<Duration>) -> Result<Duration, IoProcessError> {
         let timeout = if let Some(timeout) = timeout {
-            let temp_timeout = u32::try_from(timeout.as_millis().saturating_add(1)).unwrap_or(u32::MAX);
+            let mut temp_timeout = u32::try_from(timeout.as_millis().saturating_add(1)).unwrap_or(u32::MAX);
             if timeout.subsec_micros() > 0 || timeout.subsec_nanos() > 0 {
-                temp_timeout.saturating_add(1);
+                temp_timeout = temp_timeout.saturating_add(1);
             }
             temp_timeout
         } else {
@@ -259,7 +260,7 @@ impl Drop for CoapContext {
         // As long as [CoapResource::into_inner] isn't used and we haven't given out owned
         // CoapResource instances whose raw resource is attached to the raw context, this should
         // never fail.
-        let resources = std::mem::take(&mut self.resources);
+        let _resources = std::mem::take(&mut self.resources);
         // TODO, somehow, it seems that we are not the only ones owning the Rc here.
         //resources
         //    .into_iter()

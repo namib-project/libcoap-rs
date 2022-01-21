@@ -39,6 +39,12 @@ impl From<CoapUdpEndpoint> for CoapEndpoint {
     }
 }
 
+impl From<CoapDtlsEndpoint> for CoapEndpoint {
+    fn from(ep: CoapDtlsEndpoint) -> Self {
+        CoapEndpoint::Dtls(ep)
+    }
+}
+
 impl EndpointCommon for CoapEndpoint {
     unsafe fn as_raw_endpoint(&self) -> &coap_endpoint_t {
         match self {

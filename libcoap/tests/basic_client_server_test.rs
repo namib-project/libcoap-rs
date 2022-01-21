@@ -1,5 +1,4 @@
 use std::{
-    any::Any,
     net::{SocketAddr, UdpSocket},
     rc::Rc,
     sync::atomic::{AtomicBool, Ordering},
@@ -20,15 +19,15 @@ fn run_basic_test_server(server_address: SocketAddr) {
     let mut context = CoapContext::new().unwrap();
     context.add_endpoint_udp(server_address).unwrap();
     let request_completed = Rc::new(AtomicBool::new(false));
-    let mut resource = CoapResource::new("test1", request_completed.clone());
+    let resource = CoapResource::new("test1", request_completed.clone());
     resource.set_method_handler(
         CoapRequestCode::Get,
         Some(CoapRequestHandler::new(
-            |completed: &Rc<AtomicBool>, res, sess, req, mut rsp: CoapResponse| {
+            |completed: &Rc<AtomicBool>, _res, sess, _req, mut rsp: CoapResponse| {
                 let data = Vec::<u8>::from("Hello World!".as_bytes());
                 rsp.set_data(Some(data.into_boxed_slice()));
                 rsp.set_code(CoapMessageCode::Response(CoapResponseCode::Content));
-                sess.send(rsp.into_pdu().unwrap());
+                sess.send(rsp.into_pdu().unwrap()).unwrap();
                 completed.store(true, Ordering::Relaxed);
             },
         )),
@@ -41,7 +40,7 @@ fn run_basic_test_server(server_address: SocketAddr) {
             break;
         }
     }
-    context.shutdown(Some(Duration::from_secs(0)));
+    context.shutdown(Some(Duration::from_secs(0))).unwrap();
 }
 
 #[test]
@@ -67,7 +66,7 @@ pub fn test_basic_client_server() {
     });
 
     let mut context = CoapContext::new().unwrap();
-    let mut session = context.connect_udp(server_address).unwrap();
+    let session = context.connect_udp(server_address).unwrap();
 
     let uri: CoapRequestUri = CoapUri::new(
         None,

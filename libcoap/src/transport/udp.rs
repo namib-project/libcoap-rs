@@ -1,11 +1,8 @@
-use crate::context::CoapContext;
-use crate::error::EndpointCreationError;
-use crate::transport::EndpointCommon;
-use crate::types::CoapAddress;
-use libcoap_sys::coap_proto_t::COAP_PROTO_UDP;
-use libcoap_sys::{coap_endpoint_t, coap_free_endpoint, coap_new_endpoint};
-use std::net::SocketAddr;
-use std::os::raw::c_uint;
+use std::{net::SocketAddr};
+
+use libcoap_sys::{coap_endpoint_t, coap_free_endpoint, coap_new_endpoint, coap_proto_t::COAP_PROTO_UDP};
+
+use crate::{context::CoapContext, error::EndpointCreationError, transport::EndpointCommon, types::CoapAddress};
 
 pub struct CoapUdpEndpoint {
     raw_endpoint: *mut coap_endpoint_t,

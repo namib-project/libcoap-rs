@@ -4,19 +4,19 @@ use libcoap_sys::{
     coap_add_data, coap_add_data_large_request, coap_add_optlist_pdu, coap_add_token, coap_delete_optlist,
     coap_delete_pdu, coap_get_data, coap_insert_optlist, coap_new_optlist, coap_opt_length, coap_opt_t, coap_opt_value,
     coap_option_iterator_init, coap_option_next, coap_option_num_t, coap_optlist_t, coap_pdu_get_code,
-    coap_pdu_get_mid, coap_pdu_get_token, coap_pdu_get_type, coap_pdu_init, coap_pdu_t, coap_release_large_data_t,
+    coap_pdu_get_mid, coap_pdu_get_token, coap_pdu_get_type, coap_pdu_init, coap_pdu_t,
     coap_session_t,
 };
 use num_traits::FromPrimitive;
 
 use crate::{
-    error::{MessageConversionError, OptionValueError, UnknownOptionError},
+    error::{MessageConversionError, OptionValueError},
     protocol::{
         decode_var_len_u16, decode_var_len_u32, encode_var_len_u16, encode_var_len_u32, encode_var_len_u8, Block,
-        CoapMatch, CoapMessageCode, CoapMessageType, CoapOptionNum, CoapOptionType, CoapToken, ContentFormat, ETag,
+        CoapMatch, CoapMessageCode, CoapMessageType, CoapOptionNum, CoapOptionType, ContentFormat, ETag,
         HopLimit, MaxAge, NoResponse, ProxyScheme, ProxyUri, Size, UriHost, UriPath, UriPort, UriQuery,
     },
-    session::{CoapSession, CoapSessionCommon},
+    session::{CoapSessionCommon},
     types::CoapMessageId,
 };
 
@@ -259,7 +259,7 @@ impl CoapMessage {
         let mut len: usize = 0;
         let mut data = std::ptr::null();
         coap_get_data(raw_pdu, &mut len, &mut data);
-        let mut data = Vec::from(std::slice::from_raw_parts(data, len));
+        let data = Vec::from(std::slice::from_raw_parts(data, len));
         let raw_token = coap_pdu_get_token(raw_pdu);
         let token = Vec::from(std::slice::from_raw_parts(raw_token.s, raw_token.length));
         Ok(CoapMessage {
@@ -277,7 +277,7 @@ impl CoapMessage {
         session: &mut S,
     ) -> Result<*mut coap_pdu_t, MessageConversionError> {
         let message = self.as_message_mut();
-        let mut pdu = coap_pdu_init(
+        let pdu = coap_pdu_init(
             message.type_.to_raw_pdu_type(),
             message.code.to_raw_pdu_code(),
             message.mid.ok_or(MessageConversionError::MissingMessageId)?,
@@ -305,7 +305,7 @@ impl CoapMessage {
             return Err(MessageConversionError::Unknown);
         }
         let mut optlist = None;
-        let mut option_iter = std::mem::take(&mut message.options).into_iter();
+        let option_iter = std::mem::take(&mut message.options).into_iter();
         for option in option_iter {
             let entry = option.into_optlist_entry()?;
             if entry.is_null() {
@@ -369,6 +369,6 @@ impl CoapMessageCommon for CoapMessage {
     }
 }
 
-unsafe extern "C" fn large_data_cleanup_handler(session: *mut coap_session_t, app_ptr: *mut c_void) {
+unsafe extern "C" fn large_data_cleanup_handler(_session: *mut coap_session_t, app_ptr: *mut c_void) {
     std::mem::drop(Box::from_raw(app_ptr as *mut u8));
 }
