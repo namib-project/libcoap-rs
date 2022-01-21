@@ -1,5 +1,7 @@
 use std::{str::Utf8Error, string::FromUtf8Error};
 
+use crate::protocol::CoapOptionType;
+
 #[derive(Debug)]
 pub enum CoapError {
     EndpointCreation(EndpointCreationError),
@@ -51,12 +53,20 @@ pub enum OptionValueError {
     TooShort,
     TooLong,
     StringConversion(FromUtf8Error),
+    UrlParsing(url::ParseError),
+    NotACoapUrl(UriParsingError),
     IllegalValue,
 }
 
 impl From<FromUtf8Error> for OptionValueError {
     fn from(val: FromUtf8Error) -> Self {
         OptionValueError::StringConversion(val)
+    }
+}
+
+impl From<url::ParseError> for OptionValueError {
+    fn from(val: url::ParseError) -> Self {
+        OptionValueError::UrlParsing(val)
     }
 }
 
@@ -68,7 +78,14 @@ pub enum UriParsingError {
 #[derive(Debug)]
 pub enum MessageConversionError {
     InvalidOptionValue(OptionValueError),
+    InvalidOptionForMessageType(CoapOptionType),
+    NonRepeatableOptionRepeated(CoapOptionType),
     InvalidMessageCode(MessageCodeConversionError),
+    DataInEmptyMessage,
+    MissingToken,
+    MissingMessageId,
+    InvalidOptionCombination(CoapOptionType, CoapOptionType),
+    CriticalOptionUnrecognized,
     Unknown,
 }
 
@@ -78,14 +95,21 @@ impl From<OptionValueError> for MessageConversionError {
     }
 }
 
+impl From<UriParsingError> for MessageConversionError {
+    fn from(v: UriParsingError) -> Self {
+        MessageConversionError::InvalidOptionValue(OptionValueError::NotACoapUrl(v))
+    }
+}
+
+impl From<url::ParseError> for MessageConversionError {
+    fn from(v: url::ParseError) -> Self {
+        MessageConversionError::InvalidOptionValue(OptionValueError::UrlParsing(v))
+    }
+}
+
 #[derive(Debug)]
 pub enum MessageCodeConversionError {
     NotARequestCode,
     NotAResponseCode,
-}
-
-#[derive(Debug)]
-#[cfg(feature = "nightly")]
-pub enum ResourceTypecastingError {
-    WrongUserDataType,
+    EmptyMessageCode,
 }

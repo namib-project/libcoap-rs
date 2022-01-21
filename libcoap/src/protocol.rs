@@ -52,15 +52,20 @@ pub type Size = u32;
 pub type Block = u32;
 pub type HopLimit = u16;
 pub type NoResponse = u8;
+pub type Observe = u32;
 
 pub type CoapOptionNum = u16;
 pub type CoapToken = Box<[u8]>;
 
-pub struct CoapMatch(pub Option<ETag>);
+#[derive(Clone)]
+pub enum CoapMatch {
+    ETag(ETag),
+    Empty,
+}
 
 #[repr(u16)]
 #[non_exhaustive]
-#[derive(FromPrimitive, Copy, Clone)]
+#[derive(FromPrimitive, Copy, Clone, Debug)]
 pub enum CoapOptionType {
     IfMatch = COAP_OPTION_IF_MATCH as u16,
     UriHost = COAP_OPTION_URI_HOST as u16,
@@ -185,12 +190,12 @@ pub enum CoapContentFormat {
     SensMlXml = COAP_MEDIATYPE_APPLICATION_SENSML_XML as u16,
     ApplicationXml = COAP_MEDIATYPE_APPLICATION_XML as u16,
     TextPlain = COAP_MEDIATYPE_TEXT_PLAIN as u16,
+    Other,
 }
 
-impl From<u16> for CoapContentFormat {
+impl From<ContentFormat> for CoapContentFormat {
     fn from(value: u16) -> Self {
-        // TODO Other
-        <CoapContentFormat as FromPrimitive>::from_u16(value).unwrap()
+        <CoapContentFormat as FromPrimitive>::from_u16(value).unwrap_or(CoapContentFormat::Other)
     }
 }
 

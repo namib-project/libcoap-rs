@@ -18,12 +18,12 @@ use libcoap_sys::{
 };
 
 use crate::{
-    context::CoapResourceListContent,
     error::MessageConversionError,
     message::CoapMessage,
     protocol::CoapRequestCode,
     request::{CoapRequest, CoapResponse},
     session::CoapSession,
+    types::CoapAppDataRef,
 };
 
 // Trait aliases are experimental
@@ -45,7 +45,7 @@ macro_rules! resource_handler {
                 ($f::<D>)(
                     user_data.as_ref(),
                     &mut resource,
-                    &mut session,
+                    session.borrow_mut(),
                     &incoming_pdu,
                     outgoing_pdu,
                 )
@@ -62,7 +62,16 @@ pub unsafe fn prepare_resource_handler_data<D: Any+?Sized>(
     raw_incoming_pdu: *const coap_pdu_t,
     _raw_query: *const coap_string_t,
     raw_response_pdu: *mut coap_pdu_t,
-) -> Result<(Rc<D>, CoapResource<D>, CoapSession, CoapRequest, CoapResponse), MessageConversionError> {
+) -> Result<
+    (
+        Rc<D>,
+        CoapResource<D>,
+        CoapAppDataRef<CoapSession>,
+        CoapRequest,
+        CoapResponse,
+    ),
+    MessageConversionError,
+> {
     let resource_tmp = Weak::from_raw(coap_resource_get_userdata(raw_resource) as *const RefCell<CoapResourceInner<D>>);
     let resource = CoapResource::from(
         Weak::clone(&resource_tmp)
@@ -71,8 +80,8 @@ pub unsafe fn prepare_resource_handler_data<D: Any+?Sized>(
     );
     let session = CoapSession::restore_from_raw(raw_session);
     coap_resource_set_userdata(raw_resource, Weak::into_raw(resource_tmp) as *mut c_void);
-    let request = CoapMessage::from_raw_pdu(&session, raw_incoming_pdu).and_then(|v| CoapRequest::from_pdu(v));
-    let response = CoapMessage::from_raw_pdu(&session, raw_response_pdu).and_then(|v| CoapResponse::from_pdu(v));
+    let request = CoapMessage::from_raw_pdu(raw_incoming_pdu).and_then(|v| CoapRequest::from_pdu(v));
+    let response = CoapMessage::from_raw_pdu(raw_response_pdu).and_then(|v| CoapResponse::from_pdu(v));
     match (request, response) {
         (Ok(request), Ok(response)) => Ok((resource.user_data(), resource, session, request, response)),
         (v1, v2) => {
@@ -82,6 +91,14 @@ pub unsafe fn prepare_resource_handler_data<D: Any+?Sized>(
             Err(v1.and(v2).err().unwrap())
         },
     }
+}
+
+pub trait UntypedCoapResource: Any {
+    fn uri_path(&self) -> &str;
+    // Unfortunately, trait upcasting is currently unstable, so we provide this workaround.
+    fn as_any(&self) -> &dyn Any;
+    unsafe fn drop_inner_exclusive(&mut self);
+    unsafe fn raw_resource(&self) -> *mut coap_resource_t;
 }
 
 #[derive(Debug)]
@@ -243,12 +260,16 @@ impl<D: Any+?Sized> CoapResource<D> {
     }
 }
 
-impl<D: Any+?Sized> CoapResourceListContent for CoapResource<D> {
+impl<D: Any+?Sized> UntypedCoapResource for CoapResource<D> {
     fn uri_path(&self) -> &str {
         unsafe {
             let raw_path = coap_resource_get_uri_path(RefCell::borrow(self.inner.as_ref()).raw_resource);
             return std::str::from_utf8_unchecked(std::slice::from_raw_parts((*raw_path).s, (*raw_path).length));
         }
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        (self as &(dyn Any))
     }
 
     unsafe fn drop_inner_exclusive(&mut self) {

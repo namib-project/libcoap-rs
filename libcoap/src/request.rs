@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::format};
+use std::{collections::HashMap, fmt::format, str::FromStr};
 
 use libcoap_sys::{coap_option, coap_option_num_t, coap_option_t};
 use rand::Rng;
@@ -6,13 +6,13 @@ use url::Url;
 
 use crate::{
     error::{MessageConversionError, OptionValueError},
-    message::{CoapMessage, CoapOption},
+    message::{CoapMessage, CoapMessageCommon, CoapOption},
     protocol::{
         CoapContentFormat, CoapMatch, CoapMessageCode, CoapMessageType, CoapOptionType, CoapRequestCode,
-        CoapResponseCode, CoapToken, ETag, MaxAge,
+        CoapResponseCode, CoapToken, ContentFormat, ETag, HopLimit, MaxAge, NoResponse, Observe,
     },
-    session::{CoapClientSession, CoapSession},
-    types::{CoapMessageId, CoapUri, CoapUriHost},
+    session::{CoapClientSession, CoapSession, CoapSessionCommon},
+    types::{CoapMessageId, CoapUri, CoapUriHost, CoapUriScheme},
 };
 
 #[derive(Clone)]
@@ -73,7 +73,7 @@ impl CoapRequestUri {
         proxy_uri_string
     }
 
-    pub fn to_options(mut self) -> Vec<CoapOption> {
+    pub fn into_options(mut self) -> Vec<CoapOption> {
         let mut options = Vec::new();
         match self {
             CoapRequestUri::Request(mut uri) => {
@@ -143,78 +143,94 @@ pub struct CoapRequestHandle {}
 pub struct CoapRequest {
     pdu: CoapMessage,
     uri: Option<CoapRequestUri>,
-    accept: Option<CoapContentFormat>,
-    max_age: Option<MaxAge>,
-    etag: Option<ETag>,
-    if_match: Option<CoapMatch>,
+    accept: Option<ContentFormat>,
+    etag: Option<Vec<ETag>>,
+    if_match: Option<Vec<CoapMatch>>,
+    content_format: Option<ContentFormat>,
+    if_none_match: bool,
+    hop_limit: Option<HopLimit>,
+    no_response: Option<NoResponse>,
+    observe: Option<Observe>,
 }
 
 impl CoapRequest {
-    pub fn new(session: &CoapSession, code: CoapRequestCode) -> CoapRequest {
-        let mut token: Vec<u8> = vec![0; 8];
-        rand::thread_rng().fill(&mut token[0..8]);
+    pub fn new(type_: CoapMessageType, code: CoapRequestCode) -> CoapRequest {
         CoapRequest {
-            pdu: CoapMessage::new(
-                session.next_message_id(),
-                CoapMessageType::Con,
-                code.into(),
-                token.into_boxed_slice(),
-                session.max_pdu_size(),
-            ),
+            pdu: CoapMessage::new(type_, code.into()),
             uri: None,
             accept: None,
-            max_age: None,
             etag: None,
             if_match: None,
+            content_format: None,
+            if_none_match: false,
+            hop_limit: None,
+            no_response: None,
+            observe: None,
         }
     }
 
-    pub fn accept(&self) -> Option<CoapContentFormat> {
+    pub fn accept(&self) -> Option<ContentFormat> {
         self.accept
     }
 
-    pub fn set_accept(&mut self, accept: Option<CoapContentFormat>) {
+    pub fn set_accept(&mut self, accept: Option<ContentFormat>) {
         self.accept = accept
     }
 
-    pub fn max_age(&self) -> Option<MaxAge> {
-        self.max_age
-    }
-
-    pub fn set_max_age(&mut self, max_age: Option<MaxAge>) {
-        self.max_age = max_age
-    }
-
-    pub fn etag(&self) -> Option<&ETag> {
+    pub fn etag(&self) -> Option<&Vec<ETag>> {
         self.etag.as_ref()
     }
 
-    pub fn set_etag(&mut self, etag: Option<ETag>) {
+    pub fn set_etag(&mut self, etag: Option<Vec<ETag>>) {
         self.etag = etag
     }
 
-    pub fn if_match(&self) -> Option<&CoapMatch> {
+    pub fn if_match(&self) -> Option<&Vec<CoapMatch>> {
         self.if_match.as_ref()
     }
 
-    pub fn set_if_match(&mut self, if_match: Option<CoapMatch>) {
+    pub fn set_if_match(&mut self, if_match: Option<Vec<CoapMatch>>) {
         self.if_match = if_match
     }
 
-    pub fn type_(&self) -> CoapMessageType {
-        self.pdu.type_()
+    pub fn content_format(&self) -> Option<ContentFormat> {
+        self.content_format
     }
 
-    pub fn set_type_(&mut self, type_: CoapMessageType) {
-        self.pdu.set_type_(type_)
+    pub fn set_content_format(&mut self, content_format: Option<ContentFormat>) {
+        self.content_format = content_format;
     }
 
-    pub fn code(&self) -> CoapMessageCode {
-        self.pdu.code()
+    pub fn if_none_match(&self) -> bool {
+        self.if_none_match
     }
 
-    pub fn set_code(&mut self, code: CoapRequestCode) {
-        self.pdu.set_code(CoapMessageCode::Request(code))
+    pub fn set_if_none_match(&mut self, if_none_match: bool) {
+        self.if_none_match = if_none_match
+    }
+
+    pub fn hop_limit(&self) -> Option<HopLimit> {
+        self.hop_limit
+    }
+
+    pub fn set_hop_limit(&mut self, hop_limit: Option<HopLimit>) {
+        self.hop_limit = hop_limit;
+    }
+
+    pub fn no_response(&self) -> Option<NoResponse> {
+        self.no_response
+    }
+
+    pub fn set_no_response(&mut self, no_response: Option<NoResponse>) {
+        self.no_response = no_response;
+    }
+
+    pub fn observe(&self) -> Option<Observe> {
+        self.observe
+    }
+
+    pub fn set_observe(&mut self, observe: Option<Observe>) {
+        self.observe = observe;
     }
 
     pub fn uri(&self) -> Option<&CoapRequestUri> {
@@ -225,141 +241,484 @@ impl CoapRequest {
         self.uri = uri.map(|v| v.into())
     }
 
-    pub fn data(&self) -> Option<&Box<[u8]>> {
-        self.pdu.data()
-    }
-
-    pub fn set_data<D: Into<Box<[u8]>>>(&mut self, data: Option<D>) {
-        self.pdu.set_data(data);
-    }
-
-    pub fn token(&self) -> &Box<[u8]> {
-        self.pdu.token()
-    }
-
-    pub fn set_token<D: Into<Box<[u8]>>>(&mut self, token: D) {
-        self.pdu.set_token(token)
-    }
-
-    pub fn from_pdu(pdu: CoapMessage) -> Result<CoapRequest, MessageConversionError> {
+    pub fn from_pdu(mut pdu: CoapMessage) -> Result<CoapRequest, MessageConversionError> {
         let mut host = None;
         let mut port = None;
-        let mut path = Vec::new();
-        let mut query = Vec::new();
+        let mut path = None;
+        let mut query = None;
+        let mut proxy_scheme = None;
+        let mut proxy_uri = None;
+        let mut content_format = None;
+        let mut etag = None;
+        let mut if_match = None;
+        let mut if_none_match = false;
+        let mut accept = None;
+        let mut hop_limit = None;
+        let mut no_response = None;
+        let mut observe = None;
+        let mut additional_opts = Vec::new();
         for option in pdu.options_iter() {
             match option {
-                CoapOption::IfMatch(_) => {},
-                CoapOption::IfNoneMatch => {},
+                CoapOption::IfMatch(value) => {
+                    if if_match.is_none() {
+                        if_match = Some(Vec::new());
+                    }
+                    if_match.as_mut().unwrap().push(value.clone());
+                },
+                CoapOption::IfNoneMatch => {
+                    if if_none_match {
+                        return Err(MessageConversionError::NonRepeatableOptionRepeated(
+                            CoapOptionType::IfNoneMatch,
+                        ));
+                    }
+                    if_none_match = true;
+                },
                 CoapOption::UriHost(value) => {
+                    if host.is_some() {
+                        return Err(MessageConversionError::NonRepeatableOptionRepeated(
+                            CoapOptionType::UriHost,
+                        ));
+                    }
                     host = Some(value.clone());
                 },
-                CoapOption::UriPort(uri_port) => port = Some(uri_port.clone()),
-                CoapOption::UriPath(value) => path.push(value.clone()),
-                CoapOption::UriQuery(value) => query.push(value.clone()),
-                CoapOption::LocationPath(_) => {},
-                CoapOption::LocationQuery(_) => {},
-                CoapOption::ProxyUri(_) => {},
-                CoapOption::ProxyScheme(_) => {},
-                CoapOption::ContentFormat(_) => {},
-                CoapOption::Accept(_) => {},
+                CoapOption::UriPort(value) => {
+                    if port.is_some() {
+                        return Err(MessageConversionError::NonRepeatableOptionRepeated(
+                            CoapOptionType::UriPort,
+                        ));
+                    }
+                    port = Some(value.clone());
+                },
+                CoapOption::UriPath(value) => {
+                    if path.is_none() {
+                        path = Some(Vec::new());
+                    }
+                    path.as_mut().unwrap().push(value.clone());
+                },
+                CoapOption::UriQuery(value) => {
+                    if query.is_none() {
+                        query = Some(Vec::new());
+                    }
+                    query.as_mut().unwrap().push(value.clone());
+                },
+                CoapOption::LocationPath(_) => {
+                    return Err(MessageConversionError::InvalidOptionForMessageType(
+                        CoapOptionType::LocationPath,
+                    ))
+                },
+                CoapOption::LocationQuery(_) => {
+                    return Err(MessageConversionError::InvalidOptionForMessageType(
+                        CoapOptionType::LocationQuery,
+                    ))
+                },
+                CoapOption::ProxyUri(uri) => {
+                    if proxy_uri.is_some() {
+                        return Err(MessageConversionError::NonRepeatableOptionRepeated(
+                            CoapOptionType::ProxyUri,
+                        ));
+                    }
+                    proxy_uri = Some(uri.clone())
+                },
+                CoapOption::ProxyScheme(scheme) => {
+                    if proxy_scheme.is_some() {
+                        return Err(MessageConversionError::NonRepeatableOptionRepeated(
+                            CoapOptionType::ProxyScheme,
+                        ));
+                    }
+                    proxy_scheme = Some(CoapUriScheme::from_str(scheme)?)
+                },
+                CoapOption::ContentFormat(cformat) => {
+                    if content_format.is_some() {
+                        return Err(MessageConversionError::NonRepeatableOptionRepeated(
+                            CoapOptionType::ContentFormat,
+                        ));
+                    }
+                    content_format = Some(cformat.clone())
+                },
+                CoapOption::Accept(value) => {
+                    if accept.is_some() {
+                        return Err(MessageConversionError::NonRepeatableOptionRepeated(
+                            CoapOptionType::Accept,
+                        ));
+                    }
+                    accept = Some(value.clone());
+                },
+                // libcoap handles blockwise transfer for us (for now).
                 CoapOption::Size1(_) => {},
-                CoapOption::Size2(_) => {},
+                CoapOption::Size2(_) => {
+                    return Err(MessageConversionError::InvalidOptionForMessageType(
+                        CoapOptionType::Size2,
+                    ))
+                },
+                // libcoap handles blockwise transfer for us (for now).
                 CoapOption::Block1(_) => {},
-                CoapOption::Block2(_) => {},
-                CoapOption::HopLimit(_) => {},
-                CoapOption::NoResponse(_) => {},
-                CoapOption::ETag(_) => {},
-                CoapOption::MaxAge(_) => {},
-                CoapOption::Other(_, _) => {},
-                CoapOption::Observe(_) => {},
+                CoapOption::Block2(_) => {
+                    return Err(MessageConversionError::InvalidOptionForMessageType(
+                        CoapOptionType::Block2,
+                    ))
+                },
+                CoapOption::HopLimit(value) => {
+                    if hop_limit.is_some() {
+                        return Err(MessageConversionError::NonRepeatableOptionRepeated(
+                            CoapOptionType::HopLimit,
+                        ));
+                    }
+                    hop_limit = Some(value.clone());
+                },
+                CoapOption::NoResponse(value) => {
+                    if no_response.is_some() {
+                        return Err(MessageConversionError::NonRepeatableOptionRepeated(
+                            CoapOptionType::NoResponse,
+                        ));
+                    }
+                    no_response = Some(value.clone());
+                },
+                CoapOption::ETag(value) => {
+                    if etag.is_none() {
+                        etag = Some(Vec::new());
+                    }
+                    etag.as_mut().unwrap().push(value.clone());
+                },
+                CoapOption::MaxAge(value) => {
+                    return Err(MessageConversionError::InvalidOptionForMessageType(
+                        CoapOptionType::MaxAge,
+                    ));
+                },
+                CoapOption::Observe(value) => {
+                    if observe.is_some() {
+                        return Err(MessageConversionError::NonRepeatableOptionRepeated(
+                            CoapOptionType::MaxAge,
+                        ));
+                    }
+                    observe = Some(value.clone());
+                },
+                // TODO maybe we can save some copies here if we use into_iter for the options instead.
+                CoapOption::Other(n, v) => {
+                    additional_opts.push(CoapOption::Other(*n, v.clone()));
+                },
             }
         }
+        pdu.clear_options();
+        for opt in additional_opts {
+            (&mut pdu).add_option(opt);
+        }
+        if proxy_scheme.is_some() && proxy_uri.is_some() {
+            return Err(MessageConversionError::InvalidOptionCombination(
+                CoapOptionType::ProxyScheme,
+                CoapOptionType::ProxyUri,
+            ));
+        }
+        let uri = if let Some(proxy_uri) = proxy_uri {
+            Some(CoapUri::try_from_url(Url::parse(&proxy_uri)?)?)
+        } else {
+            Some(CoapUri::new(
+                proxy_scheme,
+                host.map(|v| CoapUriHost::from_str(v.as_str()).unwrap()),
+                port,
+                path,
+                query,
+            ))
+        }
+        .map(|uri| {
+            if uri.scheme().is_some() {
+                CoapRequestUri::new_proxy_uri(uri)
+            } else {
+                CoapRequestUri::new_request_uri(uri)
+            }
+        });
+        let uri = if let Some(uri) = uri { Some(uri?) } else { None };
         Ok(CoapRequest {
             pdu,
-            uri: Some(CoapRequestUri::Request(CoapUri::new(
-                None,
-                host.map(|v| CoapUriHost::Name(v)),
-                port,
-                if path.is_empty() { None } else { Some(path) },
-                if query.is_empty() { None } else { Some(query) },
-            ))),
-            accept: None,
-            max_age: None,
-            etag: None,
-            if_match: None,
+            uri,
+            accept,
+            etag,
+            if_match,
+            content_format,
+            if_none_match,
+            hop_limit,
+            no_response,
+            observe,
         })
     }
 
     pub fn into_pdu(mut self) -> Result<CoapMessage, MessageConversionError> {
         if let Some(req_uri) = self.uri {
-            req_uri.to_options().into_iter().for_each(|v| self.pdu.add_option(v));
+            req_uri.into_options().into_iter().for_each(|v| self.pdu.add_option(v));
+        }
+        if let Some(accept) = self.accept {
+            self.pdu.add_option(CoapOption::Accept(accept))
+        }
+        if let Some(etags) = self.etag {
+            for etag in etags {
+                self.pdu.add_option(CoapOption::ETag(etag));
+            }
+        }
+        if let Some(if_match) = self.if_match {
+            for match_expr in if_match {
+                self.pdu.add_option(CoapOption::IfMatch(match_expr));
+            }
+        }
+        if let Some(content_format) = self.content_format {
+            self.pdu.add_option(CoapOption::ContentFormat(content_format));
+        }
+        if self.if_none_match {
+            self.pdu.add_option(CoapOption::IfNoneMatch);
+        }
+        if let Some(hop_limit) = self.hop_limit {
+            self.pdu.add_option(CoapOption::HopLimit(hop_limit));
+        }
+        if let Some(no_response) = self.no_response {
+            self.pdu.add_option(CoapOption::NoResponse(no_response));
+        }
+        if let Some(observe) = self.observe {
+            self.pdu.add_option(CoapOption::Observe(observe));
         }
         Ok(self.pdu)
+    }
+}
+
+impl CoapMessageCommon for CoapRequest {
+    fn as_message(&self) -> &CoapMessage {
+        &self.pdu
+    }
+
+    fn as_message_mut(&mut self) -> &mut CoapMessage {
+        &mut self.pdu
     }
 }
 
 pub struct CoapResponse {
     pdu: CoapMessage,
-    content_format: Option<CoapContentFormat>,
+    content_format: Option<ContentFormat>,
+    max_age: Option<MaxAge>,
     etag: Option<ETag>,
     location: Option<CoapResponseLocation>,
+    observe: Option<Observe>,
 }
 
 impl CoapResponse {
-    pub fn new(
-        session: &CoapSession,
-        type_: CoapMessageType,
-        code: CoapResponseCode,
-        token: CoapToken,
-    ) -> CoapResponse {
+    pub fn new(type_: CoapMessageType, code: CoapResponseCode) -> CoapResponse {
         CoapResponse {
-            pdu: CoapMessage::new(
-                session.next_message_id(),
-                type_,
-                code.into(),
-                token,
-                session.max_pdu_size(),
-            ),
+            pdu: CoapMessage::new(type_, code.into()),
             content_format: None,
+            max_age: None,
             etag: None,
             location: None,
+            observe: None,
         }
     }
 
-    pub fn type_(&self) -> CoapMessageType {
-        self.pdu.type_()
+    pub fn max_age(&self) -> Option<MaxAge> {
+        self.max_age
     }
 
-    pub fn set_type_(&mut self, type_: CoapMessageType) {
-        self.pdu.set_type_(type_)
+    pub fn set_max_age(&mut self, max_age: Option<MaxAge>) {
+        self.max_age = max_age
     }
 
-    pub fn data(&self) -> Option<&Box<[u8]>> {
-        self.pdu.data()
+    pub fn content_format(&self) -> Option<ContentFormat> {
+        self.content_format
     }
 
-    pub fn set_data<D: Into<Box<[u8]>>>(&mut self, data: Option<D>) {
-        self.pdu.set_data(data);
+    pub fn set_content_format(&mut self, content_format: Option<ContentFormat>) {
+        self.content_format = content_format;
     }
 
-    pub fn code(&self) -> CoapMessageCode {
-        self.pdu.code()
+    pub fn etag(&self) -> Option<&ETag> {
+        self.etag.as_ref()
     }
 
-    pub fn set_code(&mut self, code: CoapResponseCode) {
-        self.pdu.set_code(CoapMessageCode::Response(code))
+    pub fn set_etag(&mut self, etag: Option<ETag>) {
+        self.etag = etag
+    }
+
+    pub fn observe(&self) -> Option<Observe> {
+        self.observe
+    }
+
+    pub fn set_observe(&mut self, observe: Option<Observe>) {
+        self.observe = observe;
+    }
+
+    pub fn location(&self) -> Option<&CoapResponseLocation> {
+        self.location.as_ref()
+    }
+
+    pub fn set_location<U: Into<CoapResponseLocation>>(&mut self, uri: Option<U>) {
+        self.location = uri.map(Into::into)
     }
 
     pub fn into_pdu(mut self) -> Result<CoapMessage, MessageConversionError> {
+        if let Some(loc) = self.location {
+            loc.into_options().into_iter().for_each(|v| self.pdu.add_option(v));
+        }
+        if let Some(max_age) = self.max_age {
+            self.pdu.add_option(CoapOption::MaxAge(max_age));
+        }
+        if let Some(content_format) = self.content_format {
+            self.pdu.add_option(CoapOption::ContentFormat(content_format));
+        }
+        if let Some(etag) = self.etag {
+            self.pdu.add_option(CoapOption::ETag(etag));
+        }
+        if let Some(observe) = self.observe {
+            self.pdu.add_option(CoapOption::Observe(observe));
+        }
         Ok(self.pdu)
     }
 
     pub fn from_pdu(pdu: CoapMessage) -> Result<CoapResponse, MessageConversionError> {
+        let mut location_path = None;
+        let mut location_query = None;
+        let mut max_age = None;
+        let mut etag = None;
+        let mut observe = None;
+        let mut content_format = None;
+        let mut additional_opts = Vec::new();
+        for option in pdu.options_iter() {
+            match option {
+                CoapOption::LocationPath(value) => {
+                    if location_path.is_none() {
+                        location_path = Some(Vec::new());
+                    }
+                    location_path.as_mut().unwrap().push(value.clone());
+                },
+                CoapOption::LocationQuery(value) => {
+                    if location_query.is_none() {
+                        location_query = Some(Vec::new());
+                    }
+                    location_query.as_mut().unwrap().push(value.clone());
+                },
+                CoapOption::ETag(value) => {
+                    if etag.is_some() {
+                        return Err(MessageConversionError::NonRepeatableOptionRepeated(
+                            CoapOptionType::ETag,
+                        ));
+                    }
+                    etag = Some(value.clone());
+                },
+                CoapOption::MaxAge(value) => {
+                    if max_age.is_some() {
+                        return Err(MessageConversionError::NonRepeatableOptionRepeated(
+                            CoapOptionType::MaxAge,
+                        ));
+                    }
+                    max_age = Some(value.clone());
+                },
+                CoapOption::Observe(value) => {
+                    if observe.is_some() {
+                        return Err(MessageConversionError::NonRepeatableOptionRepeated(
+                            CoapOptionType::Observe,
+                        ));
+                    }
+                    observe = Some(value.clone())
+                },
+                CoapOption::IfMatch(_) => {
+                    return Err(MessageConversionError::InvalidOptionForMessageType(
+                        CoapOptionType::IfMatch,
+                    ));
+                },
+                CoapOption::IfNoneMatch => {
+                    return Err(MessageConversionError::InvalidOptionForMessageType(
+                        CoapOptionType::IfNoneMatch,
+                    ));
+                },
+                CoapOption::UriHost(_) => {
+                    return Err(MessageConversionError::InvalidOptionForMessageType(
+                        CoapOptionType::UriHost,
+                    ));
+                },
+                CoapOption::UriPort(_) => {
+                    return Err(MessageConversionError::InvalidOptionForMessageType(
+                        CoapOptionType::UriPort,
+                    ));
+                },
+                CoapOption::UriPath(_) => {
+                    return Err(MessageConversionError::InvalidOptionForMessageType(
+                        CoapOptionType::UriPath,
+                    ));
+                },
+                CoapOption::UriQuery(_) => {
+                    return Err(MessageConversionError::InvalidOptionForMessageType(
+                        CoapOptionType::UriQuery,
+                    ));
+                },
+                CoapOption::ProxyUri(_) => {
+                    return Err(MessageConversionError::InvalidOptionForMessageType(
+                        CoapOptionType::ProxyUri,
+                    ));
+                },
+                CoapOption::ProxyScheme(_) => {
+                    return Err(MessageConversionError::InvalidOptionForMessageType(
+                        CoapOptionType::ProxyScheme,
+                    ));
+                },
+                CoapOption::ContentFormat(value) => {
+                    if content_format.is_some() {
+                        return Err(MessageConversionError::NonRepeatableOptionRepeated(
+                            CoapOptionType::ContentFormat,
+                        ));
+                    }
+                    content_format = Some(value.clone())
+                },
+                CoapOption::Accept(_) => {
+                    return Err(MessageConversionError::InvalidOptionForMessageType(
+                        CoapOptionType::Accept,
+                    ));
+                },
+                CoapOption::Size1(_) => {
+                    return Err(MessageConversionError::InvalidOptionForMessageType(
+                        CoapOptionType::Size1,
+                    ));
+                },
+                CoapOption::Size2(_) => {},
+                CoapOption::Block1(_) => {
+                    return Err(MessageConversionError::InvalidOptionForMessageType(
+                        CoapOptionType::Block1,
+                    ));
+                },
+                CoapOption::Block2(_) => {},
+                CoapOption::HopLimit(_) => {
+                    return Err(MessageConversionError::InvalidOptionForMessageType(
+                        CoapOptionType::HopLimit,
+                    ));
+                },
+                CoapOption::NoResponse(_) => {
+                    return Err(MessageConversionError::InvalidOptionForMessageType(
+                        CoapOptionType::NoResponse,
+                    ));
+                },
+                CoapOption::Other(n, v) => additional_opts.push(CoapOption::Other(*n, v.clone())),
+            }
+        }
+        let location = if location_path.is_some() || location_query.is_some() {
+            Some(CoapResponseLocation::new_response_location(CoapUri::new(
+                None,
+                None,
+                None,
+                location_path,
+                location_query,
+            ))?)
+        } else {
+            None
+        };
         Ok(CoapResponse {
             pdu,
-            content_format: None,
-            etag: None,
-            location: None,
+            content_format,
+            max_age,
+            etag,
+            location,
+            observe,
         })
+    }
+}
+
+impl CoapMessageCommon for CoapResponse {
+    fn as_message(&self) -> &CoapMessage {
+        &self.pdu
+    }
+
+    fn as_message_mut(&mut self) -> &mut CoapMessage {
+        &mut self.pdu
     }
 }

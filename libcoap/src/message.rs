@@ -1,10 +1,11 @@
-use std::{mem::MaybeUninit, slice::Iter};
+use std::{ffi::c_void, mem::MaybeUninit, slice::Iter};
 
 use libcoap_sys::{
-    coap_add_data, coap_add_optlist_pdu, coap_add_token, coap_delete_optlist, coap_delete_pdu, coap_get_data,
-    coap_insert_optlist, coap_new_optlist, coap_opt_length, coap_opt_t, coap_opt_value, coap_option_iterator_init,
-    coap_option_next, coap_option_num_t, coap_optlist_t, coap_pdu_get_code, coap_pdu_get_mid, coap_pdu_get_token,
-    coap_pdu_get_type, coap_pdu_init, coap_pdu_t,
+    coap_add_data, coap_add_data_large_request, coap_add_optlist_pdu, coap_add_token, coap_delete_optlist,
+    coap_delete_pdu, coap_get_data, coap_insert_optlist, coap_new_optlist, coap_opt_length, coap_opt_t, coap_opt_value,
+    coap_option_iterator_init, coap_option_next, coap_option_num_t, coap_optlist_t, coap_pdu_get_code,
+    coap_pdu_get_mid, coap_pdu_get_token, coap_pdu_get_type, coap_pdu_init, coap_pdu_t, coap_release_large_data_t,
+    coap_session_t,
 };
 use num_traits::FromPrimitive;
 
@@ -15,7 +16,7 @@ use crate::{
         CoapMatch, CoapMessageCode, CoapMessageType, CoapOptionNum, CoapOptionType, CoapToken, ContentFormat, ETag,
         HopLimit, MaxAge, NoResponse, ProxyScheme, ProxyUri, Size, UriHost, UriPath, UriPort, UriQuery,
     },
-    session::CoapSession,
+    session::{CoapSession, CoapSessionCommon},
     types::CoapMessageId,
 };
 
@@ -63,11 +64,11 @@ impl CoapOption {
                     return Err(OptionValueError::TooLong);
                 }
                 match opt_type {
-                    CoapOptionType::IfMatch => Ok(CoapOption::IfMatch(CoapMatch(if value.len() == 0 {
-                        None
+                    CoapOptionType::IfMatch => Ok(CoapOption::IfMatch(if value.len() == 0 {
+                        CoapMatch::Empty
                     } else {
-                        Some(value.into_boxed_slice())
-                    }))),
+                        CoapMatch::ETag(value.into_boxed_slice())
+                    })),
                     CoapOptionType::UriHost => Ok(CoapOption::UriHost(String::from_utf8(value)?)),
                     CoapOptionType::ETag => Ok(CoapOption::ETag(value.into_boxed_slice())),
                     CoapOptionType::IfNoneMatch => Ok(CoapOption::IfNoneMatch),
@@ -126,12 +127,9 @@ impl CoapOption {
     pub fn into_value_bytes(self) -> Result<Box<[u8]>, OptionValueError> {
         let num = self.number();
         let bytes = match self {
-            CoapOption::IfMatch(val) => {
-                if let Some(tag) = val.0 {
-                    tag
-                } else {
-                    Box::new([])
-                }
+            CoapOption::IfMatch(val) => match val {
+                CoapMatch::ETag(tag) => tag,
+                CoapMatch::Empty => Box::new([]),
             },
             CoapOption::IfNoneMatch => Box::new([]),
             CoapOption::UriHost(value) => value.into_boxed_str().into_boxed_bytes(),
@@ -172,39 +170,85 @@ impl CoapOption {
     }
 }
 
+pub trait CoapMessageCommon {
+    fn add_option(&mut self, option: CoapOption) {
+        self.as_message_mut().options.push(option);
+    }
+
+    fn clear_options(&mut self) {
+        self.as_message_mut().options.clear();
+    }
+
+    fn options_iter(&self) -> Iter<CoapOption> {
+        self.as_message().options.iter()
+    }
+
+    fn type_(&self) -> CoapMessageType {
+        self.as_message().type_
+    }
+
+    fn set_type_(&mut self, type_: CoapMessageType) {
+        self.as_message_mut().type_ = type_;
+    }
+
+    fn code(&self) -> CoapMessageCode {
+        self.as_message().code
+    }
+
+    fn set_code(&mut self, code: CoapMessageCode) {
+        self.as_message_mut().code = code.into();
+    }
+
+    fn mid(&self) -> Option<CoapMessageId> {
+        self.as_message().mid.clone()
+    }
+
+    fn set_mid(&mut self, mid: Option<CoapMessageId>) {
+        self.as_message_mut().mid = mid;
+    }
+
+    fn data(&self) -> Option<&Box<[u8]>> {
+        self.as_message().data.as_ref()
+    }
+
+    fn set_data<D: Into<Box<[u8]>>>(&mut self, data: Option<D>) {
+        self.as_message_mut().data = data.map(Into::into);
+    }
+
+    fn token(&self) -> Option<&Box<[u8]>> {
+        self.as_message().token.as_ref()
+    }
+
+    fn set_token<D: Into<Box<[u8]>>>(&mut self, token: Option<D>) {
+        self.as_message_mut().token = token.map(Into::into);
+    }
+
+    fn as_message(&self) -> &CoapMessage;
+    fn as_message_mut(&mut self) -> &mut CoapMessage;
+}
+
 pub struct CoapMessage {
     type_: CoapMessageType,
     code: CoapMessageCode,
-    mid: CoapMessageId,
-    max_message_size: usize,
+    mid: Option<CoapMessageId>,
     options: Vec<CoapOption>,
-    token: Box<[u8]>,
+    token: Option<Box<[u8]>>,
     data: Option<Box<[u8]>>,
 }
 
 impl CoapMessage {
-    pub fn new(
-        mid: CoapMessageId,
-        type_: CoapMessageType,
-        code: CoapMessageCode,
-        token: CoapToken,
-        max_pdu_size: usize,
-    ) -> CoapMessage {
+    pub fn new(type_: CoapMessageType, code: CoapMessageCode) -> CoapMessage {
         CoapMessage {
             type_,
             code,
-            mid,
-            max_message_size: max_pdu_size,
+            mid: None,
             options: Vec::new(),
+            token: None,
             data: None,
-            token,
         }
     }
 
-    pub(crate) unsafe fn from_raw_pdu(
-        session: &CoapSession,
-        raw_pdu: *const coap_pdu_t,
-    ) -> Result<CoapMessage, MessageConversionError> {
+    pub(crate) unsafe fn from_raw_pdu(raw_pdu: *const coap_pdu_t) -> Result<CoapMessage, MessageConversionError> {
         let mut option_iter = MaybeUninit::zeroed();
         coap_option_iterator_init(raw_pdu, option_iter.as_mut_ptr(), std::ptr::null());
         let mut option_iter = option_iter.assume_init();
@@ -221,25 +265,28 @@ impl CoapMessage {
         Ok(CoapMessage {
             type_: coap_pdu_get_type(raw_pdu).into(),
             code: coap_pdu_get_code(raw_pdu).try_into().unwrap(),
-            mid: coap_pdu_get_mid(raw_pdu),
-            max_message_size: session.max_pdu_size(),
+            mid: Some(coap_pdu_get_mid(raw_pdu)),
             options,
-            token: token.into_boxed_slice(),
+            token: Some(token.into_boxed_slice()),
             data: Some(data.into_boxed_slice()),
         })
     }
 
-    pub(crate) unsafe fn into_raw_pdu(mut self) -> Result<*mut coap_pdu_t, MessageConversionError> {
+    pub unsafe fn into_raw_pdu<S: CoapSessionCommon+?Sized>(
+        mut self,
+        session: &mut S,
+    ) -> Result<*mut coap_pdu_t, MessageConversionError> {
+        let message = self.as_message_mut();
         let mut pdu = coap_pdu_init(
-            self.type_.to_raw_pdu_type(),
-            self.code.to_raw_pdu_code(),
-            self.mid,
-            self.max_message_size,
+            message.type_.to_raw_pdu_type(),
+            message.code.to_raw_pdu_code(),
+            message.mid.ok_or(MessageConversionError::MissingMessageId)?,
+            session.max_pdu_size(),
         );
         if pdu.is_null() {
             return Err(MessageConversionError::Unknown);
         }
-        if self.apply_to_raw_pdu(pdu).is_err() {
+        if self.apply_to_raw_pdu(pdu, session).is_err() {
             coap_delete_pdu(pdu);
             Err(MessageConversionError::Unknown)
         } else {
@@ -247,16 +294,18 @@ impl CoapMessage {
         }
     }
 
-    pub(crate) unsafe fn apply_to_raw_pdu(
+    pub unsafe fn apply_to_raw_pdu<S: CoapSessionCommon+?Sized>(
         mut self,
         raw_pdu: *mut coap_pdu_t,
+        session: &mut S,
     ) -> Result<*mut coap_pdu_t, MessageConversionError> {
-        let token: &[u8] = self.token.as_ref();
+        let message = self.as_message_mut();
+        let token: &[u8] = message.token.as_ref().ok_or(MessageConversionError::MissingToken)?;
         if coap_add_token(raw_pdu, token.len(), token.as_ptr()) == 0 {
             return Err(MessageConversionError::Unknown);
         }
         let mut optlist = None;
-        let mut option_iter = std::mem::take(&mut self.options).into_iter();
+        let mut option_iter = std::mem::take(&mut message.options).into_iter();
         for option in option_iter {
             let entry = option.into_optlist_entry()?;
             if entry.is_null() {
@@ -281,72 +330,45 @@ impl CoapMessage {
                 return Err(MessageConversionError::Unknown);
             }
         }
-        if let Some(data) = self.data {
-            let data: &[u8] = data.as_ref().as_ref();
-            if coap_add_data(raw_pdu, data.len(), data.as_ptr()) == 0 {
-                return Err(MessageConversionError::Unknown);
+        if let Some(data) = message.data.take() {
+            match message.code {
+                CoapMessageCode::Empty => return Err(MessageConversionError::DataInEmptyMessage),
+                CoapMessageCode::Request(_) => {
+                    let len = data.len();
+                    let box_ptr = Box::into_raw(data);
+                    coap_add_data_large_request(
+                        session.raw_session_mut(),
+                        raw_pdu,
+                        len,
+                        box_ptr as *mut u8,
+                        Some(large_data_cleanup_handler),
+                        box_ptr as *mut c_void,
+                    );
+                },
+                CoapMessageCode::Response(_) => {
+                    // TODO blockwise transfer here as well.
+                    // (for some reason libcoap needs the request PDU here?)
+                    let data: &[u8] = data.as_ref().as_ref();
+                    if coap_add_data(raw_pdu, data.len(), data.as_ptr()) == 0 {
+                        return Err(MessageConversionError::Unknown);
+                    }
+                },
             }
         }
         Ok(raw_pdu)
     }
+}
 
-    pub fn add_option(&mut self, option: CoapOption) {
-        self.options.push(option);
+impl CoapMessageCommon for CoapMessage {
+    fn as_message(&self) -> &CoapMessage {
+        self
     }
 
-    pub fn clear_options(&mut self) {
-        self.options.clear();
+    fn as_message_mut(&mut self) -> &mut CoapMessage {
+        self
     }
+}
 
-    pub fn options_iter(&self) -> Iter<CoapOption> {
-        self.options.iter()
-    }
-
-    pub fn type_(&self) -> CoapMessageType {
-        self.type_
-    }
-
-    pub fn set_type_(&mut self, type_: CoapMessageType) {
-        self.type_ = type_;
-    }
-
-    pub fn code(&self) -> CoapMessageCode {
-        self.code
-    }
-
-    pub fn set_code(&mut self, code: CoapMessageCode) {
-        self.code = code.into();
-    }
-
-    pub fn mid(&self) -> CoapMessageId {
-        self.mid
-    }
-
-    pub fn set_mid(&mut self, mid: CoapMessageId) {
-        self.mid = mid;
-    }
-
-    pub fn max_pdu_size(&self) -> usize {
-        self.max_message_size
-    }
-
-    pub fn set_max_pdu_size(&mut self, max_size: usize) {
-        self.max_message_size = max_size
-    }
-
-    pub fn data(&self) -> Option<&Box<[u8]>> {
-        self.data.as_ref()
-    }
-
-    pub fn set_data<D: Into<Box<[u8]>>>(&mut self, data: Option<D>) {
-        self.data = data.map(|v| v.into());
-    }
-
-    pub fn token(&self) -> &Box<[u8]> {
-        &self.token
-    }
-
-    pub fn set_token<D: Into<Box<[u8]>>>(&mut self, token: D) {
-        self.token = token.into();
-    }
+unsafe extern "C" fn large_data_cleanup_handler(session: *mut coap_session_t, app_ptr: *mut c_void) {
+    std::mem::drop(Box::from_raw(app_ptr as *mut u8));
 }
