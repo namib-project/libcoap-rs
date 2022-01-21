@@ -1,4 +1,4 @@
-use std::{str::Utf8Error, string::FromUtf8Error};
+use std::{string::FromUtf8Error};
 
 use crate::protocol::CoapOptionType;
 

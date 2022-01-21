@@ -1,15 +1,11 @@
-use std::{borrow::Borrow, mem::MaybeUninit, slice::Iter};
+
 
 use libcoap_sys::{
-    coap_add_data, coap_add_optlist_pdu, coap_add_token, coap_delete_optlist, coap_delete_pdu, coap_get_data,
-    coap_insert_optlist, coap_new_optlist, coap_new_pdu, coap_opt_iterator_t, coap_opt_length, coap_opt_parse,
-    coap_opt_t, coap_opt_value, coap_option_filter_clear, coap_option_iterator_init, coap_option_next,
-    coap_option_num_t, coap_option_t, coap_optlist_t, coap_pdu_code_t, coap_pdu_get_code, coap_pdu_get_mid,
-    coap_pdu_get_token, coap_pdu_get_type, coap_pdu_init, coap_pdu_set_code, coap_pdu_t, coap_pdu_type_t,
+    coap_option_num_t, coap_pdu_code_t, coap_pdu_type_t,
     coap_pdu_type_t::{COAP_MESSAGE_ACK, COAP_MESSAGE_CON, COAP_MESSAGE_NON, COAP_MESSAGE_RST},
     coap_proto_t,
     coap_proto_t::{COAP_PROTO_DTLS, COAP_PROTO_NONE, COAP_PROTO_TCP, COAP_PROTO_TLS, COAP_PROTO_UDP},
-    coap_request_t, coap_response_t, COAP_MEDIATYPE_ANY, COAP_MEDIATYPE_APPLICATION_CBOR,
+    coap_request_t, COAP_MEDIATYPE_ANY, COAP_MEDIATYPE_APPLICATION_CBOR,
     COAP_MEDIATYPE_APPLICATION_COSE_ENCRYPT, COAP_MEDIATYPE_APPLICATION_COSE_ENCRYPT0,
     COAP_MEDIATYPE_APPLICATION_COSE_KEY, COAP_MEDIATYPE_APPLICATION_COSE_KEY_SET, COAP_MEDIATYPE_APPLICATION_COSE_MAC,
     COAP_MEDIATYPE_APPLICATION_COSE_MAC0, COAP_MEDIATYPE_APPLICATION_COSE_SIGN, COAP_MEDIATYPE_APPLICATION_COSE_SIGN1,
@@ -19,10 +15,9 @@ use libcoap_sys::{
     COAP_MEDIATYPE_APPLICATION_SENML_JSON, COAP_MEDIATYPE_APPLICATION_SENML_XML,
     COAP_MEDIATYPE_APPLICATION_SENSML_CBOR, COAP_MEDIATYPE_APPLICATION_SENSML_EXI,
     COAP_MEDIATYPE_APPLICATION_SENSML_JSON, COAP_MEDIATYPE_APPLICATION_SENSML_XML, COAP_MEDIATYPE_APPLICATION_XML,
-    COAP_MEDIATYPE_TEXT_PLAIN, COAP_OPTION_ACCEPT, COAP_OPTION_BLOCK1, COAP_OPTION_BLOCK2, COAP_OPTION_CONTENT_FORMAT,
-    COAP_OPTION_CONTENT_TYPE, COAP_OPTION_ETAG, COAP_OPTION_HOP_LIMIT, COAP_OPTION_IF_MATCH, COAP_OPTION_IF_NONE_MATCH,
+    COAP_MEDIATYPE_TEXT_PLAIN, COAP_OPTION_ACCEPT, COAP_OPTION_BLOCK1, COAP_OPTION_BLOCK2, COAP_OPTION_CONTENT_FORMAT, COAP_OPTION_ETAG, COAP_OPTION_HOP_LIMIT, COAP_OPTION_IF_MATCH, COAP_OPTION_IF_NONE_MATCH,
     COAP_OPTION_LOCATION_PATH, COAP_OPTION_LOCATION_QUERY, COAP_OPTION_MAXAGE, COAP_OPTION_NORESPONSE,
-    COAP_OPTION_OBSERVE, COAP_OPTION_OSCORE, COAP_OPTION_PROXY_SCHEME, COAP_OPTION_PROXY_URI, COAP_OPTION_SIZE1,
+    COAP_OPTION_OBSERVE, COAP_OPTION_PROXY_SCHEME, COAP_OPTION_PROXY_URI, COAP_OPTION_SIZE1,
     COAP_OPTION_SIZE2, COAP_OPTION_URI_HOST, COAP_OPTION_URI_PATH, COAP_OPTION_URI_PORT, COAP_OPTION_URI_QUERY,
 };
 use num_derive::FromPrimitive;
@@ -30,11 +25,8 @@ use num_traits::FromPrimitive;
 
 use crate::{
     error::{
-        MessageCodeConversionError, MessageConversionError, MessageCreationError, OptionCreationError,
-        OptionValueError, UnknownOptionError,
+        MessageCodeConversionError, UnknownOptionError,
     },
-    session::CoapSession,
-    types::CoapMessageId,
 };
 
 pub type ETag = Box<[u8]>;
@@ -442,7 +434,7 @@ fn convert_to_fixed_size_slice(n: usize, val: &[u8]) -> Box<[u8]> {
         panic!("supplied slice too short");
     }
     let mut buffer: Vec<u8> = vec![0; n];
-    let (_, mut target_buffer) = buffer.split_at_mut(n - val.len());
+    let (_, target_buffer) = buffer.split_at_mut(n - val.len());
     target_buffer.copy_from_slice(val);
     buffer.truncate(n);
     return buffer.into_boxed_slice();
@@ -454,9 +446,9 @@ pub fn decode_var_len_u32(val: &[u8]) -> u32 {
 
 pub fn encode_var_len_u32(val: u32) -> Box<[u8]> {
     // I really hope that rust accounts for endianness here.
-    let bytes_to_discard = (val.leading_zeros() / 8);
+    let bytes_to_discard = val.leading_zeros() / 8;
     let mut ret_val = Vec::from(val.to_be_bytes());
-    ret_val.drain((..bytes_to_discard as usize));
+    ret_val.drain(..bytes_to_discard as usize);
     ret_val.into_boxed_slice()
 }
 
@@ -466,9 +458,9 @@ pub fn decode_var_len_u64(val: &[u8]) -> u64 {
 
 pub fn encode_var_len_u64(val: u64) -> Box<[u8]> {
     // I really hope that rust accounts for endianness here.
-    let bytes_to_discard = (val.leading_zeros() / 8);
+    let bytes_to_discard = val.leading_zeros() / 8;
     let mut ret_val = Vec::from(val.to_be_bytes());
-    ret_val.drain((..bytes_to_discard as usize));
+    ret_val.drain(..bytes_to_discard as usize);
     ret_val.into_boxed_slice()
 }
 
@@ -478,9 +470,9 @@ pub fn decode_var_len_u16(val: &[u8]) -> u16 {
 
 pub fn encode_var_len_u16(val: u16) -> Box<[u8]> {
     // I really hope that rust accounts for endianness here.
-    let bytes_to_discard = (val.leading_zeros() / 8);
+    let bytes_to_discard = val.leading_zeros() / 8;
     let mut ret_val = Vec::from(val.to_be_bytes());
-    ret_val.drain((..bytes_to_discard as usize));
+    ret_val.drain(..bytes_to_discard as usize);
     ret_val.into_boxed_slice()
 }
 

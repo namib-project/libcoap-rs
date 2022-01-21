@@ -1,16 +1,11 @@
 //! Types required for conversion between libcoap C library abstractions and Rust types.
 use std::{
-    borrow::Borrow,
     cell::UnsafeCell,
-    collections::HashMap,
     convert::Infallible,
     ffi::c_void,
-    iter::Flatten,
     mem::MaybeUninit,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
-    ops::Deref,
     os::raw::{c_int, c_uint},
-    pin::Pin,
     rc::{Rc, Weak},
     slice::Iter,
     str::FromStr,
@@ -19,21 +14,17 @@ use std::{
 
 use libc::{in6_addr, in_addr, sa_family_t, sockaddr_in, sockaddr_in6, socklen_t, AF_INET, AF_INET6};
 use libcoap_sys::{
-    coap_address_t, coap_address_t__bindgen_ty_1, coap_mid_t, coap_new_uri, coap_opt_size, coap_split_path,
-    coap_split_query, coap_split_uri, coap_uri_scheme_t,
+    coap_address_t, coap_mid_t, coap_uri_scheme_t,
     coap_uri_scheme_t::{
         COAP_URI_SCHEME_COAP, COAP_URI_SCHEME_COAPS, COAP_URI_SCHEME_COAPS_TCP, COAP_URI_SCHEME_COAP_TCP,
         COAP_URI_SCHEME_HTTP, COAP_URI_SCHEME_HTTPS,
-    },
-    coap_uri_t, COAP_URI_SCHEME_SECURE_MASK,
+    }, COAP_URI_SCHEME_SECURE_MASK,
 };
 use num_derive::FromPrimitive;
 use url::{Host, Url};
 
 use crate::{
-    error::{OptionValueError, UriParsingError},
-    message::CoapOption,
-    protocol::{CoapMessageType::Con, CoapOptionType},
+    error::{UriParsingError},
 };
 
 pub type IfIndex = c_int;
@@ -316,7 +307,7 @@ impl CoapUri {
     }
 
     pub fn drain_path_iter(&mut self) -> Option<Drain<String>> {
-        self.path.as_mut().map(|mut p| p.drain((..)))
+        self.path.as_mut().map(|p| p.drain(..))
     }
 
     pub fn path_iter(&self) -> Option<Iter<'_, String>> {
@@ -324,7 +315,7 @@ impl CoapUri {
     }
 
     pub fn drain_query_iter(&mut self) -> Option<Drain<String>> {
-        self.query.as_mut().map(|mut p| p.drain((..)))
+        self.query.as_mut().map(|p| p.drain(..))
     }
 
     pub fn query_iter(&self) -> Option<Iter<String>> {
@@ -391,7 +382,7 @@ impl<D> CoapAppDataRef<D> {
     /// To safely use this function, the following invariants must be kept:
     /// - ptr is a valid pointer to an Rc<UnsafeCell<D>>
     pub unsafe fn clone_raw_rc(ptr: *mut c_void) -> CoapAppDataRef<D> {
-        let orig_ref = Rc::from_raw(ptr as (*const UnsafeCell<D>));
+        let orig_ref = Rc::from_raw(ptr as *const UnsafeCell<D>);
         let new_ref = Rc::clone(&orig_ref);
         Rc::into_raw(orig_ref);
         CoapAppDataRef(new_ref)
@@ -418,9 +409,9 @@ impl<D> CoapAppDataRef<D> {
     /// To safely use this function, the following invariants must be kept:
     /// - ptr is a valid pointer to a Weak<UnsafeCell<D>>
     pub unsafe fn clone_raw_weak(ptr: *mut c_void) -> CoapAppDataRef<D> {
-        let orig_ref = Weak::from_raw(ptr as (*const UnsafeCell<D>));
+        let orig_ref = Weak::from_raw(ptr as *const UnsafeCell<D>);
         let new_ref = Weak::upgrade(&orig_ref).expect("attempted to upgrade a weak reference that was orphaned");
-        Weak::into_raw(orig_ref);
+        let _weakref = Weak::into_raw(orig_ref);
         CoapAppDataRef(new_ref)
     }
 
@@ -441,7 +432,7 @@ impl<D> CoapAppDataRef<D> {
     /// - as soon as the returned Weak<UnsafeCell<D>> is dropped, the provided pointer is treated as
     ///   invalid.
     pub unsafe fn raw_ptr_to_weak(ptr: *mut c_void) -> Weak<UnsafeCell<D>> {
-        Weak::from_raw(ptr as (*const UnsafeCell<D>))
+        Weak::from_raw(ptr as *const UnsafeCell<D>)
     }
 
     /// Converts from a raw user data/application data pointer inside of a libcoap C library struct
@@ -456,7 +447,7 @@ impl<D> CoapAppDataRef<D> {
     /// To safely use this function, the following invariants must be kept:
     /// - ptr is a valid pointer to a Rc<UnsafeCell<D>>
     pub unsafe fn raw_ptr_to_rc(ptr: *mut c_void) -> Rc<UnsafeCell<D>> {
-        Rc::from_raw(ptr as (*const UnsafeCell<D>))
+        Rc::from_raw(ptr as *const UnsafeCell<D>)
     }
 
     /// Creates a raw reference, suitable for storage inside of a libcoap C library user/application
