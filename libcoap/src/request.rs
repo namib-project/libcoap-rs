@@ -1,6 +1,4 @@
-use std::{str::FromStr};
-
-
+use std::str::FromStr;
 
 use url::Url;
 
@@ -8,8 +6,8 @@ use crate::{
     error::{MessageConversionError, OptionValueError},
     message::{CoapMessage, CoapMessageCommon, CoapOption},
     protocol::{
-        CoapMatch, CoapMessageType, CoapOptionType, CoapRequestCode,
-        CoapResponseCode, ContentFormat, ETag, HopLimit, MaxAge, NoResponse, Observe,
+        CoapMatch, CoapMessageType, CoapOptionType, CoapRequestCode, CoapResponseCode, ContentFormat, ETag, HopLimit,
+        MaxAge, NoResponse, Observe,
     },
     types::{CoapUri, CoapUriHost, CoapUriScheme},
 };
@@ -105,7 +103,7 @@ impl TryFrom<CoapUri> for CoapRequestUri {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct CoapResponseLocation(CoapUri);
 
 impl CoapResponseLocation {
@@ -486,6 +484,7 @@ impl CoapMessageCommon for CoapRequest {
     }
 }
 
+#[derive(Debug)]
 pub struct CoapResponse {
     pdu: CoapMessage,
     content_format: Option<ContentFormat>,

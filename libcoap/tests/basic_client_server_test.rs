@@ -2,6 +2,7 @@ use std::{
     net::{SocketAddr, UdpSocket},
     rc::Rc,
     sync::atomic::{AtomicBool, Ordering},
+    thread::sleep,
     time::Duration,
 };
 
@@ -11,7 +12,7 @@ use libcoap::{
     protocol::{CoapMessageCode, CoapMessageType, CoapRequestCode, CoapResponseCode},
     request::{CoapRequest, CoapRequestUri, CoapResponse},
     resource::{CoapRequestHandler, CoapResource},
-    session::{CoapSession, CoapSessionCommon},
+    session::{CoapClientSession, CoapSessionCommon},
     types::{CoapUri, CoapUriHost},
 };
 
@@ -66,7 +67,7 @@ pub fn test_basic_client_server() {
     });
 
     let mut context = CoapContext::new().unwrap();
-    let session = context.connect_udp(server_address).unwrap();
+    let mut session = context.connect_udp(server_address).unwrap();
 
     let uri: CoapRequestUri = CoapUri::new(
         None,
@@ -80,17 +81,10 @@ pub fn test_basic_client_server() {
 
     let mut request = CoapRequest::new(CoapMessageType::Con, CoapRequestCode::Get);
     request.set_uri(Some(uri));
-    let req_handle = match context.session_by_handle_mut(&session).unwrap() {
-        CoapSession::Client(client) => client.send_request(request).unwrap(),
-        CoapSession::Server(_) => panic!(),
-    };
+    let req_handle = session.send_request(request).unwrap();
     loop {
         assert!(context.do_io(Some(Duration::from_secs(10))).expect("error during IO") <= Duration::from_secs(10));
-        let client_session = match context.session_by_handle_mut(&session).unwrap() {
-            CoapSession::Client(client) => client,
-            CoapSession::Server(_) => panic!(),
-        };
-        for response in client_session.poll_handle(&req_handle) {
+        for response in session.poll_handle(&req_handle) {
             assert_eq!(response.code(), CoapMessageCode::Response(CoapResponseCode::Content));
             assert_eq!(response.data().unwrap().as_ref(), "Hello World!".as_bytes());
             server_handle.join().unwrap();

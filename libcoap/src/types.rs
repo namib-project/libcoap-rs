@@ -1,6 +1,7 @@
 //! Types required for conversion between libcoap C library abstractions and Rust types.
 use std::{
-    cell::UnsafeCell,
+    borrow::{Borrow, BorrowMut},
+    cell::{Ref, RefCell, RefMut, UnsafeCell},
     convert::Infallible,
     ffi::c_void,
     mem::MaybeUninit,
@@ -18,14 +19,13 @@ use libcoap_sys::{
     coap_uri_scheme_t::{
         COAP_URI_SCHEME_COAP, COAP_URI_SCHEME_COAPS, COAP_URI_SCHEME_COAPS_TCP, COAP_URI_SCHEME_COAP_TCP,
         COAP_URI_SCHEME_HTTP, COAP_URI_SCHEME_HTTPS,
-    }, COAP_URI_SCHEME_SECURE_MASK,
+    },
+    COAP_URI_SCHEME_SECURE_MASK,
 };
 use num_derive::FromPrimitive;
 use url::{Host, Url};
 
-use crate::{
-    error::{UriParsingError},
-};
+use crate::error::UriParsingError;
 
 pub type IfIndex = c_int;
 pub type MaxRetransmit = c_uint;
@@ -160,7 +160,7 @@ impl From<&coap_address_t> for CoapAddress {
 }
 
 #[repr(u32)]
-#[derive(Copy, Clone, FromPrimitive)]
+#[derive(Copy, Clone, FromPrimitive, Debug)]
 pub enum CoapUriScheme {
     Coap = COAP_URI_SCHEME_COAP as u32,
     Coaps = COAP_URI_SCHEME_COAPS as u32,
@@ -209,7 +209,7 @@ impl ToString for CoapUriScheme {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum CoapUriHost {
     IpLiteral(IpAddr),
     Name(String),
@@ -248,7 +248,7 @@ impl ToString for CoapUriHost {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct CoapUri {
     scheme: Option<CoapUriScheme>,
     host: Option<CoapUriHost>,
@@ -355,14 +355,14 @@ impl TryFrom<Url> for CoapUri {
 /// structures like sessions) were mutably borrowed to this function, we can therefore assume that
 /// creating a mutable reference to the Rust structs from the callback function does not violate
 /// Rust's aliasing rules. In order to get these references, this wrapper type is used, which
-/// provides basically the same functionality as an Rc<UnsafeCell<D>>, but with additional helper
+/// provides basically the same functionality as an Rc<RefCell<D>>, but with additional helper
 /// functions to aid in creating and using the raw pointers stored in the libcoap C structs.
-pub struct CoapAppDataRef<D>(Rc<UnsafeCell<D>>);
+pub struct CoapAppDataRef<D>(Rc<RefCell<D>>);
 
 impl<D> CoapAppDataRef<D> {
     /// Creates a new instance of CoapStrongAppDataRef, containing the provided value.
     pub fn new(value: D) -> CoapAppDataRef<D> {
-        CoapAppDataRef(Rc::new(UnsafeCell::new(value)))
+        CoapAppDataRef(Rc::new(RefCell::new(value)))
     }
 
     /// Converts from a raw user data/application data pointer inside of a libcoap C library struct
@@ -382,7 +382,7 @@ impl<D> CoapAppDataRef<D> {
     /// To safely use this function, the following invariants must be kept:
     /// - ptr is a valid pointer to an Rc<UnsafeCell<D>>
     pub unsafe fn clone_raw_rc(ptr: *mut c_void) -> CoapAppDataRef<D> {
-        let orig_ref = Rc::from_raw(ptr as *const UnsafeCell<D>);
+        let orig_ref = Rc::from_raw(ptr as *const RefCell<D>);
         let new_ref = Rc::clone(&orig_ref);
         Rc::into_raw(orig_ref);
         CoapAppDataRef(new_ref)
@@ -409,7 +409,7 @@ impl<D> CoapAppDataRef<D> {
     /// To safely use this function, the following invariants must be kept:
     /// - ptr is a valid pointer to a Weak<UnsafeCell<D>>
     pub unsafe fn clone_raw_weak(ptr: *mut c_void) -> CoapAppDataRef<D> {
-        let orig_ref = Weak::from_raw(ptr as *const UnsafeCell<D>);
+        let orig_ref = Weak::from_raw(ptr as *const RefCell<D>);
         let new_ref = Weak::upgrade(&orig_ref).expect("attempted to upgrade a weak reference that was orphaned");
         let _weakref = Weak::into_raw(orig_ref);
         CoapAppDataRef(new_ref)
@@ -431,8 +431,8 @@ impl<D> CoapAppDataRef<D> {
     /// - ptr is a valid pointer to a Weak<UnsafeCell<D>>
     /// - as soon as the returned Weak<UnsafeCell<D>> is dropped, the provided pointer is treated as
     ///   invalid.
-    pub unsafe fn raw_ptr_to_weak(ptr: *mut c_void) -> Weak<UnsafeCell<D>> {
-        Weak::from_raw(ptr as *const UnsafeCell<D>)
+    pub unsafe fn raw_ptr_to_weak(ptr: *mut c_void) -> Weak<RefCell<D>> {
+        Weak::from_raw(ptr as *const RefCell<D>)
     }
 
     /// Converts from a raw user data/application data pointer inside of a libcoap C library struct
@@ -446,8 +446,8 @@ impl<D> CoapAppDataRef<D> {
     ///
     /// To safely use this function, the following invariants must be kept:
     /// - ptr is a valid pointer to a Rc<UnsafeCell<D>>
-    pub unsafe fn raw_ptr_to_rc(ptr: *mut c_void) -> Rc<UnsafeCell<D>> {
-        Rc::from_raw(ptr as *const UnsafeCell<D>)
+    pub unsafe fn raw_ptr_to_rc(ptr: *mut c_void) -> Rc<RefCell<D>> {
+        Rc::from_raw(ptr as *const RefCell<D>)
     }
 
     /// Creates a raw reference, suitable for storage inside of a libcoap C library user/application
@@ -490,8 +490,8 @@ impl<D> CoapAppDataRef<D> {
     /// - the instance of D contained in this pointer can be treated as if it were immutably
     ///   borrowed for the lifetime of the created reference, i.e. creating an immutable reference
     ///   to D does not violate Rust's aliasing rules for as long as this reference lives.
-    pub unsafe fn borrow(&self) -> &D {
-        &*UnsafeCell::get(&self.0)
+    pub fn borrow(&self) -> Ref<D> {
+        RefCell::borrow(&self.0)
     }
 
     /// Creates a mutable reference to the contained data type.
@@ -501,7 +501,13 @@ impl<D> CoapAppDataRef<D> {
     /// - the instance of D contained in this pointer can be treated as if it were mutably
     ///   borrowed for the lifetime of the created reference, i.e. creating a mutable reference to
     ///   D does not violate Rust's aliasing rules for as long as this reference lives.
-    pub unsafe fn borrow_mut(&mut self) -> &mut D {
-        &mut *UnsafeCell::get(&self.0)
+    pub fn borrow_mut(&mut self) -> RefMut<D> {
+        RefCell::borrow_mut(&mut self.0)
+    }
+}
+
+impl<D> Clone for CoapAppDataRef<D> {
+    fn clone(&self) -> Self {
+        CoapAppDataRef(self.0.clone())
     }
 }
