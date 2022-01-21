@@ -8,9 +8,11 @@ use std::{
 
 use libcoap::{
     context::CoapContext,
-    protocol::{CoapMessageCode, CoapRequestCode, CoapResponseCode},
+    message::CoapMessageCommon,
+    protocol::{CoapMessageCode, CoapMessageType, CoapRequestCode, CoapResponseCode},
     request::{CoapRequest, CoapRequestUri, CoapResponse},
     resource::{CoapRequestHandler, CoapResource},
+    session::{CoapSession, CoapSessionCommon},
     types::{CoapUri, CoapUriHost},
 };
 
@@ -25,7 +27,7 @@ fn run_basic_test_server(server_address: SocketAddr) {
             |completed: &Rc<AtomicBool>, res, sess, req, mut rsp: CoapResponse| {
                 let data = Vec::<u8>::from("Hello World!".as_bytes());
                 rsp.set_data(Some(data.into_boxed_slice()));
-                rsp.set_code(CoapResponseCode::Content);
+                rsp.set_code(CoapMessageCode::Response(CoapResponseCode::Content));
                 sess.send(rsp.into_pdu().unwrap());
                 completed.store(true, Ordering::Relaxed);
             },
@@ -77,20 +79,23 @@ pub fn test_basic_client_server() {
     .try_into()
     .unwrap();
 
-    let mut request = CoapRequest::new(&session, CoapRequestCode::Get);
+    let mut request = CoapRequest::new(CoapMessageType::Con, CoapRequestCode::Get);
     request.set_uri(Some(uri));
-    let req_handle = session.send_request(request).unwrap();
+    let req_handle = match context.session_by_handle_mut(&session).unwrap() {
+        CoapSession::Client(client) => client.send_request(request).unwrap(),
+        CoapSession::Server(_) => panic!(),
+    };
     loop {
         assert!(context.do_io(Some(Duration::from_secs(10))).expect("error during IO") <= Duration::from_secs(10));
-        if let Some(iter) = session.poll_handle(&req_handle) {
-            for response in iter {
-                let response = response.expect("received invalid response");
-                assert_eq!(response.code(), CoapMessageCode::Response(CoapResponseCode::Content));
-                assert_eq!(response.data().unwrap().as_ref(), "Hello World!".as_bytes());
-            }
-            break;
+        let client_session = match context.session_by_handle_mut(&session).unwrap() {
+            CoapSession::Client(client) => client,
+            CoapSession::Server(_) => panic!(),
+        };
+        for response in client_session.poll_handle(&req_handle) {
+            assert_eq!(response.code(), CoapMessageCode::Response(CoapResponseCode::Content));
+            assert_eq!(response.data().unwrap().as_ref(), "Hello World!".as_bytes());
+            server_handle.join().unwrap();
+            return;
         }
     }
-
-    server_handle.join().unwrap();
 }

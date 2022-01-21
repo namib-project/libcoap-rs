@@ -1,33 +1,43 @@
-use std::{any::Any, borrow::BorrowMut, cell::RefCell, net::SocketAddr, ops::Sub, rc::Rc, time::Duration};
-
-use libcoap_sys::{
-    coap_add_resource, coap_can_exit, coap_context_set_block_mode, coap_context_t, coap_free_context, coap_io_process,
-    coap_mid_t, coap_new_client_session, coap_new_context, coap_pdu_t, coap_proto_t::COAP_PROTO_UDP,
-    coap_register_response_handler, coap_resource_t, coap_session_t, COAP_BLOCK_SINGLE_BODY, COAP_BLOCK_USE_LIBCOAP,
-    COAP_IO_WAIT,
+use std::{
+    any::Any,
+    borrow::{Borrow, BorrowMut},
+    cell::RefCell,
+    collections::HashMap,
+    ffi::c_void,
+    net::SocketAddr,
+    ops::Sub,
+    rc::Rc,
+    time::Duration,
 };
 
-#[cfg(feature = "nightly")]
-use crate::error::ResourceTypecastingError;
+use libcoap_sys::{
+    coap_add_resource, coap_bin_const_t, coap_can_exit, coap_context_set_block_mode, coap_context_set_psk2,
+    coap_context_t, coap_dtls_cpsk_info_t, coap_dtls_cpsk_t, coap_dtls_id_callback_t, coap_dtls_spsk_info_t,
+    coap_dtls_spsk_t, coap_free_context, coap_io_process, coap_mid_t, coap_new_client_session,
+    coap_new_client_session_psk2, coap_new_context, coap_pdu_t,
+    coap_proto_t::{COAP_PROTO_DTLS, COAP_PROTO_UDP},
+    coap_register_response_handler, coap_resource_t, coap_session_t, COAP_BLOCK_SINGLE_BODY, COAP_BLOCK_USE_LIBCOAP,
+    COAP_DTLS_SPSK_SETUP_VERSION, COAP_IO_WAIT,
+};
+
 use crate::{
+    crypto::{CoapClientCryptoProvider, CoapServerCryptoProvider},
     error::{ContextCreationError, EndpointCreationError, IoProcessError, SessionCreationError},
-    resource::CoapResource,
-    session::{session_response_handler, CoapClientSession, CoapSession},
+    resource::{CoapResource, UntypedCoapResource},
+    session::{
+        dtls_ih_callback, dtls_server_id_callback, session_response_handler, CoapClientSession, CoapSession,
+        CoapSessionHandle,
+    },
     transport::{udp::CoapUdpEndpoint, CoapEndpoint},
-    types::CoapAddress,
+    types::{CoapAddress, CoapAppDataRef},
 };
 
 pub struct CoapContext {
     raw_context: *mut coap_context_t,
     endpoints: Vec<CoapEndpoint>,
-    resources: Vec<Box<dyn CoapResourceListContent>>,
-    sessions: Vec<CoapSession>,
-}
-
-pub(crate) trait CoapResourceListContent: Any {
-    fn uri_path(&self) -> &str;
-    unsafe fn drop_inner_exclusive(&mut self);
-    unsafe fn raw_resource(&self) -> *mut coap_resource_t;
+    resources: Vec<Box<dyn UntypedCoapResource>>,
+    sessions: HashMap<SocketAddr, CoapAppDataRef<CoapSession>>,
+    crypto_provider: Option<Box<dyn CoapServerCryptoProvider>>,
 }
 
 impl CoapContext {
@@ -44,7 +54,8 @@ impl CoapContext {
             raw_context,
             endpoints: Vec::new(),
             resources: Vec::new(),
-            sessions: Vec::new(),
+            sessions: HashMap::new(),
+            crypto_provider: None,
         })
     }
 
@@ -74,31 +85,120 @@ impl CoapContext {
         };
     }
 
-    #[cfg(feature = "nightly")]
-    pub fn resource_by_uri_path_typed<D: Any+?Sized>(
-        &self,
-        uri_path: &str,
-    ) -> Result<Option<&CoapResource<D>>, ResourceTypecastingError> {
-        for resource in self.resources {
-            if resource.uri_path() == uri_path {
-                return (resource as Box<dyn Any>)
-                    .downcast_ref::<CoapResource<D>>()
-                    .map(|v| Some(v))
-                    .ok_or(ResourceTypecastingError::WrongUserDataType);
-            }
-        }
-        Ok(None)
+    pub(crate) fn server_crypto_provider(&mut self) -> Option<&mut Box<dyn CoapServerCryptoProvider>> {
+        self.crypto_provider.as_mut()
     }
 
-    pub fn connect_udp(&mut self, addr: SocketAddr) -> Result<CoapSession, SessionCreationError> {
-        Ok(unsafe {
-            CoapSession::from_raw(coap_new_client_session(
+    pub fn set_server_crypto_provider(&mut self, provider: Option<Box<dyn CoapServerCryptoProvider>>) {
+        self.crypto_provider = provider;
+        if let Some(provider) = &mut self.crypto_provider {
+            let initial_data = provider.provide_hint_for_sni(None).map(|v| coap_dtls_spsk_info_t {
+                hint: coap_bin_const_t {
+                    length: v.hint.len(),
+                    s: v.hint.as_ptr(),
+                },
+                key: coap_bin_const_t {
+                    length: v.key.len(),
+                    s: v.key.as_ptr(),
+                },
+            });
+            if let Some(initial_data) = initial_data {
+                unsafe {
+                    coap_context_set_psk2(
+                        self.raw_context,
+                        Box::leak(Box::new(coap_dtls_spsk_t {
+                            version: COAP_DTLS_SPSK_SETUP_VERSION as u8,
+                            reserved: [0; 7],
+                            validate_id_call_back: Some(dtls_server_id_callback),
+                            id_call_back_arg: Box::into_raw(Box::from(self)) as *mut c_void,
+                            validate_sni_call_back: None,
+                            sni_call_back_arg: std::ptr::null_mut::<c_void>(),
+                            psk_info: initial_data,
+                        })),
+                    )
+                };
+            }
+        }
+    }
+
+    pub fn resource_by_uri_path<D: Any+?Sized>(&self, uri_path: &str) -> Option<&dyn UntypedCoapResource> {
+        for resource in &self.resources {
+            if resource.uri_path() == uri_path {
+                return Some(resource.as_ref());
+            }
+        }
+        None
+    }
+
+    pub fn connect_dtls<P: 'static+CoapClientCryptoProvider>(
+        &mut self,
+        addr: SocketAddr,
+        mut crypto_provider: P,
+    ) -> Result<CoapSessionHandle, SessionCreationError> {
+        unsafe {
+            let id = crypto_provider
+                .provide_info_for_hint(None)
+                .expect("crypto provider did not provide default credentials");
+            let session = coap_new_client_session_psk2(
                 self.raw_context,
                 std::ptr::null(),
-                CoapAddress::from(addr).as_raw_address(),
+                CoapAddress::from(addr.clone()).as_raw_address(),
+                COAP_PROTO_DTLS,
+                Box::leak(Box::new(coap_dtls_cpsk_t {
+                    version: COAP_DTLS_SPSK_SETUP_VERSION as u8,
+                    reserved: [0; 7],
+                    validate_ih_call_back: Some(dtls_ih_callback),
+                    ih_call_back_arg: std::ptr::null_mut(),
+                    client_sni: std::ptr::null_mut(),
+                    psk_info: coap_dtls_cpsk_info_t {
+                        identity: coap_bin_const_t {
+                            length: id.identity.len(),
+                            s: id.identity.as_ptr(),
+                        },
+                        key: coap_bin_const_t {
+                            length: id.key.len(),
+                            s: id.key.as_ptr(),
+                        },
+                    },
+                })),
+            );
+            if session.is_null() {
+                return Err(SessionCreationError::Unknown);
+            }
+            let mut session = CoapSession::from_raw(session);
+            match session.borrow_mut() {
+                CoapSession::Client(client_session) => {
+                    client_session.set_crypto_provider(Some(Box::new(crypto_provider)));
+                    self.sessions.insert(addr.clone(), session);
+                    Ok(CoapSessionHandle::new(addr))
+                },
+                CoapSession::Server(_) => unreachable!(),
+            }
+        }
+    }
+
+    pub fn connect_udp(&mut self, addr: SocketAddr) -> Result<CoapSessionHandle, SessionCreationError> {
+        unsafe {
+            let session = coap_new_client_session(
+                self.raw_context,
+                std::ptr::null(),
+                CoapAddress::from(addr.clone()).as_raw_address(),
                 COAP_PROTO_UDP,
-            ))
-        })
+            );
+            if session.is_null() {
+                return Err(SessionCreationError::Unknown);
+            }
+            self.sessions.insert(addr.clone(), CoapSession::from_raw(session));
+            return Ok(CoapSessionHandle::new(addr));
+        }
+    }
+
+    pub fn session_by_handle(&self, handle: &CoapSessionHandle) -> Option<&CoapSession> {
+        unsafe { self.sessions.get(handle.addr()).map(|v| v.borrow()) }
+    }
+
+    pub fn session_by_handle_mut(&mut self, handle: &CoapSessionHandle) -> Option<&mut CoapSession> {
+        unsafe { self.sessions.get_mut(handle.addr()).map(|v| v.borrow_mut()) }
     }
 
     pub fn do_io(&mut self, timeout: Option<Duration>) -> Result<Duration, IoProcessError> {

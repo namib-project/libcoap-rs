@@ -1,13 +1,17 @@
+//! Types required for conversion between libcoap C library abstractions and Rust types.
 use std::{
     borrow::Borrow,
+    cell::UnsafeCell,
     collections::HashMap,
     convert::Infallible,
+    ffi::c_void,
     iter::Flatten,
     mem::MaybeUninit,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
     ops::Deref,
     os::raw::{c_int, c_uint},
     pin::Pin,
+    rc::{Rc, Weak},
     slice::Iter,
     str::FromStr,
     vec::Drain,
@@ -230,6 +234,14 @@ impl<T: ToString> From<url::Host<T>> for CoapUriHost {
     }
 }
 
+impl FromStr for CoapUriHost {
+    type Err = Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(IpAddr::from_str(s).map_or_else(|_| CoapUriHost::Name(s.to_string()), |v| CoapUriHost::IpLiteral(v)))
+    }
+}
+
 impl From<coap_uri_scheme_t> for CoapUriScheme {
     fn from(scheme: coap_uri_scheme_t) -> Self {
         CoapUriScheme::from_raw_scheme(scheme)
@@ -325,5 +337,180 @@ impl TryFrom<Url> for CoapUri {
 
     fn try_from(value: Url) -> Result<Self, Self::Error> {
         CoapUri::try_from_url(value)
+    }
+}
+
+/// A strong reference to an existing Coap Rust library struct, created from an app data/user data
+/// pointer inside of a C library struct.
+///
+/// This type is used to emulate Rust's aliasing rules through the FFI boundary.
+///
+/// # Purpose and Safety
+/// When [CoapContext::do_io()] is called, a mutable reference to the context is provided, which
+/// implies that inside of this call, we can assume to have exclusive access to the context (and
+/// therefore also all of its sessions, resources, endpoints, etc.).
+///
+/// At some point inside of the [CoapContext::do_io()] call, the callback functions are called from
+/// within the C library. Because these callbacks only get the raw pointers to the underlying C
+/// library structs, we have to use their app_data pointers to get to our actual Rust structs.
+///
+/// These pointers also have to be raw, which is why we use [Rc]/[Weak]s and
+/// [Rc::into_raw()]/[Weak::into_raw()] to create such raw pointers.
+/// However, after restoration, these smart pointers only provide immutable access to the underlying
+/// structs.
+///
+/// Because we know that the callbacks are only called from [CoapContext::do_io()], which treats
+/// the call to the raw libraries [coap_io_process()] as if the context (and all of its related
+/// structures like sessions) were mutably borrowed to this function, we can therefore assume that
+/// creating a mutable reference to the Rust structs from the callback function does not violate
+/// Rust's aliasing rules. In order to get these references, this wrapper type is used, which
+/// provides basically the same functionality as an Rc<UnsafeCell<D>>, but with additional helper
+/// functions to aid in creating and using the raw pointers stored in the libcoap C structs.
+pub struct CoapAppDataRef<D>(Rc<UnsafeCell<D>>);
+
+impl<D> CoapAppDataRef<D> {
+    /// Creates a new instance of CoapStrongAppDataRef, containing the provided value.
+    pub fn new(value: D) -> CoapAppDataRef<D> {
+        CoapAppDataRef(Rc::new(UnsafeCell::new(value)))
+    }
+
+    /// Converts from a raw user data/application data pointer inside of a libcoap C library struct
+    /// into the appropriate reference type.
+    ///
+    /// This is done by first restoring the [Rc<UnsafeCell<D>>] using [Rc::from_raw()], then
+    /// cloning and creating the [CoapStrongAppDataRef<D>] from it (maintaining the original
+    /// reference using [Rc::into_raw()]).
+    ///
+    /// Note that for the lifetime of this [CoapStrongAppDataRef<D>], the reference counter of the
+    /// underlying [Rc] is increased by one.
+    ///
+    /// # Safety
+    /// For an explanation of the purpose of this struct and where it was originally intended to be
+    /// used, see the struct-level documentation.
+    ///
+    /// To safely use this function, the following invariants must be kept:
+    /// - ptr is a valid pointer to an Rc<UnsafeCell<D>>
+    pub unsafe fn clone_raw_rc(ptr: *mut c_void) -> CoapAppDataRef<D> {
+        let orig_ref = Rc::from_raw(ptr as (*const UnsafeCell<D>));
+        let new_ref = Rc::clone(&orig_ref);
+        Rc::into_raw(orig_ref);
+        CoapAppDataRef(new_ref)
+    }
+
+    /// Converts from a raw user data/application data pointer inside of a libcoap C library struct
+    /// into the appropriate reference type.
+    ///
+    /// This is done by first restoring the [Weak<UnsafeCell<D>>] using [Weak::from_raw()],
+    /// upgrading it to a [Rc<UnsafeCell<D>>] then cloning and creating the
+    /// [CoapStrongAppDataRef<D>] from the upgraded reference (restoring the raw pointer again
+    /// afterwards using [Rc::downgrade()] and [Weak::into_raw()]).
+    ///
+    /// Note that for the lifetime of this [CoapStrongAppDataRef<D>], the reference counter of the
+    /// underlying [Rc] is increased by one.
+    ///
+    /// # Panics
+    /// Panics if the provided Weak reference is orphaned.
+    ///
+    /// # Safety
+    /// For an explanation of the purpose of this struct and where it was originally intended to be
+    /// used, see the struct-level documentation.
+    ///
+    /// To safely use this function, the following invariants must be kept:
+    /// - ptr is a valid pointer to a Weak<UnsafeCell<D>>
+    pub unsafe fn clone_raw_weak(ptr: *mut c_void) -> CoapAppDataRef<D> {
+        let orig_ref = Weak::from_raw(ptr as (*const UnsafeCell<D>));
+        let new_ref = Weak::upgrade(&orig_ref).expect("attempted to upgrade a weak reference that was orphaned");
+        Weak::into_raw(orig_ref);
+        CoapAppDataRef(new_ref)
+    }
+
+    /// Converts from a raw user data/application data pointer inside of a libcoap C library struct
+    /// into the underlying Weak<UnsafeCell<D>>.
+    ///
+    /// This is done by restoring the [Weak<UnsafeCell<D>>] using [Weak::from_raw()],
+    ///
+    /// # Panics
+    /// Panics if the provided Weak reference is orphaned.
+    ///
+    /// # Safety
+    /// For an explanation of the purpose of this struct and where it was originally intended to be
+    /// used, see the struct-level documentation.
+    ///
+    /// To safely use this function, the following invariants must be kept:
+    /// - ptr is a valid pointer to a Weak<UnsafeCell<D>>
+    /// - as soon as the returned Weak<UnsafeCell<D>> is dropped, the provided pointer is treated as
+    ///   invalid.
+    pub unsafe fn raw_ptr_to_weak(ptr: *mut c_void) -> Weak<UnsafeCell<D>> {
+        Weak::from_raw(ptr as (*const UnsafeCell<D>))
+    }
+
+    /// Converts from a raw user data/application data pointer inside of a libcoap C library struct
+    /// into the underlying Rc<UnsafeCell<D>>.
+    ///
+    /// This is done by restoring the [Rc<UnsafeCell<D>>] using [Rc::from_raw()],
+    ///
+    /// # Safety
+    /// For an explanation of the purpose of this struct and where it was originally intended to be
+    /// used, see the struct-level documentation.
+    ///
+    /// To safely use this function, the following invariants must be kept:
+    /// - ptr is a valid pointer to a Rc<UnsafeCell<D>>
+    pub unsafe fn raw_ptr_to_rc(ptr: *mut c_void) -> Rc<UnsafeCell<D>> {
+        Rc::from_raw(ptr as (*const UnsafeCell<D>))
+    }
+
+    /// Creates a raw reference, suitable for storage inside of a libcoap C library user/application
+    /// data pointer.
+    ///
+    /// This function internally calls Rc::clone and then Rc::into_raw to create a pointer referring
+    /// to a clone of the Rc<UnsafeCell<D>> contained in this type.
+    ///
+    /// Note that this increases the reference count of the Rc by one.
+    ///
+    /// # Safety
+    /// To safely use this function, the following invariants must be kept:
+    /// - The provided pointer is never treated as anything else but a pointer to an
+    ///   Rc<UnsafeCell<D>>.
+    pub fn create_raw_rc(&self) -> *mut c_void {
+        Rc::into_raw(Rc::clone(&self.0)) as *mut c_void
+    }
+
+    /// Creates a raw reference, suitable for storage inside of a libcoap C library user/application
+    /// data pointer.
+    ///
+    /// This function internally calls Rc::downgrade and then Weak::into_raw to create a pointer
+    /// referring to a weak reference of the Rc<UnsafeCell<D>> contained in this type.
+    ///
+    /// Note that this does not increase the reference count of the Rc by one. If you want to ensure
+    /// that the underlying D is never cleaned up for as long as this pointer is not .
+    ///
+    /// # Safety
+    /// To safely use this function, the following invariants must be kept:
+    /// - The provided pointer is never treated as anything else but a pointer to a
+    ///   Weak<UnsafeCell<D>>.
+    pub fn create_raw_weak(&self) -> *mut c_void {
+        Weak::into_raw(Rc::downgrade(&self.0)) as *mut c_void
+    }
+
+    /// Creates an immutable reference to the contained data type.
+    ///
+    /// # Safety
+    /// To safely use this function, the following invariants must be kept:
+    /// - the instance of D contained in this pointer can be treated as if it were immutably
+    ///   borrowed for the lifetime of the created reference, i.e. creating an immutable reference
+    ///   to D does not violate Rust's aliasing rules for as long as this reference lives.
+    pub unsafe fn borrow(&self) -> &D {
+        &*UnsafeCell::get(&self.0)
+    }
+
+    /// Creates a mutable reference to the contained data type.
+    ///
+    /// # Safety
+    /// To safely use this function, the following invariants must be kept:
+    /// - the instance of D contained in this pointer can be treated as if it were mutably
+    ///   borrowed for the lifetime of the created reference, i.e. creating a mutable reference to
+    ///   D does not violate Rust's aliasing rules for as long as this reference lives.
+    pub unsafe fn borrow_mut(&mut self) -> &mut D {
+        &mut *UnsafeCell::get(&self.0)
     }
 }
