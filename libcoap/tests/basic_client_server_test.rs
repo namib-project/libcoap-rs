@@ -2,7 +2,6 @@ use std::{
     net::{SocketAddr, UdpSocket},
     rc::Rc,
     sync::atomic::{AtomicBool, Ordering},
-    thread::sleep,
     time::Duration,
 };
 
@@ -10,9 +9,9 @@ use libcoap::{
     context::CoapContext,
     message::CoapMessageCommon,
     protocol::{CoapMessageCode, CoapMessageType, CoapRequestCode, CoapResponseCode},
-    request::{CoapRequest, CoapRequestUri, CoapResponse},
+    request::{CoapRequest, CoapResponse},
     resource::{CoapRequestHandler, CoapResource},
-    session::{CoapClientSession, CoapSessionCommon},
+    session::{CoapSessionCommon},
     types::{CoapUri, CoapUriHost},
 };
 
@@ -28,7 +27,7 @@ fn run_basic_test_server(server_address: SocketAddr) {
                 let data = Vec::<u8>::from("Hello World!".as_bytes());
                 rsp.set_data(Some(data.into_boxed_slice()));
                 rsp.set_code(CoapMessageCode::Response(CoapResponseCode::Content));
-                sess.send(rsp.into_pdu().unwrap()).unwrap();
+                sess.send(rsp).unwrap();
                 completed.store(true, Ordering::Relaxed);
             },
         )),
@@ -61,7 +60,7 @@ pub fn test_basic_client_server() {
         .local_addr()
         .expect("Failed to get server socket address");
 
-    let addr_clone = server_address.clone();
+    let addr_clone = server_address;
     let server_handle = std::thread::spawn(move || {
         run_basic_test_server(addr_clone);
     });
@@ -69,18 +68,16 @@ pub fn test_basic_client_server() {
     let mut context = CoapContext::new().unwrap();
     let mut session = context.connect_udp(server_address).unwrap();
 
-    let uri: CoapRequestUri = CoapUri::new(
+    let uri = CoapUri::new(
         None,
         Some(CoapUriHost::IpLiteral(server_address.ip())),
         Some(server_address.port()),
         Some(vec!["test1".to_string()]),
         None,
-    )
-    .try_into()
-    .unwrap();
+    );
 
-    let mut request = CoapRequest::new(CoapMessageType::Con, CoapRequestCode::Get);
-    request.set_uri(Some(uri));
+    let mut request = CoapRequest::new(CoapMessageType::Con, CoapRequestCode::Get).unwrap();
+    request.set_uri(Some(uri)).unwrap();
     let req_handle = session.send_request(request).unwrap();
     loop {
         assert!(context.do_io(Some(Duration::from_secs(10))).expect("error during IO") <= Duration::from_secs(10));

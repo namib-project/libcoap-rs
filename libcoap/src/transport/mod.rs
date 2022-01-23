@@ -12,12 +12,32 @@ pub mod tcp;
 pub mod tls;
 pub mod udp;
 
+pub type EndpointMtu = c_uint;
+
+/// Trait for functions common between all types of endpoints.
 pub trait EndpointCommon {
+    /// Provides an immutable reference to the supplied endpoint.
+    ///
+    /// # Safety
+    /// Note that the endpoint expects the reference to be valid for as long as the endpoint
+    /// itself exists. Therefore, you should never call [coap_free_endpoint()](libcoap_sys::coap_free_endpoint())
+    /// or attach the raw endpoint to a context that does not live for as long as the endpoint
+    /// itself ([coap_free_context()](libcoap_sys::coap_free_context()) is called when the
+    /// context goes out of scope and then also calls [coap_free_endpoint()](libcoap_sys::coap_free_endpoint())).
     unsafe fn as_raw_endpoint(&self) -> &coap_endpoint_t;
 
+    /// Provides an immutable reference to the supplied endpoint.
+    ///
+    /// # Safety
+    /// Note that the endpoint expects the reference to be valid for as long as the endpoint
+    /// itself exists. Therefore, you should never call [coap_free_endpoint()](libcoap_sys::coap_free_endpoint())
+    /// or attach the raw endpoint to a context that does not live for as long as the endpoint
+    /// itself ([coap_free_context()](libcoap_sys::coap_free_context()) is called when the context
+    /// goes out of scope and then also calls [coap_free_endpoint()](libcoap_sys::coap_free_endpoint())).
     unsafe fn as_mut_raw_endpoint(&mut self) -> &mut coap_endpoint_t;
 
-    fn set_default_mtu(&mut self, mtu: c_uint) {
+    /// Sets the default MTU value of the endpoint.
+    fn set_default_mtu(&mut self, mtu: EndpointMtu) {
         // SAFETY: as_mut_raw_endpoint cannot fail and will always return a valid reference.
         // Modifying the state of the endpoint is also fine, because we have a mutable reference
         // of the whole endpoint.
@@ -28,6 +48,8 @@ pub trait EndpointCommon {
     }
 }
 
+/// Enum representing CoAP endpoints of various types.
+#[derive(Debug)]
 pub enum CoapEndpoint {
     Udp(CoapUdpEndpoint),
     Dtls(CoapDtlsEndpoint),

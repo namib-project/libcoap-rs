@@ -31,6 +31,7 @@ num-derive = {version = "^0.3.3"}
 num-traits = {version = "^0.2.14"}
 url = {version = "^2.2"}
 rand = {version = "^0.8.4"}
+thiserror = "^1.0"
 
 [dev-dependencies]
 libcoap-sys = {path = "../libcoap-sys", features = ["dtls_backend_mbedtls"]}

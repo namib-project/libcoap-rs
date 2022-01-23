@@ -3,24 +3,27 @@ use std::str::FromStr;
 use url::Url;
 
 use crate::{
-    error::{MessageConversionError, OptionValueError},
+    error::{MessageConversionError, MessageTypeError, OptionValueError},
     message::{CoapMessage, CoapMessageCommon, CoapOption},
     protocol::{
-        CoapMatch, CoapMessageType, CoapOptionType, CoapRequestCode, CoapResponseCode, ContentFormat, ETag, HopLimit,
-        MaxAge, NoResponse, Observe,
+        CoapMatch, CoapMessageCode, CoapMessageType, CoapOptionType, CoapRequestCode, CoapResponseCode, ContentFormat,
+        ETag, HopLimit, MaxAge, NoResponse, Observe,
     },
     types::{CoapUri, CoapUriHost, CoapUriScheme},
 };
 
-#[derive(Clone)]
-pub enum CoapRequestUri {
+/// Internal representation of a CoAP URI that can be used for requests
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+enum CoapRequestUri {
     Request(CoapUri),
     Proxy(CoapUri),
 }
 
 impl CoapRequestUri {
+    /// Creates a new request URI from the given CoapUri, returning an OptionValueError if the URI
+    /// contains invalid values for request URIs.
     pub fn new_request_uri(uri: CoapUri) -> Result<CoapRequestUri, OptionValueError> {
-        if uri.scheme().is_some() || uri.port().is_some() && !uri.host().is_some() {
+        if uri.scheme().is_some() || uri.port().is_some() && uri.host().is_none() {
             return Err(OptionValueError::IllegalValue);
         }
         if let Some(iter) = uri.path_iter() {
@@ -36,6 +39,8 @@ impl CoapRequestUri {
         Ok(CoapRequestUri::Request(uri))
     }
 
+    /// Creates a new request proxy URI from the given CoapUri, returning an OptionValueError if
+    /// the URI contains invalid values for proxy URIs.
     pub fn new_proxy_uri(uri: CoapUri) -> Result<CoapRequestUri, OptionValueError> {
         if uri.scheme().is_none() || uri.host().is_none() {
             return Err(OptionValueError::IllegalValue);
@@ -46,6 +51,7 @@ impl CoapRequestUri {
         Ok(CoapRequestUri::Proxy(uri))
     }
 
+    /// Generate a proxy URI string corresponding to this request URI.
     fn generate_proxy_uri_string(uri: &CoapUri) -> String {
         let mut proxy_uri_string = format!(
             "{}://{}",
@@ -70,6 +76,7 @@ impl CoapRequestUri {
         proxy_uri_string
     }
 
+    /// Converts this request URI into a `Vec<CoapOption>` that can be added to a message.
     pub fn into_options(self) -> Vec<CoapOption> {
         let mut options = Vec::new();
         match self {
@@ -93,6 +100,14 @@ impl CoapRequestUri {
         }
         options
     }
+
+    /// Returns an immutable reference to the underlying URI.
+    pub fn as_uri(&self) -> &CoapUri {
+        match self {
+            CoapRequestUri::Request(uri) => uri,
+            CoapRequestUri::Proxy(uri) => uri,
+        }
+    }
 }
 
 impl TryFrom<CoapUri> for CoapRequestUri {
@@ -103,10 +118,13 @@ impl TryFrom<CoapUri> for CoapRequestUri {
     }
 }
 
-#[derive(Clone, Debug)]
+/// Internal representation of a CoAP URI that can be used as a response location.
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct CoapResponseLocation(CoapUri);
 
 impl CoapResponseLocation {
+    /// Creates a new response location from the given CoapUri, returning an OptionValueError if
+    /// the URI contains invalid values for response locations.
     pub fn new_response_location(uri: CoapUri) -> Result<CoapResponseLocation, OptionValueError> {
         if uri.scheme().is_some() || uri.host().is_some() || uri.port().is_some() {
             return Err(OptionValueError::IllegalValue);
@@ -114,6 +132,7 @@ impl CoapResponseLocation {
         Ok(CoapResponseLocation(uri))
     }
 
+    /// Converts this response location into a `Vec<CoapOption>` that can be added to a message.
     pub fn into_options(self) -> Vec<CoapOption> {
         let mut options = Vec::new();
         let mut uri = self.0;
@@ -125,6 +144,11 @@ impl CoapResponseLocation {
         }
         options
     }
+
+    /// Returns an immutable reference to the underlying URI.
+    pub fn as_uri(&self) -> &CoapUri {
+        &self.0
+    }
 }
 
 impl TryFrom<CoapUri> for CoapResponseLocation {
@@ -135,8 +159,11 @@ impl TryFrom<CoapUri> for CoapResponseLocation {
     }
 }
 
-pub struct CoapRequestHandle {}
-
+/// Representation of a CoAP request message.
+///
+/// This struct wraps around the more direct CoapMessage and allows easier definition of typical
+/// options used in requests.
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct CoapRequest {
     pdu: CoapMessage,
     uri: Option<CoapRequestUri>,
@@ -151,8 +178,16 @@ pub struct CoapRequest {
 }
 
 impl CoapRequest {
-    pub fn new(type_: CoapMessageType, code: CoapRequestCode) -> CoapRequest {
-        CoapRequest {
+    /// Creates a new CoAP request with the given message type and code.
+    ///
+    /// Returns an error if the given message type is not allowed for CoAP requests (the only
+    /// allowed message types are [CoapMessageType::Con] and [CoapMessageType::Non]).
+    pub fn new(type_: CoapMessageType, code: CoapRequestCode) -> Result<CoapRequest, MessageTypeError> {
+        match type_ {
+            CoapMessageType::Con | CoapMessageType::Non => {},
+            v => return Err(MessageTypeError::InvalidForMessageCode(v)),
+        }
+        Ok(CoapRequest {
             pdu: CoapMessage::new(type_, code.into()),
             uri: None,
             accept: None,
@@ -163,82 +198,183 @@ impl CoapRequest {
             hop_limit: None,
             no_response: None,
             observe: None,
-        }
+        })
     }
 
+    /// Returns the "Accept" option value for this request.
     pub fn accept(&self) -> Option<ContentFormat> {
         self.accept
     }
 
+    /// Sets the "Accept" option value for this request.
+    ///
+    /// This option indicates the acceptable content formats for the response.
+    ///
+    /// See [RFC 7252, Section 5.10.4](https://datatracker.ietf.org/doc/html/rfc7252#section-5.10.4)
+    /// for more information.
     pub fn set_accept(&mut self, accept: Option<ContentFormat>) {
         self.accept = accept
     }
 
+    /// Returns the "ETag" option value for this request.
     pub fn etag(&self) -> Option<&Vec<ETag>> {
         self.etag.as_ref()
     }
 
+    /// Sets the "ETag" option value for this request.
+    ///
+    /// This option can be used to request a specific representation of the requested resource.
+    ///
+    /// The server may send an ETag value alongside a response, which the client can then set here
+    /// to request the given representation.
+    ///
+    /// See [RFC 7252, Section 5.10.6](https://datatracker.ietf.org/doc/html/rfc7252#section-5.10.6)
+    /// for more information.
     pub fn set_etag(&mut self, etag: Option<Vec<ETag>>) {
         self.etag = etag
     }
 
+    /// Returns the "If-Match" option value for this request.
     pub fn if_match(&self) -> Option<&Vec<CoapMatch>> {
         self.if_match.as_ref()
     }
 
+    /// Sets the "If-Match" option value for this request.
+    ///
+    /// This option indicates a match expression that must be fulfilled in order to perform the
+    /// request.
+    ///
+    /// See [RFC 7252, Section 5.10.8.1](https://datatracker.ietf.org/doc/html/rfc7252#section-5.10.8.1)
+    /// for more information.
     pub fn set_if_match(&mut self, if_match: Option<Vec<CoapMatch>>) {
         self.if_match = if_match
     }
 
+    /// Returns the "Content-Format" option value for this request.
     pub fn content_format(&self) -> Option<ContentFormat> {
         self.content_format
     }
 
+    /// Sets the "Content-Format" option value for this request.
+    ///
+    /// This option indicates the content format of the body of this message. It is not to be
+    /// confused with the "Accept" option, which indicates the format that the body of the response
+    /// to this message should have.
+    ///
+    /// See [RFC 7252, Section 5.10.3](https://datatracker.ietf.org/doc/html/rfc7252#section-5.10.3)
+    /// for more information.
     pub fn set_content_format(&mut self, content_format: Option<ContentFormat>) {
         self.content_format = content_format;
     }
 
+    /// Returns the "If-None-Match" option value of this request.
     pub fn if_none_match(&self) -> bool {
         self.if_none_match
     }
 
+    /// Sets the "If-None-Match" option value for this request.
+    ///
+    /// This option indicates that no match expression may be fulfilled in order for this request
+    /// to be fulfilled.
+    ///
+    /// It is usually nonsensical to set this value to `true` if an If-Match-Expression has been set.
+    ///
+    /// See [RFC 7252, Section 5.10.8.2](https://datatracker.ietf.org/doc/html/rfc7252#section-5.10.8.2)
+    /// for more information.
     pub fn set_if_none_match(&mut self, if_none_match: bool) {
         self.if_none_match = if_none_match
     }
 
+    /// Returns the "Hop-Limit" option value of this request.
     pub fn hop_limit(&self) -> Option<HopLimit> {
         self.hop_limit
     }
 
+    /// Sets the "Hop-Limit" option value for this request.
+    ///
+    /// This option is mainly used to prevent proxying loops and specifies the maximum number of
+    /// proxies that the request may pass.
+    ///
+    /// This option is defined in [RFC 8768](https://datatracker.ietf.org/doc/html/rfc8768) and is
+    /// not part of the main CoAP spec. Some peers may therefore not support this option.
     pub fn set_hop_limit(&mut self, hop_limit: Option<HopLimit>) {
         self.hop_limit = hop_limit;
     }
 
+    /// Returns the "No-Response" option value for this request.
     pub fn no_response(&self) -> Option<NoResponse> {
         self.no_response
     }
 
+    /// Sets the "No-Response" option value for this request.
+    ///
+    /// This option indicates that the client performing this request does not wish to receive a
+    /// response for this request.
+    ///
+    /// This option is defined in [RFC 7967](https://datatracker.ietf.org/doc/html/rfc7967) and is
+    /// not part of the main CoAP spec. Some peers may therefore not support this option.
     pub fn set_no_response(&mut self, no_response: Option<NoResponse>) {
         self.no_response = no_response;
     }
 
+    /// Returns the "Observe" option value for this request.
     pub fn observe(&self) -> Option<Observe> {
         self.observe
     }
 
+    /// Sets the "Observe" option value for this request.
+    ///
+    /// This option indicates that the client performing this request wishes to be notified of
+    /// changes to the requested resource.
+    ///
+    /// This option is defined in [RFC 7641](https://datatracker.ietf.org/doc/html/rfc7641) and is
+    /// not part of the main CoAP spec. Some peers may therefore not support this option.
     pub fn set_observe(&mut self, observe: Option<Observe>) {
         self.observe = observe;
     }
 
-    pub fn uri(&self) -> Option<&CoapRequestUri> {
-        self.uri.as_ref()
+    /// Returns the CoAP URI that is requested (either a normal request URI or a proxy URI)
+    pub fn uri(&self) -> Option<&CoapUri> {
+        self.uri.as_ref().map(|v| v.as_uri())
     }
 
-    pub fn set_uri<U: Into<CoapRequestUri>>(&mut self, uri: Option<U>) {
-        self.uri = uri.map(|v| v.into())
+    /// Sets the URI requested in this request.
+    ///
+    /// The request URI must not have a scheme defined, and path segments, query segments and the
+    /// host itself each have to be smaller than 255 characters.
+    ///
+    /// If the URI has an invalid format, an [OptionValueError] is returned.
+    ///
+    /// This method overrides any previously set proxy URI.
+    pub fn set_uri<U: Into<CoapUri>>(&mut self, uri: Option<U>) -> Result<(), OptionValueError> {
+        let uri = uri.map(|v| v.into());
+        if let Some(uri) = uri {
+            self.uri = Some(CoapRequestUri::new_request_uri(uri)?)
+        }
+        Ok(())
     }
 
-    pub fn from_pdu(mut pdu: CoapMessage) -> Result<CoapRequest, MessageConversionError> {
+    /// Sets the proxy URI requested in this request.
+    ///
+    /// The proxy URI must be an absolute URL with a schema valid for CoAP proxying (CoAP(s) or
+    /// HTTP(s)),
+    /// The proxy URI must not be longer than 1023 characters.
+    ///
+    /// If the URI has an invalid format, an [OptionValueError] is returned.
+    ///
+    /// This method overrides any previously set request URI.
+    pub fn set_proxy_uri<U: Into<CoapUri>>(&mut self, uri: Option<U>) -> Result<(), OptionValueError> {
+        let uri = uri.map(|v| v.into());
+        if let Some(uri) = uri {
+            self.uri = Some(CoapRequestUri::new_proxy_uri(uri)?)
+        }
+        Ok(())
+    }
+
+    /// Parses the given [CoapMessage] into a CoapRequest.
+    ///
+    /// Returns a [MessageConversionError] if the provided PDU cannot be parsed into a request.
+    pub fn from_message(mut pdu: CoapMessage) -> Result<CoapRequest, MessageConversionError> {
         let mut host = None;
         let mut port = None;
         let mut path = None;
@@ -284,7 +420,7 @@ impl CoapRequest {
                             CoapOptionType::UriPort,
                         ));
                     }
-                    port = Some(value.clone());
+                    port = Some(*value);
                 },
                 CoapOption::UriPath(value) => {
                     if path.is_none() {
@@ -330,7 +466,7 @@ impl CoapRequest {
                             CoapOptionType::ContentFormat,
                         ));
                     }
-                    content_format = Some(cformat.clone())
+                    content_format = Some(*cformat)
                 },
                 CoapOption::Accept(value) => {
                     if accept.is_some() {
@@ -338,7 +474,7 @@ impl CoapRequest {
                             CoapOptionType::Accept,
                         ));
                     }
-                    accept = Some(value.clone());
+                    accept = Some(*value);
                 },
                 // libcoap handles blockwise transfer for us (for now).
                 CoapOption::Size1(_) => {},
@@ -360,7 +496,7 @@ impl CoapRequest {
                             CoapOptionType::HopLimit,
                         ));
                     }
-                    hop_limit = Some(value.clone());
+                    hop_limit = Some(*value);
                 },
                 CoapOption::NoResponse(value) => {
                     if no_response.is_some() {
@@ -368,7 +504,7 @@ impl CoapRequest {
                             CoapOptionType::NoResponse,
                         ));
                     }
-                    no_response = Some(value.clone());
+                    no_response = Some(*value);
                 },
                 CoapOption::ETag(value) => {
                     if etag.is_none() {
@@ -387,7 +523,7 @@ impl CoapRequest {
                             CoapOptionType::MaxAge,
                         ));
                     }
-                    observe = Some(value.clone());
+                    observe = Some(*value);
                 },
                 // TODO maybe we can save some copies here if we use into_iter for the options instead.
                 CoapOption::Other(n, v) => {
@@ -438,7 +574,8 @@ impl CoapRequest {
         })
     }
 
-    pub fn into_pdu(mut self) -> Result<CoapMessage, MessageConversionError> {
+    /// Converts this request into a [CoapMessage] that can be sent over a [CoapSession](crate::session::CoapSession).
+    pub fn into_message(mut self) -> CoapMessage {
         if let Some(req_uri) = self.uri {
             req_uri.into_options().into_iter().for_each(|v| self.pdu.add_option(v));
         }
@@ -470,11 +607,24 @@ impl CoapRequest {
         if let Some(observe) = self.observe {
             self.pdu.add_option(CoapOption::Observe(observe));
         }
-        Ok(self.pdu)
+        self.pdu
     }
 }
 
 impl CoapMessageCommon for CoapRequest {
+    /// Sets the message code of this request.
+    ///
+    /// # Panics
+    /// Panics if the provided message code is not a request code.
+    fn set_code(&mut self, code: CoapMessageCode) {
+        match code {
+            CoapMessageCode::Request(req) => self.pdu.set_code(CoapMessageCode::Request(req)),
+            CoapMessageCode::Response(_) | CoapMessageCode::Empty => {
+                panic!("attempted to set message code of request to value that is not a request code")
+            },
+        }
+    }
+
     fn as_message(&self) -> &CoapMessage {
         &self.pdu
     }
@@ -484,7 +634,7 @@ impl CoapMessageCommon for CoapRequest {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct CoapResponse {
     pdu: CoapMessage,
     content_format: Option<ContentFormat>,
@@ -495,58 +645,117 @@ pub struct CoapResponse {
 }
 
 impl CoapResponse {
-    pub fn new(type_: CoapMessageType, code: CoapResponseCode) -> CoapResponse {
-        CoapResponse {
+    /// Creates a new CoAP response with the given message type and code.
+    ///
+    /// Returns an error if the given message type is not allowed for CoAP responses (the allowed
+    /// message types are [CoapMessageType::Con] and [CoapMessageType::Non] and [CoapMessageType::Ack]).
+    pub fn new(type_: CoapMessageType, code: CoapResponseCode) -> Result<CoapResponse, MessageTypeError> {
+        match type_ {
+            CoapMessageType::Con | CoapMessageType::Non | CoapMessageType::Ack => {},
+            v => return Err(MessageTypeError::InvalidForMessageCode(v)),
+        }
+        Ok(CoapResponse {
             pdu: CoapMessage::new(type_, code.into()),
             content_format: None,
             max_age: None,
             etag: None,
             location: None,
             observe: None,
-        }
+        })
     }
 
+    /// Returns the "Max-Age" option value for this response.
     pub fn max_age(&self) -> Option<MaxAge> {
         self.max_age
     }
 
+    /// Sets the "Max-Age" option value for this response.
+    ///
+    /// This option indicates the maximum time a response may be cached (in seconds).
+    ///
+    /// See [RFC 7252, Section 5.10.5](https://datatracker.ietf.org/doc/html/rfc7252#section-5.10.5)
+    /// for more information.
     pub fn set_max_age(&mut self, max_age: Option<MaxAge>) {
         self.max_age = max_age
     }
 
+    /// Returns the "Content-Format" option value for this request.
     pub fn content_format(&self) -> Option<ContentFormat> {
         self.content_format
     }
 
+    /// Sets the "Content-Format" option value for this response.
+    ///
+    /// This option indicates the content format of the body of this message.
+    ///
+    /// See [RFC 7252, Section 5.10.3](https://datatracker.ietf.org/doc/html/rfc7252#section-5.10.3)
+    /// for more information.
     pub fn set_content_format(&mut self, content_format: Option<ContentFormat>) {
         self.content_format = content_format;
     }
 
+    /// Returns the "ETag" option value for this request.
     pub fn etag(&self) -> Option<&ETag> {
         self.etag.as_ref()
     }
 
+    /// Sets the "ETag" option value for this response.
+    ///
+    /// This option can be used by clients to request a specific representation of the requested
+    /// resource.
+    ///
+    /// The server may send an ETag value alongside a response, which the client can then set here
+    /// to request the given representation.
+    ///
+    /// See [RFC 7252, Section 5.10.6](https://datatracker.ietf.org/doc/html/rfc7252#section-5.10.6)
+    /// for more information.
     pub fn set_etag(&mut self, etag: Option<ETag>) {
         self.etag = etag
     }
 
+    /// Returns the "Observe" option value for this request.
     pub fn observe(&self) -> Option<Observe> {
         self.observe
     }
 
+    /// Sets the "Observe" option value for this response.
+    ///
+    /// This option indicates that this response is a notification for a previously requested
+    /// resource observation.
+    ///
+    /// This option is defined in [RFC 7641](https://datatracker.ietf.org/doc/html/rfc7641) and is
+    /// not part of the main CoAP spec. Some peers may therefore not support this option.
     pub fn set_observe(&mut self, observe: Option<Observe>) {
         self.observe = observe;
     }
 
+    /// Returns the "Location" option value for this request.
     pub fn location(&self) -> Option<&CoapResponseLocation> {
         self.location.as_ref()
     }
 
-    pub fn set_location<U: Into<CoapResponseLocation>>(&mut self, uri: Option<U>) {
-        self.location = uri.map(Into::into)
+    /// Sets the "Location-Path" and "Location-Query" option values for this response.
+    ///
+    /// These options indicate a relative URI for a resource created in response of a POST or PUT
+    /// request.
+    ///
+    /// The supplied URI must be relative to the requested path and must therefore also not contain
+    /// a scheme, host or port. Also, each path component must be smaller than 255 characters.
+    ///
+    /// If an invalid URI is provided, an [OptionValueError] is returned
+    ///
+    /// See [RFC 7252, Section 5.10.7](https://datatracker.ietf.org/doc/html/rfc7252#section-5.10.7)
+    /// for more information.
+    pub fn set_location<U: Into<CoapUri>>(&mut self, uri: Option<U>) -> Result<(), OptionValueError> {
+        let uri = uri.map(|v| v.into());
+        if let Some(uri) = uri {
+            self.location = Some(CoapResponseLocation::new_response_location(uri)?)
+        }
+        Ok(())
     }
 
-    pub fn into_pdu(mut self) -> Result<CoapMessage, MessageConversionError> {
+    /// Converts this request into a [CoapMessage] that can be sent over a [CoapSession](crate::session::CoapSession).
+    pub fn into_message(mut self) -> CoapMessage {
         if let Some(loc) = self.location {
             loc.into_options().into_iter().for_each(|v| self.pdu.add_option(v));
         }
@@ -562,10 +771,13 @@ impl CoapResponse {
         if let Some(observe) = self.observe {
             self.pdu.add_option(CoapOption::Observe(observe));
         }
-        Ok(self.pdu)
+        self.pdu
     }
 
-    pub fn from_pdu(pdu: CoapMessage) -> Result<CoapResponse, MessageConversionError> {
+    /// Parses the given [CoapMessage] into a CoapResponse.
+    ///
+    /// Returns a [MessageConversionError] if the provided PDU cannot be parsed into a response.
+    pub fn from_message(pdu: CoapMessage) -> Result<CoapResponse, MessageConversionError> {
         let mut location_path = None;
         let mut location_query = None;
         let mut max_age = None;
@@ -601,7 +813,7 @@ impl CoapResponse {
                             CoapOptionType::MaxAge,
                         ));
                     }
-                    max_age = Some(value.clone());
+                    max_age = Some(*value);
                 },
                 CoapOption::Observe(value) => {
                     if observe.is_some() {
@@ -609,7 +821,7 @@ impl CoapResponse {
                             CoapOptionType::Observe,
                         ));
                     }
-                    observe = Some(value.clone())
+                    observe = Some(*value)
                 },
                 CoapOption::IfMatch(_) => {
                     return Err(MessageConversionError::InvalidOptionForMessageType(
@@ -657,7 +869,7 @@ impl CoapResponse {
                             CoapOptionType::ContentFormat,
                         ));
                     }
-                    content_format = Some(value.clone())
+                    content_format = Some(*value)
                 },
                 CoapOption::Accept(_) => {
                     return Err(MessageConversionError::InvalidOptionForMessageType(
@@ -712,6 +924,15 @@ impl CoapResponse {
 }
 
 impl CoapMessageCommon for CoapResponse {
+    fn set_code(&mut self, code: CoapMessageCode) {
+        match code {
+            CoapMessageCode::Response(req) => self.pdu.set_code(CoapMessageCode::Response(req)),
+            CoapMessageCode::Request(_) | CoapMessageCode::Empty => {
+                panic!("attempted to set message code of response to value that is not a response code")
+            },
+        }
+    }
+
     fn as_message(&self) -> &CoapMessage {
         &self.pdu
     }
