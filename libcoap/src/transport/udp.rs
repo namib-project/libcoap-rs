@@ -4,6 +4,7 @@ use libcoap_sys::{coap_endpoint_t, coap_free_endpoint, coap_new_endpoint, coap_p
 
 use crate::{context::CoapContext, error::EndpointCreationError, transport::EndpointCommon, types::CoapAddress};
 
+#[derive(Debug)]
 pub struct CoapUdpEndpoint {
     raw_endpoint: *mut coap_endpoint_t,
 }
