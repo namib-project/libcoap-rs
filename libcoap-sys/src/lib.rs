@@ -96,7 +96,7 @@ include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 pub unsafe fn coap_send_rst(
     session: *mut coap_session_t,
     request: *const coap_pdu_t,
-    type_: coap_pdu_type_t,
+    _type_: coap_pdu_type_t,
 ) -> coap_mid_t {
     coap_send_message_type(session, request, COAP_MESSAGE_RST)
 }

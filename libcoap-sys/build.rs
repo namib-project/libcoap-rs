@@ -110,12 +110,12 @@ fn main() {
 
         let mut build_config = autotools::Config::new(libcoap_src_dir);
         build_config.out_dir(out_dir);
-        if dtls_backend.is_some() {
+        if let Some(dtls_backend) = dtls_backend {
             build_config
                 .enable("dtls", None)
-                .with(dtls_backend.unwrap().to_string().as_str(), None);
+                .with(dtls_backend.to_string().as_str(), None);
 
-            if dtls_backend == Some(DtlsBackend::TinyDtls) {
+            if dtls_backend == DtlsBackend::TinyDtls {
                 // We do not ship tinydtls with our source distribution. Instead, we use tinydtls-sys.
                 build_config.with("system-tinydtls", None);
                 build_config.without("vendored-tinydtls", None);
@@ -165,10 +165,10 @@ fn main() {
 
         // Enable debug symbols if enabled in Rust
         match std::env::var_os("DEBUG").unwrap().to_str().unwrap() {
-            "0" | "false" => {}
+            "0" | "false" => {},
             _ => {
                 build_config.with("debug", None);
-            }
+            },
         }
 
         // Enable dependency features based on selected cargo features.
