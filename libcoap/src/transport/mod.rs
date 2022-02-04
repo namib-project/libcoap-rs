@@ -26,7 +26,7 @@ pub trait EndpointCommon {
     /// context goes out of scope and then also calls [coap_free_endpoint()](libcoap_sys::coap_free_endpoint())).
     unsafe fn as_raw_endpoint(&self) -> &coap_endpoint_t;
 
-    /// Provides an immutable reference to the supplied endpoint.
+    /// Provides a mutable reference to the supplied endpoint.
     ///
     /// # Safety
     /// Note that the endpoint expects the reference to be valid for as long as the endpoint

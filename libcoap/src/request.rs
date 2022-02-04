@@ -26,15 +26,8 @@ impl CoapRequestUri {
         if uri.scheme().is_some() || uri.port().is_some() && uri.host().is_none() {
             return Err(OptionValueError::IllegalValue);
         }
-        if let Some(iter) = uri.path_iter() {
-            if iter.filter(|p| p.len() > 255).count() > 0 {
-                return Err(OptionValueError::TooLong);
-            }
-        }
-        if let Some(iter) = uri.query_iter() {
-            if iter.filter(|p| p.len() > 255).count() > 0 {
-                return Err(OptionValueError::TooLong);
-            }
+        if uri.path_iter().iter().chain(uri.query_iter()).any(|x| x.len() > 255) {
+            return Err(OptionValueError::TooShort);
         }
         Ok(CoapRequestUri::Request(uri))
     }
@@ -88,10 +81,10 @@ impl CoapRequestUri {
                     options.push(CoapOption::UriPort(port))
                 }
                 if let Some(path) = uri.drain_path_iter() {
-                    path.for_each(|path_component| options.push(CoapOption::UriPath(path_component)));
+                    options.extend(path.map(CoapOption::UriPath))
                 }
                 if let Some(query) = uri.drain_query_iter() {
-                    query.for_each(|query_option| options.push(CoapOption::UriQuery(query_option)));
+                    options.extend(query.map(CoapOption::UriQuery))
                 }
             },
             CoapRequestUri::Proxy(uri) => {
@@ -137,10 +130,10 @@ impl CoapResponseLocation {
         let mut options = Vec::new();
         let mut uri = self.0;
         if let Some(path) = uri.drain_path_iter() {
-            path.for_each(|path_component| options.push(CoapOption::LocationPath(path_component)));
+            options.extend(path.map(CoapOption::LocationPath));
         }
         if let Some(query) = uri.drain_query_iter() {
-            query.for_each(|query_option| options.push(CoapOption::LocationQuery(query_option)));
+            options.extend(query.map(CoapOption::LocationQuery));
         }
         options
     }

@@ -46,7 +46,7 @@ pub struct CoapContext<'a> {
     resources: Vec<Box<dyn UntypedCoapResource>>,
     /// A list of client-side sessions that were created using the `connect_*` methods
     ///
-    /// Note that these are not necessarily all session there are. Most notably, server sessions are
+    /// Note that these are not necessarily all sessions there are. Most notably, server sessions are
     /// automatically created and managed by the underlying C library and are not stored here.
     client_sessions: HashMap<SocketAddr, CoapAppDataRef<CoapClientSession>>,
     /// The provider for cryptography information for server-side sessions.
@@ -245,12 +245,7 @@ impl CoapContext<'_> {
     /// To interact with the user data, use [UntypedCoapResource::as_any()] and downcast as
     /// necessary or use trait upcasting if you are on unstable rust (`resource as Any`).
     pub fn resource_by_uri_path(&self, uri_path: &str) -> Option<&dyn UntypedCoapResource> {
-        for resource in &self.resources {
-            if resource.uri_path() == uri_path {
-                return Some(resource.as_ref());
-            }
-        }
-        None
+        self.resources.iter().find(|r| r.uri_path() == uri_path).map(|r| r.as_ref())
     }
 
     /// Performs currently outstanding IO operations, waiting for a maximum duration of `timeout`.

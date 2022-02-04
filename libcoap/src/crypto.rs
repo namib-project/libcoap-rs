@@ -38,7 +38,7 @@ pub type CoapCryptoPsk = [u8];
 /// Trait implemented by types that can provide cryptographic information to CoapContexts and
 /// associated sessions when needed.
 pub trait CoapClientCryptoProvider: Debug {
-    /// Provide the appropiate cryptographic information for the given hint supplied by the server.
+    /// Provide the appropriate cryptographic information for the given hint supplied by the server.
     ///
     /// The hint can be none either if the server does not provide a hint or if the client has not
     /// started connecting yet and requests the standard key information to use.
@@ -56,7 +56,7 @@ pub trait CoapServerCryptoProvider: Debug {
     /// identity.
     fn provide_key_for_identity(&mut self, identity: &CoapCryptoPskIdentity) -> Option<Box<CoapCryptoPsk>>;
 
-    /// Provide the appropiate key hint for the given SNI provided by the client
+    /// Provide the appropriate key hint for the given SNI provided by the client
     ///
     /// Return None if the provided SNI is unacceptable, i.e. you have no key for this server name.
     fn provide_hint_for_sni(&mut self, sni: Option<&str>) -> Option<CoapServerCryptoHint>;
