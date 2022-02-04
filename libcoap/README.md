@@ -22,6 +22,6 @@ for inclusion in the work by you, shall be licensed as above, without any additi
 
 This project is currently maintained by the following developers:
 
-|    Name    |     Email Address    |                GitHub Username               |
-|:----------:|:--------------------:|:--------------------------------------------:|
+|       Name       |    Email Address     |               GitHub Username                |
+|:----------------:|:--------------------:|:--------------------------------------------:|
 | Hugo Hakim Damer | hdamer@uni-bremen.de | [@pulsastrix](https://github.com/pulsastrix) |

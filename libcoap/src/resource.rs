@@ -60,9 +60,9 @@ macro_rules! resource_handler {
     }};
 }
 
-/// Converts the raw parameters provided to a request handler into the appropiate wrapped types.
+/// Converts the raw parameters provided to a request handler into the appropriate wrapped types.
 ///
-/// If an error occurs while parsing the resource data, this function will send a RST message to the
+/// If an error occurs while parsing the resource data, this function will send an RST message to the
 /// client and return a [MessageConversionError].
 ///
 /// This function is not intended for public use, the only reason it is public is that the
@@ -126,7 +126,7 @@ pub trait UntypedCoapResource: Any+Debug {
     /// Panics if the inner resource instance associated with this resource cannot be exclusively
     /// dropped, i.e. because the underlying [Rc] is used elsewhere.
     fn drop_inner_exclusive(self);
-    /// Returns the raw resource associated with this CoapResource
+    /// Returns the raw resource associated with this CoapResource.
     ///
     /// # Safety
     /// You must not do anything with this resource that could interfere with this instance.

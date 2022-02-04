@@ -163,7 +163,7 @@ impl From<&coap_address_t> for CoapAddress {
     }
 }
 
-/// Representation for an URI scheme that can be used in CoAP (proxy) requests.
+/// Representation for a URI scheme that can be used in CoAP (proxy) requests.
 #[repr(u32)]
 #[derive(Copy, Clone, FromPrimitive, Debug, PartialEq, Eq, Hash)]
 pub enum CoapUriScheme {

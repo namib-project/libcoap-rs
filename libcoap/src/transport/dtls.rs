@@ -15,9 +15,9 @@ impl CoapDtlsEndpoint {
     /// This is an unsafe function (see #Safety for an explanation of why) used internally by
     /// libcoap-rs to instantiate new endpoints. You should most likely not use this function, and
     /// use one of the following alternatives instead:
-    /// - If you just want to add an endpoint to the coap context, use [CoapContext::add_endpoint_udp()].
+    /// - If you just want to add an endpoint to the coap context, use [CoapContext::add_endpoint_dtls()].
     /// - If you need to (unsafely) modify the underlying [coap_endpoint_t] directly, use
-    ///   [CoapContext::add_endpoint_udp()] to instantiate the endpoint and then [as_mut_raw_endpoint()]
+    ///   [CoapContext::add_endpoint_dtls()] to instantiate the endpoint and then [as_mut_raw_endpoint()]
     ///   to access the underlying struct.
     ///
     /// # Safety
@@ -25,7 +25,7 @@ impl CoapDtlsEndpoint {
     /// which is the representation of endpoints used by the underlying libcoap C library.
     ///
     /// On instantiation, these [coap_endpoint_t] instances are bound to a context, which includes
-    /// adding them to a list maintained by the [CoapContext] (or - to be more specific -  the
+    /// adding them to a list maintained by the [CoapContext] (or — to be more specific — the
     /// underlying [libcoap_sys::coap_context_t].
     ///
     /// When the context that this endpoint is bound to is dropped, the context calls [libcoap_sys::coap_free_context()],
@@ -34,7 +34,7 @@ impl CoapDtlsEndpoint {
     ///
     /// Therefore, if you decide to use this function anyway, you have to ensure that the
     /// CoapContext lives at least as long as this struct does.
-    /// Also note that unlike [CoapContext::add_endpoint_udp()], this function does not add the
+    /// Also note that unlike [CoapContext::add_endpoint_dtls()], this function does not add the
     /// endpoint to the [CoapContext::endpoints] vector, while the underlying [coap_endpoint_t] is
     /// added to the underlying [libcoap_sys::coap_context_t]
     pub(crate) unsafe fn new(

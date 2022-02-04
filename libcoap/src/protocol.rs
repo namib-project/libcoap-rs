@@ -60,7 +60,7 @@ pub enum CoapMatch {
 /// CoAP option types as defined in [RFC 7252, Section 5.10](https://datatracker.ietf.org/doc/html/rfc7252#section-5.10)
 /// and later CoAP extensions.
 ///
-/// The enum value correspons to the appropriate option number and can be retrieved using
+/// The enum value corresponds to the appropriate option number and can be retrieved using
 /// `[value] as u16` or [to_raw_option_num()](CoapOptionType::to_raw_option_num()).
 ///
 /// See <https://www.iana.org/assignments/core-parameters/core-parameters.xhtml#option-numbers> for a

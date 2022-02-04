@@ -358,7 +358,7 @@ impl CoapClientSession {
     /// # Safety
     /// The provided pointer must be valid.
     /// The existing value in the `app_data` field of the raw session will be overridden.
-    /// Make sure that this is actually okay to do so (most importantly, no other [CoapSession] may
+    /// Make sure that this is actually okay to do so — most importantly, no other [CoapSession] may
     /// already be stored there.
     ///
     /// If you wish to restore an existing [CoapSession] from its raw counterpart, use
@@ -520,7 +520,7 @@ impl CoapServerSession {
     /// # Safety
     /// The provided pointer must be valid.
     /// The existing value in the `app_data` field of the raw session will be overridden.
-    /// Make sure that this is actually okay to do so (most importantly, no other [CoapSession] may
+    /// Make sure that this is actually okay to do so — most importantly, no other [CoapSession] may
     /// already be stored there.
     ///
     /// If you wish to restore an existing [CoapSession] from its raw counterpart, use
