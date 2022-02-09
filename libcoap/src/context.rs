@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * context.rs - CoAP context related code.
+ * Copyright (c) 2022 The NAMIB Project Developers, all rights reserved.
+ * See the README as well as the LICENSE file for more information.
+ */
 use std::{
     any::Any,
     cell::RefCell,
@@ -80,7 +86,7 @@ impl<'a> CoapContext<'a> {
     ///
     /// To supply cryptographic information (like PSK hints or key data), you have to provide a
     /// struct implementing [CoapClientCryptoProvider].
-    pub fn connect_dtls<P: 'static+CoapClientCryptoProvider>(
+    pub fn connect_dtls<P: 'static + CoapClientCryptoProvider>(
         &mut self,
         addr: SocketAddr,
         mut crypto_provider: P,
@@ -187,7 +193,7 @@ impl CoapContext<'_> {
     }
 
     /// Adds the given resource to the resource pool of this context.
-    pub fn add_resource<D: Any+?Sized+Debug>(&mut self, res: CoapResource<D>) {
+    pub fn add_resource<D: Any + ?Sized + Debug>(&mut self, res: CoapResource<D>) {
         self.resources.push(Box::new(res));
         // SAFETY: raw context is valid, raw resource is also guaranteed to be valid as long as
         // contract of CoapResource is upheld (most importantly,
@@ -227,7 +233,6 @@ impl CoapContext<'_> {
                             reserved: [0; 7],
                             validate_id_call_back: Some(dtls_server_id_callback),
                             id_call_back_arg: (self) as *mut CoapContext as *mut c_void,
-                            // TODO
                             validate_sni_call_back: Some(dtls_server_sni_callback),
                             sni_call_back_arg: (self) as *const CoapContext as *mut c_void,
                             psk_info: initial_data,
@@ -245,7 +250,10 @@ impl CoapContext<'_> {
     /// To interact with the user data, use [UntypedCoapResource::as_any()] and downcast as
     /// necessary or use trait upcasting if you are on unstable rust (`resource as Any`).
     pub fn resource_by_uri_path(&self, uri_path: &str) -> Option<&dyn UntypedCoapResource> {
-        self.resources.iter().find(|r| r.uri_path() == uri_path).map(|r| r.as_ref())
+        self.resources
+            .iter()
+            .find(|r| r.uri_path() == uri_path)
+            .map(|r| r.as_ref())
     }
 
     /// Performs currently outstanding IO operations, waiting for a maximum duration of `timeout`.
@@ -255,7 +263,7 @@ impl CoapContext<'_> {
     /// is used.
     pub fn do_io(&mut self, timeout: Option<Duration>) -> Result<Duration, IoProcessError> {
         let timeout = if let Some(timeout) = timeout {
-            let mut temp_timeout = u32::try_from(timeout.as_millis().saturating_add(1)).unwrap_or(u32::MAX);
+            let mut temp_timeout = u32::try_from(timeout.as_millis()).unwrap_or(u32::MAX);
             if timeout.subsec_micros() > 0 || timeout.subsec_nanos() > 0 {
                 temp_timeout = temp_timeout.saturating_add(1);
             }

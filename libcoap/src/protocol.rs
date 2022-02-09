@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * protocol.rs - Types representing CoAP protocol values.
+ * Copyright (c) 2022 The NAMIB Project Developers, all rights reserved.
+ * See the README as well as the LICENSE file for more information.
+ */
 //! Various types that are specified and defined in the CoAP standard and its extensions.
 
 use std::{
@@ -424,7 +430,7 @@ impl CoapResponseCode {
             CoapResponseCode::Unprocessable => coap_pdu_code_t::COAP_RESPONSE_CODE_UNPROCESSABLE,
             CoapResponseCode::UnsupportedContentFormat => {
                 coap_pdu_code_t::COAP_RESPONSE_CODE_UNSUPPORTED_CONTENT_FORMAT
-            },
+            }
             CoapResponseCode::Valid => coap_pdu_code_t::COAP_RESPONSE_CODE_VALID,
         }
     }

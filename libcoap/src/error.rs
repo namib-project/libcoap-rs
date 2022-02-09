@@ -1,6 +1,10 @@
-use std::{
-    string::FromUtf8Error,
-};
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * crypto.rs - CoAP error types.
+ * Copyright (c) 2022 The NAMIB Project Developers, all rights reserved.
+ * See the README as well as the LICENSE file for more information.
+ */
+use std::string::FromUtf8Error;
 
 use thiserror::Error;
 

@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * request.rs - Types wrapping messages into requests and responses.
+ * Copyright (c) 2022 The NAMIB Project Developers, all rights reserved.
+ * See the README as well as the LICENSE file for more information.
+ */
 use std::str::FromStr;
 
 use url::Url;
@@ -26,7 +32,12 @@ impl CoapRequestUri {
         if uri.scheme().is_some() || uri.port().is_some() && uri.host().is_none() {
             return Err(OptionValueError::IllegalValue);
         }
-        if uri.path_iter().iter().chain(uri.query_iter()).any(|x| x.len() > 255) {
+        if uri
+            .path_iter()
+            .unwrap_or(vec![].iter())
+            .chain(uri.query_iter().unwrap_or(vec![].iter()))
+            .any(|x| x.len() > 255)
+        {
             return Err(OptionValueError::TooShort);
         }
         Ok(CoapRequestUri::Request(uri))
@@ -86,10 +97,10 @@ impl CoapRequestUri {
                 if let Some(query) = uri.drain_query_iter() {
                     options.extend(query.map(CoapOption::UriQuery))
                 }
-            },
+            }
             CoapRequestUri::Proxy(uri) => {
                 options.push(CoapOption::ProxyUri(CoapRequestUri::generate_proxy_uri_string(&uri)))
-            },
+            }
         }
         options
     }
@@ -177,7 +188,7 @@ impl CoapRequest {
     /// allowed message types are [CoapMessageType::Con] and [CoapMessageType::Non]).
     pub fn new(type_: CoapMessageType, code: CoapRequestCode) -> Result<CoapRequest, MessageTypeError> {
         match type_ {
-            CoapMessageType::Con | CoapMessageType::Non => {},
+            CoapMessageType::Con | CoapMessageType::Non => {}
             v => return Err(MessageTypeError::InvalidForMessageCode(v)),
         }
         Ok(CoapRequest {
@@ -390,7 +401,7 @@ impl CoapRequest {
                         if_match = Some(Vec::new());
                     }
                     if_match.as_mut().unwrap().push(value.clone());
-                },
+                }
                 CoapOption::IfNoneMatch => {
                     if if_none_match {
                         return Err(MessageConversionError::NonRepeatableOptionRepeated(
@@ -398,7 +409,7 @@ impl CoapRequest {
                         ));
                     }
                     if_none_match = true;
-                },
+                }
                 CoapOption::UriHost(value) => {
                     if host.is_some() {
                         return Err(MessageConversionError::NonRepeatableOptionRepeated(
@@ -406,7 +417,7 @@ impl CoapRequest {
                         ));
                     }
                     host = Some(value.clone());
-                },
+                }
                 CoapOption::UriPort(value) => {
                     if port.is_some() {
                         return Err(MessageConversionError::NonRepeatableOptionRepeated(
@@ -414,29 +425,29 @@ impl CoapRequest {
                         ));
                     }
                     port = Some(*value);
-                },
+                }
                 CoapOption::UriPath(value) => {
                     if path.is_none() {
                         path = Some(Vec::new());
                     }
                     path.as_mut().unwrap().push(value.clone());
-                },
+                }
                 CoapOption::UriQuery(value) => {
                     if query.is_none() {
                         query = Some(Vec::new());
                     }
                     query.as_mut().unwrap().push(value.clone());
-                },
+                }
                 CoapOption::LocationPath(_) => {
                     return Err(MessageConversionError::InvalidOptionForMessageType(
                         CoapOptionType::LocationPath,
                     ))
-                },
+                }
                 CoapOption::LocationQuery(_) => {
                     return Err(MessageConversionError::InvalidOptionForMessageType(
                         CoapOptionType::LocationQuery,
                     ))
-                },
+                }
                 CoapOption::ProxyUri(uri) => {
                     if proxy_uri.is_some() {
                         return Err(MessageConversionError::NonRepeatableOptionRepeated(
@@ -444,7 +455,7 @@ impl CoapRequest {
                         ));
                     }
                     proxy_uri = Some(uri.clone())
-                },
+                }
                 CoapOption::ProxyScheme(scheme) => {
                     if proxy_scheme.is_some() {
                         return Err(MessageConversionError::NonRepeatableOptionRepeated(
@@ -452,7 +463,7 @@ impl CoapRequest {
                         ));
                     }
                     proxy_scheme = Some(CoapUriScheme::from_str(scheme)?)
-                },
+                }
                 CoapOption::ContentFormat(cformat) => {
                     if content_format.is_some() {
                         return Err(MessageConversionError::NonRepeatableOptionRepeated(
@@ -460,7 +471,7 @@ impl CoapRequest {
                         ));
                     }
                     content_format = Some(*cformat)
-                },
+                }
                 CoapOption::Accept(value) => {
                     if accept.is_some() {
                         return Err(MessageConversionError::NonRepeatableOptionRepeated(
@@ -468,21 +479,21 @@ impl CoapRequest {
                         ));
                     }
                     accept = Some(*value);
-                },
+                }
                 // libcoap handles blockwise transfer for us (for now).
-                CoapOption::Size1(_) => {},
+                CoapOption::Size1(_) => {}
                 CoapOption::Size2(_) => {
                     return Err(MessageConversionError::InvalidOptionForMessageType(
                         CoapOptionType::Size2,
                     ))
-                },
+                }
                 // libcoap handles blockwise transfer for us (for now).
-                CoapOption::Block1(_) => {},
+                CoapOption::Block1(_) => {}
                 CoapOption::Block2(_) => {
                     return Err(MessageConversionError::InvalidOptionForMessageType(
                         CoapOptionType::Block2,
                     ))
-                },
+                }
                 CoapOption::HopLimit(value) => {
                     if hop_limit.is_some() {
                         return Err(MessageConversionError::NonRepeatableOptionRepeated(
@@ -490,7 +501,7 @@ impl CoapRequest {
                         ));
                     }
                     hop_limit = Some(*value);
-                },
+                }
                 CoapOption::NoResponse(value) => {
                     if no_response.is_some() {
                         return Err(MessageConversionError::NonRepeatableOptionRepeated(
@@ -498,18 +509,18 @@ impl CoapRequest {
                         ));
                     }
                     no_response = Some(*value);
-                },
+                }
                 CoapOption::ETag(value) => {
                     if etag.is_none() {
                         etag = Some(Vec::new());
                     }
                     etag.as_mut().unwrap().push(value.clone());
-                },
+                }
                 CoapOption::MaxAge(_value) => {
                     return Err(MessageConversionError::InvalidOptionForMessageType(
                         CoapOptionType::MaxAge,
                     ));
-                },
+                }
                 CoapOption::Observe(value) => {
                     if observe.is_some() {
                         return Err(MessageConversionError::NonRepeatableOptionRepeated(
@@ -517,11 +528,11 @@ impl CoapRequest {
                         ));
                     }
                     observe = Some(*value);
-                },
+                }
                 // TODO maybe we can save some copies here if we use into_iter for the options instead.
                 CoapOption::Other(n, v) => {
                     additional_opts.push(CoapOption::Other(*n, v.clone()));
-                },
+                }
             }
         }
         pdu.clear_options();
@@ -614,7 +625,7 @@ impl CoapMessageCommon for CoapRequest {
             CoapMessageCode::Request(req) => self.pdu.set_code(CoapMessageCode::Request(req)),
             CoapMessageCode::Response(_) | CoapMessageCode::Empty => {
                 panic!("attempted to set message code of request to value that is not a request code")
-            },
+            }
         }
     }
 
@@ -644,7 +655,7 @@ impl CoapResponse {
     /// message types are [CoapMessageType::Con] and [CoapMessageType::Non] and [CoapMessageType::Ack]).
     pub fn new(type_: CoapMessageType, code: CoapResponseCode) -> Result<CoapResponse, MessageTypeError> {
         match type_ {
-            CoapMessageType::Con | CoapMessageType::Non | CoapMessageType::Ack => {},
+            CoapMessageType::Con | CoapMessageType::Non | CoapMessageType::Ack => {}
             v => return Err(MessageTypeError::InvalidForMessageCode(v)),
         }
         Ok(CoapResponse {
@@ -785,13 +796,13 @@ impl CoapResponse {
                         location_path = Some(Vec::new());
                     }
                     location_path.as_mut().unwrap().push(value.clone());
-                },
+                }
                 CoapOption::LocationQuery(value) => {
                     if location_query.is_none() {
                         location_query = Some(Vec::new());
                     }
                     location_query.as_mut().unwrap().push(value.clone());
-                },
+                }
                 CoapOption::ETag(value) => {
                     if etag.is_some() {
                         return Err(MessageConversionError::NonRepeatableOptionRepeated(
@@ -799,7 +810,7 @@ impl CoapResponse {
                         ));
                     }
                     etag = Some(value.clone());
-                },
+                }
                 CoapOption::MaxAge(value) => {
                     if max_age.is_some() {
                         return Err(MessageConversionError::NonRepeatableOptionRepeated(
@@ -807,7 +818,7 @@ impl CoapResponse {
                         ));
                     }
                     max_age = Some(*value);
-                },
+                }
                 CoapOption::Observe(value) => {
                     if observe.is_some() {
                         return Err(MessageConversionError::NonRepeatableOptionRepeated(
@@ -815,47 +826,47 @@ impl CoapResponse {
                         ));
                     }
                     observe = Some(*value)
-                },
+                }
                 CoapOption::IfMatch(_) => {
                     return Err(MessageConversionError::InvalidOptionForMessageType(
                         CoapOptionType::IfMatch,
                     ));
-                },
+                }
                 CoapOption::IfNoneMatch => {
                     return Err(MessageConversionError::InvalidOptionForMessageType(
                         CoapOptionType::IfNoneMatch,
                     ));
-                },
+                }
                 CoapOption::UriHost(_) => {
                     return Err(MessageConversionError::InvalidOptionForMessageType(
                         CoapOptionType::UriHost,
                     ));
-                },
+                }
                 CoapOption::UriPort(_) => {
                     return Err(MessageConversionError::InvalidOptionForMessageType(
                         CoapOptionType::UriPort,
                     ));
-                },
+                }
                 CoapOption::UriPath(_) => {
                     return Err(MessageConversionError::InvalidOptionForMessageType(
                         CoapOptionType::UriPath,
                     ));
-                },
+                }
                 CoapOption::UriQuery(_) => {
                     return Err(MessageConversionError::InvalidOptionForMessageType(
                         CoapOptionType::UriQuery,
                     ));
-                },
+                }
                 CoapOption::ProxyUri(_) => {
                     return Err(MessageConversionError::InvalidOptionForMessageType(
                         CoapOptionType::ProxyUri,
                     ));
-                },
+                }
                 CoapOption::ProxyScheme(_) => {
                     return Err(MessageConversionError::InvalidOptionForMessageType(
                         CoapOptionType::ProxyScheme,
                     ));
-                },
+                }
                 CoapOption::ContentFormat(value) => {
                     if content_format.is_some() {
                         return Err(MessageConversionError::NonRepeatableOptionRepeated(
@@ -863,34 +874,34 @@ impl CoapResponse {
                         ));
                     }
                     content_format = Some(*value)
-                },
+                }
                 CoapOption::Accept(_) => {
                     return Err(MessageConversionError::InvalidOptionForMessageType(
                         CoapOptionType::Accept,
                     ));
-                },
+                }
                 CoapOption::Size1(_) => {
                     return Err(MessageConversionError::InvalidOptionForMessageType(
                         CoapOptionType::Size1,
                     ));
-                },
-                CoapOption::Size2(_) => {},
+                }
+                CoapOption::Size2(_) => {}
                 CoapOption::Block1(_) => {
                     return Err(MessageConversionError::InvalidOptionForMessageType(
                         CoapOptionType::Block1,
                     ));
-                },
-                CoapOption::Block2(_) => {},
+                }
+                CoapOption::Block2(_) => {}
                 CoapOption::HopLimit(_) => {
                     return Err(MessageConversionError::InvalidOptionForMessageType(
                         CoapOptionType::HopLimit,
                     ));
-                },
+                }
                 CoapOption::NoResponse(_) => {
                     return Err(MessageConversionError::InvalidOptionForMessageType(
                         CoapOptionType::NoResponse,
                     ));
-                },
+                }
                 CoapOption::Other(n, v) => additional_opts.push(CoapOption::Other(*n, v.clone())),
             }
         }
@@ -922,7 +933,7 @@ impl CoapMessageCommon for CoapResponse {
             CoapMessageCode::Response(req) => self.pdu.set_code(CoapMessageCode::Response(req)),
             CoapMessageCode::Request(_) | CoapMessageCode::Empty => {
                 panic!("attempted to set message code of response to value that is not a response code")
-            },
+            }
         }
     }
 

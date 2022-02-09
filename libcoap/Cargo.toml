@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-2-Clause
-# wrapper.h - wrapper header to generate libcoap Rust bindings using bindgen
+# Cargo.toml for libcoap
 # Copyright (c) 2022 The NAMIB Project Developers, all rights reserved.
 # See the README as well as the LICENSE file for more information.
 
@@ -34,4 +34,4 @@ rand = {version = "^0.8.4"}
 thiserror = "^1.0"
 
 [dev-dependencies]
-libcoap-sys = {path = "../libcoap-sys", features = ["dtls_backend_openssl"]}
+libcoap-sys = {path = "../libcoap-sys", features = ["dtls_backend_tinydtls"]}

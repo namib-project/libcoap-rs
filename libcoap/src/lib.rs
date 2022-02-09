@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * lib.rs - Main library entry point for safe libcoap bindings.
+ * Copyright (c) 2022 The NAMIB Project Developers, all rights reserved.
+ * See the README as well as the LICENSE file for more information.
+ */
 #![cfg_attr(feature = "nightly", feature(trait_upcasting))]
 
 //! A safe wrapper around the libcoap C library.

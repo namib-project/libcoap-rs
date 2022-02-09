@@ -1,3 +1,10 @@
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * resource.rs - Types relating to CoAP sessions.
+ * Copyright (c) 2022 The NAMIB Project Developers, all rights reserved.
+ * See the README as well as the LICENSE file for more information.
+ */
+
 use std::{
     any::Any,
     collections::{vec_deque::Drain, HashMap, VecDeque},
@@ -57,7 +64,7 @@ pub trait CoapSessionCommon {
     fn app_data<T: Any>(&self) -> Result<Option<Rc<T>>, SessionGetAppDataError>;
 
     /// Sets the application-specific data stored alongside this session.
-    fn set_app_data<T: 'static+Any>(&mut self, value: Option<T>);
+    fn set_app_data<T: 'static + Any>(&mut self, value: Option<T>);
 
     /// Clears the application-specific data stored alongside this session.
     fn clear_app_data(&mut self);
@@ -152,7 +159,7 @@ pub trait CoapSessionCommon {
     unsafe fn raw_session(&self) -> *const coap_session_t;
 }
 
-impl<S: AsRef<CoapSessionInner>+AsMut<CoapSessionInner>> CoapSessionCommon for S {
+impl<S: AsRef<CoapSessionInner> + AsMut<CoapSessionInner>> CoapSessionCommon for S {
     fn app_data<T: Any>(&self) -> Result<Option<Rc<T>>, SessionGetAppDataError> {
         let inner = self.as_ref();
         inner
@@ -162,7 +169,7 @@ impl<S: AsRef<CoapSessionInner>+AsMut<CoapSessionInner>> CoapSessionCommon for S
             .transpose()
     }
 
-    fn set_app_data<T: 'static+Any>(&mut self, value: Option<T>) {
+    fn set_app_data<T: 'static + Any>(&mut self, value: Option<T>) {
         let inner = self.as_mut();
         let new_box: Option<Rc<dyn Any>> = value.map(|v| Rc::new(v) as Rc<dyn Any>);
         inner.app_data = new_box;
@@ -389,10 +396,10 @@ impl CoapClientSession {
                 let session_ref = CoapAppDataRef::new(client_session);
                 coap_session_set_app_data(raw_session, session_ref.create_raw_rc());
                 session_ref
-            },
+            }
             coap_session_type_t::COAP_SESSION_TYPE_SERVER => {
                 panic!("attempted to create CoapClientSession from raw server session")
-            },
+            }
             _ => unreachable!("unknown session type"),
         }
     }
@@ -534,14 +541,14 @@ impl CoapServerSession {
             coap_session_type_t::COAP_SESSION_TYPE_NONE => panic!("provided session has no type"),
             coap_session_type_t::COAP_SESSION_TYPE_CLIENT => {
                 panic!("attempted to create server session from raw client session")
-            },
+            }
             coap_session_type_t::COAP_SESSION_TYPE_SERVER => {
                 let crypto_info = psk_key.map(|key| Box::from(std::slice::from_raw_parts(key.s, key.length)));
                 CoapServerSession {
                     inner,
                     crypto_current_data: crypto_info,
                 }
-            },
+            }
             coap_session_type_t::COAP_SESSION_TYPE_HELLO => CoapServerSession {
                 inner,
                 crypto_current_data: None,
@@ -677,7 +684,7 @@ impl<S: CoapSessionCommon> CoapSessionCommon for CoapSessionHandle<'_, S> {
         self.session_ref.borrow().app_data()
     }
 
-    fn set_app_data<T: 'static+Any>(&mut self, value: Option<T>) {
+    fn set_app_data<T: 'static + Any>(&mut self, value: Option<T>) {
         self.session_ref.borrow_mut().set_app_data(value)
     }
 

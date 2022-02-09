@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * transport/dtls.rs - transport-specific code for UDP.
+ * Copyright (c) 2022 The NAMIB Project Developers, all rights reserved.
+ * See the README as well as the LICENSE file for more information.
+ */
 use std::net::SocketAddr;
 
 use libcoap_sys::{coap_endpoint_t, coap_free_endpoint, coap_new_endpoint, coap_proto_t::COAP_PROTO_UDP};
@@ -16,7 +22,7 @@ impl CoapUdpEndpoint {
     /// libcoap-rs to instantiate new endpoints. You should most likely not use this function, and
     /// use one of the following alternatives instead:
     /// - If you just want to add an endpoint to the coap context, use [CoapContext::add_endpoint_udp()].
-    /// - If you need to (unsafely) modify the underlying [coap_endpoint_t] directly, use
+    /// - If you need to modify the underlying [coap_endpoint_t] directly (in an unsafe manner), use
     ///   [CoapContext::add_endpoint_udp()] to instantiate the endpoint and then [as_mut_raw_endpoint()]
     ///   to access the underlying struct.
     ///
@@ -25,7 +31,7 @@ impl CoapUdpEndpoint {
     /// which is the representation of endpoints used by the underlying libcoap C library.
     ///
     /// On instantiation, these [coap_endpoint_t] instances are bound to a context, which includes
-    /// adding them to a list maintained by the [CoapContext] (or - to be more specific -  the
+    /// adding them to a list maintained by the [CoapContext] (or – to be more specific – the
     /// underlying [libcoap_sys::coap_context_t].
     ///
     /// When the context that this endpoint is bound to is dropped, the context calls [libcoap_sys::coap_free_context()],

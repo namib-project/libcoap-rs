@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * crypto.rs - CoAP cryptography provider interfaces and types.
+ * Copyright (c) 2022 The NAMIB Project Developers, all rights reserved.
+ * See the README as well as the LICENSE file for more information.
+ */
 use std::{
     ffi::{c_void, CStr},
     fmt::Debug,
