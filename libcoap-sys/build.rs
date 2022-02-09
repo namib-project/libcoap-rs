@@ -165,10 +165,10 @@ fn main() {
 
         // Enable debug symbols if enabled in Rust
         match std::env::var_os("DEBUG").unwrap().to_str().unwrap() {
-            "0" | "false" => {},
+            "0" | "false" => {}
             _ => {
                 build_config.with("debug", None);
-            },
+            }
         }
 
         // Enable dependency features based on selected cargo features.
@@ -188,13 +188,20 @@ fn main() {
         bindgen_builder = bindgen_builder
             .clang_arg(format!("-I{}", dst.join("include").to_str().unwrap()))
             .clang_arg(format!("-L{}", dst.join("lib").to_str().unwrap()));
-        pkgconf.arg(format!(
-            "--with-path={}",
-            dst.join("lib").join("pkgconfig").to_str().unwrap()
-        ));
+        std::env::set_var(
+            "PKG_CONFIG_PATH",
+            format!(
+                "{}:{}",
+                dst.join("lib").join("pkgconfig").to_str().unwrap(),
+                std::env::var_os("PKG_CONFIG_PATH")
+                    .map(|v| String::from(v.to_str().unwrap()))
+                    .unwrap_or("".to_string())
+            ),
+        );
     }
 
     pkgconf.statik(cfg!(feature = "static"));
+    pkgconf.cargo_metadata(false);
     for link_lib in pkgconf
         .probe(
             format!(
@@ -209,6 +216,10 @@ fn main() {
         .unwrap()
         .libs
     {
+        let link_lib = match link_lib.as_str() {
+            ":libtinydtls.a" => String::from("tinydtls"),
+            v => String::from(v),
+        };
         println!(
             "cargo:rustc-link-lib={}{}",
             cfg!(feature = "static").then(|| "static=").unwrap_or(""),
