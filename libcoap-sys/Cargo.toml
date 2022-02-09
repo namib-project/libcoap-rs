@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-2-Clause
-# wrapper.h - wrapper header to generate libcoap Rust bindings using bindgen
+# Cargo.toml for libcoap-sys
 # Copyright (c) 2021-2022 The NAMIB Project Developers, all rights reserved.
 # See the README as well as the LICENSE file for more information.
 
@@ -34,7 +34,7 @@ default = ["server", "client", "tcp", "async", "epoll", "vendored", "static"]
 # different backends), we select one based on the auto-detection order specified in
 # https://github.com/obgm/libcoap/blob/develop/configure.ac#L494 (gnutls > openssl > mbedtls > tinydtls).
 dtls = []
-dtls_backend_openssl = ["openssl-sys"]
+dtls_backend_openssl = ["openssl-sys", "openssl-sys/vendored"] # TODO vendored should probably be a weak dependency feature as soon as this is on stable cargo releases (https://github.com/rust-lang/cargo/pull/10269)
 dtls_backend_gnutls = ["gnutls-sys"]
 dtls_backend_mbedtls = ["mbedtls-sys-auto"]
 dtls_backend_tinydtls = ["tinydtls-sys"]
@@ -65,9 +65,10 @@ gnutls-sys = {version = "^0.1", optional = true}
 openssl-sys = {version = "^0.9", optional = true}
 mbedtls-sys-auto = {version = "^2.26", optional = true}
 libc = "^0.2"
-tinydtls-sys = {version = "0.1.0", optional = true}
+tinydtls-sys = {version = "^0.1.0", optional = true}
 
 [build-dependencies]
-bindgen = "0.59.2"
-autotools = "0.2.3"
-fs_extra = "1.2.0"
+bindgen = "^0.59.2"
+autotools = "^0.2.3"
+fs_extra = "^1.2"
+pkg-config = "^0.3.24"
