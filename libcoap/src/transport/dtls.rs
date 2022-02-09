@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * transport/dtls.rs - transport-specific code for DTLS.
+ * Copyright (c) 2022 The NAMIB Project Developers, all rights reserved.
+ * See the README as well as the LICENSE file for more information.
+ */
 use std::net::SocketAddr;
 
 use libcoap_sys::{coap_endpoint_t, coap_free_endpoint, coap_new_endpoint, coap_proto_t::COAP_PROTO_DTLS};

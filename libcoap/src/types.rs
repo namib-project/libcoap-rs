@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * resource.rs - Types for converting between libcoap and Rust data structures.
+ * Copyright (c) 2022 The NAMIB Project Developers, all rights reserved.
+ * See the README as well as the LICENSE file for more information.
+ */
 //! Types required for conversion between libcoap C library abstractions and Rust types.
 use std::{
     cell::{Ref, RefCell, RefMut},
@@ -79,7 +85,7 @@ impl ToSocketAddrs for CoapAddress {
                     u16::from_be(raw_addr.sin_port),
                 )
                 .into()
-            },
+            }
             AF_INET6 => {
                 // SAFETY: Validity of addr is an invariant, and we checked that the type of the
                 // underlying sockaddr is actually sockaddr_in6.
@@ -91,7 +97,7 @@ impl ToSocketAddrs for CoapAddress {
                     raw_addr.sin6_scope_id,
                 )
                 .into()
-            },
+            }
             // This should not happen as long as the invariants are kept.
             _ => panic!("sa_family_t of underlying coap_address_t is invalid!"),
         };
@@ -121,7 +127,7 @@ impl From<SocketAddr> for CoapAddress {
                     };
                     CoapAddress(coap_addr)
                 }
-            },
+            }
             SocketAddr::V6(addr) => {
                 // addr is a bindgen-type union wrapper, so we can't assign to it directly and have
                 // to use a pointer instead.
@@ -142,7 +148,7 @@ impl From<SocketAddr> for CoapAddress {
                     };
                     CoapAddress(coap_addr)
                 }
-            },
+            }
         }
     }
 }
@@ -286,7 +292,7 @@ impl CoapUri {
             .path()
             .split('/')
             .map(String::from)
-            .filter(|v| v.is_empty())
+            .filter(|v| !v.is_empty())
             .collect();
         let path = if path.is_empty() { None } else { Some(path) };
 

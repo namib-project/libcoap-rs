@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * message.rs - Types related to CoAP messages.
+ * Copyright (c) 2022 The NAMIB Project Developers, all rights reserved.
+ * See the README as well as the LICENSE file for more information.
+ */
 use std::{ffi::c_void, mem::MaybeUninit, slice::Iter};
 
 use libcoap_sys::{
@@ -88,7 +94,7 @@ impl CoapOption {
                     CoapOptionType::UriPath => Ok(CoapOption::UriPath(String::from_utf8(value)?)),
                     CoapOptionType::ContentFormat => {
                         Ok(CoapOption::ContentFormat(decode_var_len_u16(value.as_slice())))
-                    },
+                    }
                     CoapOptionType::MaxAge => Ok(CoapOption::MaxAge(decode_var_len_u32(value.as_slice()))),
                     CoapOptionType::UriQuery => Ok(CoapOption::UriQuery(String::from_utf8(value)?)),
                     CoapOptionType::Accept => Ok(CoapOption::Accept(decode_var_len_u16(value.as_slice()))),
@@ -103,7 +109,7 @@ impl CoapOption {
                     CoapOptionType::NoResponse => Ok(CoapOption::Size2(decode_var_len_u32(value.as_slice()))),
                     CoapOptionType::Observe => Ok(CoapOption::Observe(decode_var_len_u32(value.as_slice()))),
                 }
-            },
+            }
             _ => Ok(CoapOption::Other(number, value.into_boxed_slice())),
         }
     }
@@ -326,7 +332,7 @@ impl CoapMessage {
     ///
     /// The caller is responsible for freeing the returned PDU, either by calling [coap_send()](libcoap_sys::coap_send()) or
     /// [coap_delete_pdu()].
-    pub fn into_raw_pdu<S: CoapSessionCommon+?Sized>(
+    pub fn into_raw_pdu<S: CoapSessionCommon + ?Sized>(
         mut self,
         session: &mut S,
     ) -> Result<*mut coap_pdu_t, MessageConversionError> {
@@ -368,7 +374,7 @@ impl CoapMessage {
     ///
     /// # Safety
     /// raw_pdu must point to a valid mutable instance of coap_pdu_t.
-    pub unsafe fn apply_to_raw_pdu<S: CoapSessionCommon+?Sized>(
+    pub unsafe fn apply_to_raw_pdu<S: CoapSessionCommon + ?Sized>(
         mut self,
         raw_pdu: *mut coap_pdu_t,
         session: &mut S,
@@ -394,10 +400,10 @@ impl CoapMessage {
             match optlist {
                 None => {
                     optlist = Some(entry);
-                },
+                }
                 Some(mut optlist) => {
                     coap_insert_optlist(&mut optlist, entry);
-                },
+                }
             }
         }
         if let Some(mut optlist) = optlist {
@@ -421,7 +427,7 @@ impl CoapMessage {
                         Some(large_data_cleanup_handler),
                         box_ptr as *mut c_void,
                     );
-                },
+                }
                 CoapMessageCode::Response(_) => {
                     // TODO blockwise transfer here as well.
                     // (for some reason libcoap needs the request PDU here?)
@@ -429,7 +435,7 @@ impl CoapMessage {
                     if coap_add_data(raw_pdu, data.len(), data.as_ptr()) == 0 {
                         return Err(MessageConversionError::Unknown);
                     }
-                },
+                }
             }
         }
         Ok(raw_pdu)
