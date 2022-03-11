@@ -66,10 +66,6 @@ pub enum OptionValueError {
     TooLong,
     #[error("CoAP option has invalid value: invalid string")]
     StringConversion(#[from] FromUtf8Error),
-    #[error("CoAP option has invalid value: invalid url (malformed proxy URL?)")]
-    UrlParsing(#[from] url::ParseError),
-    #[error("CoAP option has invalid value: provided url does not have scheme valid for CoAP")]
-    NotACoapUrl(#[from] UriParsingError),
     #[error("CoAP option has invalid value")]
     IllegalValue,
 }
@@ -82,12 +78,16 @@ pub enum UriParsingError {
 
 #[derive(Error, Debug, Clone, Eq, PartialEq)]
 pub enum MessageConversionError {
-    #[error("CoAP message conversion error: invalid option value")]
-    InvalidOptionValue(OptionValueError),
+    #[error("CoAP message conversion error: invalid option value for {:?}", .0)]
+    InvalidOptionValue(Option<CoapOptionType>, #[source] OptionValueError),
     #[error("CoAP message conversion error: option of type {:?} invalid for message type", .0)]
     InvalidOptionForMessageType(CoapOptionType),
     #[error("CoAP message conversion error: non-repeatable option of type {:?} repeated", .0)]
     NonRepeatableOptionRepeated(CoapOptionType),
+    #[error("CoAP message conversion error: provided url does not have scheme valid for CoAP")]
+    NotACoapUri(UriParsingError),
+    #[error("CoAP message conversion error: invalid url (malformed proxy URL?)")]
+    InvalidUri(url::ParseError),
     #[error("CoAP message conversion error: invalid message code")]
     InvalidMessageCode(#[from] MessageCodeError),
     #[error("CoAP message conversion error: empty message contains data")]
@@ -106,19 +106,13 @@ pub enum MessageConversionError {
 
 impl From<UriParsingError> for MessageConversionError {
     fn from(v: UriParsingError) -> Self {
-        MessageConversionError::InvalidOptionValue(OptionValueError::NotACoapUrl(v))
+        MessageConversionError::NotACoapUri(v)
     }
 }
 
 impl From<url::ParseError> for MessageConversionError {
     fn from(v: url::ParseError) -> Self {
-        MessageConversionError::InvalidOptionValue(OptionValueError::UrlParsing(v))
-    }
-}
-
-impl From<OptionValueError> for MessageConversionError {
-    fn from(e: OptionValueError) -> Self {
-        MessageConversionError::InvalidOptionValue(e)
+        MessageConversionError::InvalidUri(v)
     }
 }
 

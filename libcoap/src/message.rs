@@ -94,7 +94,7 @@ impl CoapOption {
                     CoapOptionType::UriPath => Ok(CoapOption::UriPath(String::from_utf8(value)?)),
                     CoapOptionType::ContentFormat => {
                         Ok(CoapOption::ContentFormat(decode_var_len_u16(value.as_slice())))
-                    }
+                    },
                     CoapOptionType::MaxAge => Ok(CoapOption::MaxAge(decode_var_len_u32(value.as_slice()))),
                     CoapOptionType::UriQuery => Ok(CoapOption::UriQuery(String::from_utf8(value)?)),
                     CoapOptionType::Accept => Ok(CoapOption::Accept(decode_var_len_u16(value.as_slice()))),
@@ -109,7 +109,7 @@ impl CoapOption {
                     CoapOptionType::NoResponse => Ok(CoapOption::Size2(decode_var_len_u32(value.as_slice()))),
                     CoapOptionType::Observe => Ok(CoapOption::Observe(decode_var_len_u32(value.as_slice()))),
                 }
-            }
+            },
             _ => Ok(CoapOption::Other(number, value.into_boxed_slice())),
         }
     }
@@ -309,7 +309,9 @@ impl CoapMessage {
         let mut option_iter = option_iter.assume_init();
         let mut options = Vec::new();
         while let Some(read_option) = coap_option_next(&mut option_iter).as_ref() {
-            options.push(CoapOption::from_raw_opt(option_iter.number, read_option)?);
+            options.push(CoapOption::from_raw_opt(option_iter.number, read_option).map_err(|e| {
+                MessageConversionError::InvalidOptionValue(CoapOptionType::try_from(option_iter.number).ok(), e)
+            })?);
         }
         let mut len: usize = 0;
         let mut data = std::ptr::null();
@@ -390,7 +392,10 @@ impl CoapMessage {
         let mut optlist = None;
         let option_iter = std::mem::take(&mut message.options).into_iter();
         for option in option_iter {
-            let entry = option.into_optlist_entry()?;
+            let optnum = option.number();
+            let entry = option
+                .into_optlist_entry()
+                .map_err(|e| MessageConversionError::InvalidOptionValue(CoapOptionType::try_from(optnum).ok(), e))?;
             if entry.is_null() {
                 if let Some(optlist) = optlist {
                     coap_delete_optlist(optlist);
@@ -400,10 +405,10 @@ impl CoapMessage {
             match optlist {
                 None => {
                     optlist = Some(entry);
-                }
+                },
                 Some(mut optlist) => {
                     coap_insert_optlist(&mut optlist, entry);
-                }
+                },
             }
         }
         if let Some(mut optlist) = optlist {
@@ -427,7 +432,7 @@ impl CoapMessage {
                         Some(large_data_cleanup_handler),
                         box_ptr as *mut c_void,
                     );
-                }
+                },
                 CoapMessageCode::Response(_) => {
                     // TODO blockwise transfer here as well.
                     // (for some reason libcoap needs the request PDU here?)
@@ -435,7 +440,7 @@ impl CoapMessage {
                     if coap_add_data(raw_pdu, data.len(), data.as_ptr()) == 0 {
                         return Err(MessageConversionError::Unknown);
                     }
-                }
+                },
             }
         }
         Ok(raw_pdu)

@@ -50,9 +50,9 @@ macro_rules! resource_handler {
             query: *const coap_string_t,
             response_pdu: *mut coap_pdu_t,
         ) {
-            if let Ok((user_data, mut resource, mut session, incoming_pdu, outgoing_pdu)) =
-                prepare_resource_handler_data::<$t>(resource, session, incoming_pdu, query, response_pdu)
-            {
+            let handler_data =
+                prepare_resource_handler_data::<$t>(resource, session, incoming_pdu, query, response_pdu);
+            if let Ok((user_data, mut resource, mut session, incoming_pdu, outgoing_pdu)) = handler_data {
                 ($f::<D>)(
                     user_data.as_ref(),
                     &mut resource,
@@ -60,6 +60,8 @@ macro_rules! resource_handler {
                     &incoming_pdu,
                     outgoing_pdu,
                 )
+            } else {
+                dbg!(handler_data);
             }
         }
         unsafe { CoapRequestHandler::<$t>::from_raw_handler(_coap_method_handler_wrapper::<$t>) }
@@ -108,7 +110,7 @@ pub unsafe fn prepare_resource_handler_data<D: Any + ?Sized + Debug>(
         (v1, v2) => {
             coap_send_rst(raw_session, raw_incoming_pdu, COAP_MESSAGE_RST);
             Err(v1.and(v2).err().unwrap())
-        }
+        },
     }
 }
 
