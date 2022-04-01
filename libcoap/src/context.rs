@@ -30,6 +30,7 @@ use libcoap_sys::{
 use crate::{
     crypto::{
         dtls_ih_callback, dtls_server_id_callback, dtls_server_sni_callback, CoapClientCryptoProvider,
+        CoapCryptoProviderResponse, CoapCryptoPskData, CoapCryptoPskIdentity, CoapCryptoPskInfo,
         CoapServerCryptoProvider,
     },
     error::{ContextCreationError, EndpointCreationError, IoProcessError, SessionCreationError},
@@ -57,6 +58,13 @@ pub struct CoapContext<'a> {
     client_sessions: HashMap<SocketAddr, CoapAppDataRef<CoapClientSession>>,
     /// The provider for cryptography information for server-side sessions.
     crypto_provider: Option<Box<dyn CoapServerCryptoProvider>>,
+    crypto_default_info: Option<CoapCryptoPskInfo>,
+    crypto_sni_info_container: Vec<CoapCryptoPskInfo>,
+    crypto_current_data: Option<CoapCryptoPskInfo>,
+    // coap_dtls_spsk_info_t created upon calling dtls_server_sni_callback() as the SNI validation callback.
+    // The caller of the validate_sni_call_back will make a defensive copy, so this one only has
+    // to be valid for a very short time and can always be overridden by dtls_server_sni_callback().
+    crypto_last_info_ref: coap_dtls_spsk_info_t,
     _context_lifetime_marker: PhantomData<&'a coap_context_t>,
 }
 
@@ -78,6 +86,19 @@ impl<'a> CoapContext<'a> {
             resources: Vec::new(),
             client_sessions: HashMap::new(),
             crypto_provider: None,
+            crypto_default_info: None,
+            crypto_sni_info_container: Vec::new(),
+            crypto_current_data: None,
+            crypto_last_info_ref: coap_dtls_spsk_info_t {
+                hint: coap_bin_const_t {
+                    length: 0,
+                    s: std::ptr::null(),
+                },
+                key: coap_bin_const_t {
+                    length: 0,
+                    s: std::ptr::null(),
+                },
+            },
             _context_lifetime_marker: Default::default(),
         })
     }
@@ -92,9 +113,7 @@ impl<'a> CoapContext<'a> {
         mut crypto_provider: P,
     ) -> Result<CoapSessionHandle<'a, CoapClientSession>, SessionCreationError> {
         // Get default identity.
-        let id = crypto_provider
-            .provide_info_for_hint(None)
-            .expect("crypto provider did not provide default credentials");
+        let id = crypto_provider.provide_default_info();
         // SAFETY: self.raw_context is guaranteed to be valid, local_if can be null, constructed
         // coap_dtls_cpsk_t is of valid format and has no out-of-bounds issues.
         let session = unsafe {
@@ -130,7 +149,7 @@ impl<'a> CoapContext<'a> {
         session
             .borrow_mut()
             .set_crypto_provider(Some(Box::new(crypto_provider)));
-        session.borrow_mut().crypto_initial_data = Some(id);
+        session.borrow_mut().crypto_current_data = Some(id);
         self.client_sessions.insert(addr, (&session).clone());
         let handle = CoapSessionHandle::new(session);
         Ok(handle)
@@ -210,36 +229,36 @@ impl CoapContext<'_> {
 
     /// Sets the server-side cryptography information provider.
     pub fn set_server_crypto_provider(&mut self, provider: Option<Box<dyn CoapServerCryptoProvider>>) {
+        // TODO replace Option<Box<Something>> with Option<Borrow<Something>> in libcoap-rs to simplify API.
         self.crypto_provider = provider;
         if let Some(provider) = &mut self.crypto_provider {
-            let initial_data = provider.provide_hint_for_sni(None).map(|v| coap_dtls_spsk_info_t {
+            self.crypto_default_info = Some(provider.provide_default_info());
+            let initial_data = coap_dtls_spsk_info_t {
                 hint: coap_bin_const_t {
-                    length: v.hint.len(),
-                    s: v.hint.as_ptr(),
+                    length: self.crypto_default_info.as_ref().unwrap().key.len(),
+                    s: self.crypto_default_info.as_ref().unwrap().key.as_ptr(),
                 },
                 key: coap_bin_const_t {
-                    length: v.key.len(),
-                    s: v.key.as_ptr(),
+                    length: self.crypto_default_info.as_ref().unwrap().key.len(),
+                    s: self.crypto_default_info.as_ref().unwrap().key.as_ptr(),
                 },
-            });
-            if let Some(initial_data) = initial_data {
-                // SAFETY: raw context is valid, setup_data is of the right type and contains
-                // only valid information.
-                unsafe {
-                    coap_context_set_psk2(
-                        self.raw_context,
-                        Box::leak(Box::new(coap_dtls_spsk_t {
-                            version: COAP_DTLS_SPSK_SETUP_VERSION as u8,
-                            reserved: [0; 7],
-                            validate_id_call_back: Some(dtls_server_id_callback),
-                            id_call_back_arg: (self) as *mut CoapContext as *mut c_void,
-                            validate_sni_call_back: Some(dtls_server_sni_callback),
-                            sni_call_back_arg: (self) as *const CoapContext as *mut c_void,
-                            psk_info: initial_data,
-                        })),
-                    )
-                };
-            }
+            };
+            // SAFETY: raw context is valid, setup_data is of the right type and contains
+            // only valid information.
+            unsafe {
+                coap_context_set_psk2(
+                    self.raw_context,
+                    Box::leak(Box::new(coap_dtls_spsk_t {
+                        version: COAP_DTLS_SPSK_SETUP_VERSION as u8,
+                        reserved: [0; 7],
+                        validate_id_call_back: Some(dtls_server_id_callback),
+                        id_call_back_arg: (self) as *mut CoapContext as *mut c_void,
+                        validate_sni_call_back: Some(dtls_server_sni_callback),
+                        sni_call_back_arg: (self) as *const CoapContext as *mut c_void,
+                        psk_info: initial_data,
+                    })),
+                )
+            };
         }
     }
 
@@ -286,6 +305,69 @@ impl CoapContext<'_> {
     /// Returns a mutable iterator over all endpoints associated with this context.
     pub fn endpoints_mut(&mut self) -> IterMut<'_, CoapEndpoint> {
         self.endpoints.iter_mut()
+    }
+
+    pub fn provide_raw_key_for_identity(&mut self, identity: &CoapCryptoPskIdentity) -> Option<&coap_bin_const_t> {
+        match self
+            .crypto_provider
+            .as_mut()
+            .map(|v| v.provide_key_for_identity(identity))
+        {
+            Some(CoapCryptoProviderResponse::UseNew(new_data)) => {
+                self.crypto_current_data = Some(CoapCryptoPskInfo {
+                    identity: Box::from(identity),
+                    key: new_data,
+                });
+                self.crypto_current_data
+                    .as_ref()
+                    .unwrap()
+                    .apply_to_spsk_info(&mut self.crypto_last_info_ref);
+                Some(&self.crypto_last_info_ref.key)
+            },
+            Some(CoapCryptoProviderResponse::UseCurrent) => {
+                if self.crypto_current_data.is_some() {
+                    self.crypto_current_data
+                        .as_ref()
+                        .unwrap()
+                        .apply_to_spsk_info(&mut self.crypto_last_info_ref);
+                    Some(&self.crypto_last_info_ref.key)
+                } else {
+                    None
+                }
+            },
+            None | Some(CoapCryptoProviderResponse::Unacceptable) => None,
+        }
+    }
+
+    pub fn provide_raw_hint_for_sni(&mut self, sni: &str) -> Option<&coap_dtls_spsk_info_t> {
+        match self.crypto_provider.as_mut().map(|v| v.provide_hint_for_sni(sni)) {
+            Some(CoapCryptoProviderResponse::UseNew(new_info)) => {
+                self.crypto_sni_info_container.push(new_info);
+                self.crypto_sni_info_container
+                    .last()
+                    .unwrap()
+                    .apply_to_spsk_info(&mut self.crypto_last_info_ref);
+                Some(&self.crypto_last_info_ref)
+            },
+            Some(CoapCryptoProviderResponse::UseCurrent) => {
+                if self.crypto_default_info.is_some() {
+                    self.crypto_default_info
+                        .as_ref()
+                        .unwrap()
+                        .apply_to_spsk_info(&mut self.crypto_last_info_ref);
+                    Some(&self.crypto_last_info_ref)
+                } else {
+                    None
+                }
+            },
+            None | Some(CoapCryptoProviderResponse::Unacceptable) => None,
+        }
+    }
+
+    pub fn provide_default_info(&mut self) -> Option<CoapCryptoPskInfo> {
+        self.crypto_provider
+            .as_mut()
+            .map(|provider| provider.provide_default_info())
     }
 
     /// Returns a reference to the raw context contained in this struct.

@@ -14,20 +14,22 @@ use std::{
 };
 
 use libcoap_sys::{
-    coap_context_t, coap_fixed_point_t, coap_mid_t, coap_new_message_id, coap_pdu_get_token, coap_pdu_t,
-    coap_response_t, coap_send, coap_session_get_ack_random_factor, coap_session_get_ack_timeout,
-    coap_session_get_addr_local, coap_session_get_addr_remote, coap_session_get_app_data, coap_session_get_ifindex,
-    coap_session_get_max_retransmit, coap_session_get_proto, coap_session_get_psk_hint, coap_session_get_psk_identity,
-    coap_session_get_psk_key, coap_session_get_state, coap_session_get_type, coap_session_init_token,
-    coap_session_max_pdu_size, coap_session_new_token, coap_session_reference, coap_session_release,
-    coap_session_send_ping, coap_session_set_ack_random_factor, coap_session_set_ack_timeout,
-    coap_session_set_app_data, coap_session_set_max_retransmit, coap_session_set_mtu, coap_session_set_type_client,
-    coap_session_state_t, coap_session_t, coap_session_type_t,
+    coap_bin_const_t, coap_context_t, coap_dtls_cpsk_info_t, coap_dtls_spsk_info_t, coap_fixed_point_t, coap_mid_t,
+    coap_new_message_id, coap_pdu_get_token, coap_pdu_t, coap_response_t, coap_send,
+    coap_session_get_ack_random_factor, coap_session_get_ack_timeout, coap_session_get_addr_local,
+    coap_session_get_addr_remote, coap_session_get_app_data, coap_session_get_ifindex, coap_session_get_max_retransmit,
+    coap_session_get_proto, coap_session_get_psk_hint, coap_session_get_psk_identity, coap_session_get_psk_key,
+    coap_session_get_state, coap_session_get_type, coap_session_init_token, coap_session_max_pdu_size,
+    coap_session_new_token, coap_session_reference, coap_session_release, coap_session_send_ping,
+    coap_session_set_ack_random_factor, coap_session_set_ack_timeout, coap_session_set_app_data,
+    coap_session_set_max_retransmit, coap_session_set_mtu, coap_session_set_type_client, coap_session_state_t,
+    coap_session_t, coap_session_type_t,
 };
 use rand::Rng;
 
+use crate::crypto::{CoapCryptoProviderResponse, CoapCryptoPskData};
 use crate::{
-    crypto::{CoapClientCryptoIdentity, CoapClientCryptoProvider, CoapCryptoPsk},
+    crypto::{CoapClientCryptoProvider, CoapCryptoPskIdentity, CoapCryptoPskInfo},
     error::{MessageConversionError, SessionGetAppDataError},
     message::{CoapMessage, CoapMessageCommon},
     protocol::CoapToken,
@@ -254,7 +256,7 @@ impl<S: AsRef<CoapSessionInner> + AsMut<CoapSessionInner>> CoapSessionCommon for
         unsafe { coap_session_get_proto(self.as_ref().raw_session) }.into()
     }
 
-    fn psk_hint(&self) -> Option<Box<[u8]>> {
+    fn psk_hint(&self) -> Option<Box<CoapCryptoPskIdentity>> {
         unsafe {
             coap_session_get_psk_hint(self.as_ref().raw_session)
                 .as_ref()
@@ -262,7 +264,7 @@ impl<S: AsRef<CoapSessionInner> + AsMut<CoapSessionInner>> CoapSessionCommon for
         }
     }
 
-    fn psk_identity(&self) -> Option<Box<[u8]>> {
+    fn psk_identity(&self) -> Option<Box<CoapCryptoPskIdentity>> {
         unsafe {
             coap_session_get_psk_identity(self.as_ref().raw_session)
                 .as_ref()
@@ -270,7 +272,7 @@ impl<S: AsRef<CoapSessionInner> + AsMut<CoapSessionInner>> CoapSessionCommon for
         }
     }
 
-    fn psk_key(&self) -> Option<Box<[u8]>> {
+    fn psk_key(&self) -> Option<Box<CoapCryptoPskData>> {
         unsafe {
             coap_session_get_psk_key(self.as_ref().raw_session)
                 .as_ref()
@@ -350,9 +352,12 @@ impl AsMut<CoapSessionInner> for CoapSession {
 pub struct CoapClientSession {
     inner: CoapSessionInner,
     pub(crate) crypto_provider: Option<Box<dyn CoapClientCryptoProvider>>,
-    pub(crate) crypto_initial_data: Option<CoapClientCryptoIdentity>,
-    pub(crate) crypto_current_data: Option<CoapClientCryptoIdentity>,
+    pub(crate) crypto_current_data: Option<CoapCryptoPskInfo>,
     received_responses: HashMap<CoapToken, VecDeque<CoapResponse>>,
+    // coap_dtls_cpsk_info_t created upon calling dtls_client_ih_callback().
+    // The caller of the callback will make a defensive copy, so this one only has
+    // to be valid for a very short time and can always be overridden.
+    pub(crate) crypto_last_info_ref: coap_dtls_cpsk_info_t,
 }
 
 impl CoapClientSession {
@@ -380,7 +385,7 @@ impl CoapClientSession {
             coap_session_type_t::COAP_SESSION_TYPE_NONE => panic!("provided session has no type"),
             coap_session_type_t::COAP_SESSION_TYPE_CLIENT => {
                 let crypto_info = match (psk_id, psk_key) {
-                    (Some(id), Some(key)) => Some(CoapClientCryptoIdentity {
+                    (Some(id), Some(key)) => Some(CoapCryptoPskInfo {
                         identity: Box::from(std::slice::from_raw_parts(id.s, id.length)),
                         key: Box::from(std::slice::from_raw_parts(key.s, key.length)),
                     }),
@@ -389,17 +394,26 @@ impl CoapClientSession {
                 let client_session = CoapClientSession {
                     inner,
                     crypto_provider: None,
-                    crypto_initial_data: None,
                     crypto_current_data: crypto_info,
                     received_responses: HashMap::new(),
+                    crypto_last_info_ref: coap_dtls_cpsk_info_t {
+                        identity: coap_bin_const_t {
+                            length: 0,
+                            s: std::ptr::null(),
+                        },
+                        key: coap_bin_const_t {
+                            length: 0,
+                            s: std::ptr::null(),
+                        },
+                    },
                 };
                 let session_ref = CoapAppDataRef::new(client_session);
                 coap_session_set_app_data(raw_session, session_ref.create_raw_rc());
                 session_ref
-            }
+            },
             coap_session_type_t::COAP_SESSION_TYPE_SERVER => {
                 panic!("attempted to create CoapClientSession from raw server session")
-            }
+            },
             _ => unreachable!("unknown session type"),
         }
     }
@@ -478,6 +492,40 @@ impl CoapClientSession {
             }
         }
     }
+
+    pub fn provide_raw_key_for_hint(&mut self, hint: &CoapCryptoPskIdentity) -> Option<&coap_dtls_cpsk_info_t> {
+        match self.crypto_provider.as_mut().map(|v| v.provide_key_for_hint(hint)) {
+            Some(CoapCryptoProviderResponse::UseNew(new_data)) => {
+                self.crypto_current_data = Some(CoapCryptoPskInfo {
+                    identity: Box::from(hint),
+                    key: new_data,
+                });
+                self.crypto_current_data
+                    .as_ref()
+                    .unwrap()
+                    .apply_to_cpsk_info(&mut self.crypto_last_info_ref);
+                Some(&self.crypto_last_info_ref)
+            },
+            Some(CoapCryptoProviderResponse::UseCurrent) => {
+                if self.crypto_current_data.is_some() {
+                    self.crypto_current_data
+                        .as_ref()
+                        .unwrap()
+                        .apply_to_cpsk_info(&mut self.crypto_last_info_ref);
+                    Some(&self.crypto_last_info_ref)
+                } else {
+                    None
+                }
+            },
+            None | Some(CoapCryptoProviderResponse::Unacceptable) => None,
+        }
+    }
+
+    pub fn provide_default_info(&mut self) -> Option<CoapCryptoPskInfo> {
+        self.crypto_provider
+            .as_mut()
+            .map(|provider| provider.provide_default_info())
+    }
 }
 
 impl AsRef<CoapSessionInner> for CoapClientSession {
@@ -500,12 +548,18 @@ impl From<CoapServerSession> for CoapClientSession {
         CoapClientSession {
             inner: server_session.inner,
             crypto_provider: None,
-            crypto_initial_data: None,
-            crypto_current_data: server_session.crypto_current_data.map(|v| CoapClientCryptoIdentity {
-                identity: Vec::new().into_boxed_slice(),
-                key: v,
-            }),
+            crypto_current_data: server_session.crypto_current_data,
             received_responses: HashMap::new(),
+            crypto_last_info_ref: coap_dtls_cpsk_info_t {
+                identity: coap_bin_const_t {
+                    length: 0,
+                    s: std::ptr::null(),
+                },
+                key: coap_bin_const_t {
+                    length: 0,
+                    s: std::ptr::null(),
+                },
+            },
         }
     }
 }
@@ -514,7 +568,7 @@ impl From<CoapServerSession> for CoapClientSession {
 #[derive(Debug)]
 pub struct CoapServerSession {
     inner: CoapSessionInner,
-    pub(crate) crypto_current_data: Option<Box<CoapCryptoPsk>>,
+    pub(crate) crypto_current_data: Option<CoapCryptoPskInfo>,
 }
 
 impl CoapServerSession {
@@ -536,19 +590,23 @@ impl CoapServerSession {
         assert!(!raw_session.is_null(), "provided raw session was null");
         let raw_session_type = coap_session_get_type(raw_session);
         let inner = CoapSessionInner::from_raw(raw_session);
+        let psk_identity = coap_session_get_psk_identity(raw_session).as_ref();
         let psk_key = coap_session_get_psk_key(raw_session).as_ref();
         let session = match raw_session_type {
             coap_session_type_t::COAP_SESSION_TYPE_NONE => panic!("provided session has no type"),
             coap_session_type_t::COAP_SESSION_TYPE_CLIENT => {
                 panic!("attempted to create server session from raw client session")
-            }
+            },
             coap_session_type_t::COAP_SESSION_TYPE_SERVER => {
-                let crypto_info = psk_key.map(|key| Box::from(std::slice::from_raw_parts(key.s, key.length)));
+                let crypto_info = psk_identity.zip(psk_key).map(|(identity, key)| CoapCryptoPskInfo {
+                    identity: Box::from(std::slice::from_raw_parts(identity.s, identity.length)),
+                    key: Box::from(std::slice::from_raw_parts(key.s, key.length)),
+                });
                 CoapServerSession {
                     inner,
                     crypto_current_data: crypto_info,
                 }
-            }
+            },
             coap_session_type_t::COAP_SESSION_TYPE_HELLO => CoapServerSession {
                 inner,
                 crypto_current_data: None,
@@ -737,7 +795,7 @@ impl<S: CoapSessionCommon> CoapSessionCommon for CoapSessionHandle<'_, S> {
     }
 
     fn psk_hint(&self) -> Option<Box<[u8]>> {
-        self.session_ref.borrow().psk_key()
+        self.session_ref.borrow().psk_identity()
     }
 
     fn psk_identity(&self) -> Option<Box<[u8]>> {
