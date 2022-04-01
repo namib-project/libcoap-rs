@@ -21,6 +21,11 @@ use libcoap_sys::{
     coap_resource_set_userdata, coap_resource_t, coap_send_rst, coap_session_t, coap_string_t,
 };
 
+use crate::message::CoapMessageCommon;
+use crate::protocol::CoapMessageCode;
+use crate::protocol::CoapMessageType;
+use crate::session::CoapSessionCommon;
+
 use crate::{
     error::MessageConversionError,
     message::CoapMessage,
@@ -60,8 +65,6 @@ macro_rules! resource_handler {
                     &incoming_pdu,
                     outgoing_pdu,
                 )
-            } else {
-                dbg!(handler_data);
             }
         }
         unsafe { CoapRequestHandler::<$t>::from_raw_handler(_coap_method_handler_wrapper::<$t>) }
@@ -301,12 +304,20 @@ impl<D: Any + ?Sized + Debug> CoapResource<D> {
         data: &D,
         session: &mut CoapServerSession,
         req_message: &CoapRequest,
-        rsp_message: CoapResponse,
+        mut rsp_message: CoapResponse,
     ) {
         let mut inner = RefCell::borrow_mut(self.inner.as_ref());
+        let req_code = match req_message.code() {
+            CoapMessageCode::Request(req_code) => req_code,
+            _ => {
+                rsp_message.set_type_(CoapMessageType::Rst);
+                session.send(rsp_message);
+                return;
+            },
+        };
         (inner
             .handlers
-            .handler_mut(CoapRequestCode::Get)
+            .handler_mut(req_code)
             .expect("attempted to call dynamic handler for method that has no handler set")
             .dynamic_handler_function
             .as_mut()

@@ -4,6 +4,7 @@
  * Copyright (c) 2022 The NAMIB Project Developers, all rights reserved.
  * See the README as well as the LICENSE file for more information.
  */
+use std::any::Any;
 use std::{
     ffi::{c_void, CStr},
     fmt::Debug,
@@ -20,26 +21,39 @@ use crate::{
     session::{CoapClientSession, CoapServerSession},
 };
 
-/// Representation of cryptographic information used by a client.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CoapClientCryptoIdentity {
-    /// The key identity of the PSK to use.
-    pub identity: Box<CoapCryptoPskIdentity>,
-    /// The PSK that should be used and has the given identity.
-    pub key: Box<CoapCryptoPsk>,
-}
-
 /// Representation of cryptographic information used by a server.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CoapServerCryptoHint {
+pub struct CoapCryptoPskInfo {
     /// The identity hint to return to the client.
-    pub hint: Box<CoapCryptoPskIdentity>,
+    pub identity: Box<CoapCryptoPskIdentity>,
     /// The pre-shared-key that belongs to this identity hint.
-    pub key: Box<CoapCryptoPsk>,
+    pub key: Box<CoapCryptoPskData>,
+}
+
+impl CoapCryptoPskInfo {
+    pub fn apply_to_cpsk_info(&self, info: &mut coap_dtls_cpsk_info_t) {
+        info.identity.s = self.identity.as_ptr();
+        info.identity.length = self.identity.len();
+        info.key.s = self.key.as_ptr();
+        info.key.length = self.key.len();
+    }
+
+    pub fn apply_to_spsk_info(&self, info: &mut coap_dtls_spsk_info_t) {
+        info.hint.s = self.identity.as_ptr();
+        info.hint.length = self.identity.len();
+        info.key.s = self.key.as_ptr();
+        info.key.length = self.key.len();
+    }
 }
 
 pub type CoapCryptoPskIdentity = [u8];
-pub type CoapCryptoPsk = [u8];
+pub type CoapCryptoPskData = [u8];
+
+pub enum CoapCryptoProviderResponse<T> {
+    UseCurrent,
+    UseNew(T),
+    Unacceptable,
+}
 
 /// Trait implemented by types that can provide cryptographic information to CoapContexts and
 /// associated sessions when needed.
@@ -51,7 +65,12 @@ pub trait CoapClientCryptoProvider: Debug {
     ///
     /// Return None if the provided hint is unacceptable, i.e. you have no key that matches this
     /// hint.
-    fn provide_info_for_hint(&mut self, hint: Option<&CoapCryptoPskIdentity>) -> Option<CoapClientCryptoIdentity>;
+    fn provide_key_for_hint(
+        &mut self,
+        hint: &CoapCryptoPskIdentity,
+    ) -> CoapCryptoProviderResponse<Box<CoapCryptoPskData>>;
+
+    fn provide_default_info(&mut self) -> CoapCryptoPskInfo;
 }
 
 pub trait CoapServerCryptoProvider: Debug {
@@ -60,12 +79,21 @@ pub trait CoapServerCryptoProvider: Debug {
     ///
     /// Return None if the provided hint is unacceptable, i.e. you have no key that matches this
     /// identity.
-    fn provide_key_for_identity(&mut self, identity: &CoapCryptoPskIdentity) -> Option<Box<CoapCryptoPsk>>;
+    fn provide_key_for_identity(
+        &mut self,
+        identity: &CoapCryptoPskIdentity,
+    ) -> CoapCryptoProviderResponse<Box<CoapCryptoPskData>> {
+        CoapCryptoProviderResponse::UseCurrent
+    }
 
     /// Provide the appropriate key hint for the given SNI provided by the client
     ///
     /// Return None if the provided SNI is unacceptable, i.e. you have no key for this server name.
-    fn provide_hint_for_sni(&mut self, sni: Option<&str>) -> Option<CoapServerCryptoHint>;
+    fn provide_hint_for_sni(&mut self, sni: &str) -> CoapCryptoProviderResponse<CoapCryptoPskInfo> {
+        CoapCryptoProviderResponse::UseCurrent
+    }
+
+    fn provide_default_info(&mut self) -> CoapCryptoPskInfo;
 }
 
 // TODO DTLS PKI/RPK
@@ -77,28 +105,11 @@ pub(crate) unsafe extern "C" fn dtls_ih_callback(
 ) -> *const coap_dtls_cpsk_info_t {
     let mut session = CoapClientSession::restore_from_raw(session);
     let mut client = session.borrow_mut();
-    if let Some(client_crypto) = &mut client.crypto_provider {
-        client.crypto_current_data =
-            client_crypto.provide_info_for_hint(Some(std::slice::from_raw_parts((*hint).s, (*hint).length)));
-        client
-            .crypto_current_data
-            .as_ref()
-            .map(|crypto_data| {
-                Box::leak(Box::new(coap_dtls_cpsk_info_t {
-                    identity: coap_bin_const_t {
-                        s: crypto_data.identity.as_ptr(),
-                        length: crypto_data.identity.len(),
-                    },
-                    key: coap_bin_const_t {
-                        s: crypto_data.key.as_ptr(),
-                        length: crypto_data.key.len(),
-                    },
-                })) as *const coap_dtls_cpsk_info_t
-            })
-            .unwrap_or(std::ptr::null())
-    } else {
-        std::ptr::null()
-    }
+    let provided_identity = std::slice::from_raw_parts((*hint).s, (*hint).length);
+    client
+        .provide_raw_key_for_hint(provided_identity)
+        .map(|v| (v as *const coap_dtls_cpsk_info_t))
+        .unwrap_or(std::ptr::null())
 }
 
 pub(crate) unsafe extern "C" fn dtls_server_id_callback(
@@ -109,17 +120,11 @@ pub(crate) unsafe extern "C" fn dtls_server_id_callback(
     let mut session = CoapServerSession::restore_from_raw(session);
     let mut server = session.borrow_mut();
     let context = (userdata as *mut CoapContext).as_mut().unwrap();
-    if let Some(server_crypto) = context.server_crypto_provider() {
-        server.crypto_current_data =
-            server_crypto.provide_key_for_identity(std::slice::from_raw_parts((*identity).s, (*identity).length));
-        server
-            .crypto_current_data
-            .as_ref()
-            .map(|crypto_data| coap_new_bin_const(crypto_data.as_ptr(), crypto_data.len()))
-            .unwrap_or(std::ptr::null_mut())
-    } else {
-        std::ptr::null_mut()
-    }
+    let provided_identity = std::slice::from_raw_parts((*identity).s, (*identity).length);
+    context
+        .provide_raw_key_for_identity(provided_identity)
+        .map(|v| (v as *const coap_bin_const_t))
+        .unwrap_or(std::ptr::null())
 }
 
 pub(crate) unsafe extern "C" fn dtls_server_sni_callback(
@@ -130,33 +135,13 @@ pub(crate) unsafe extern "C" fn dtls_server_sni_callback(
     let mut session = CoapServerSession::restore_from_raw(session);
     let mut server = session.borrow_mut();
     let context = (userdata as *mut CoapContext).as_mut().unwrap();
-    if let Some(server_crypto) = context.server_crypto_provider() {
-        let sni_value = CStr::from_ptr(sni).to_str();
-        if let Ok(sni_value) = sni_value {
-            let new_hint = server_crypto.provide_hint_for_sni(Some(sni_value));
-
-            if let Some(hint) = &new_hint {
-                server.crypto_current_data = Some(hint.key.clone());
-            }
-
-            new_hint
-                .map(|v| {
-                    Box::into_raw(Box::new(coap_dtls_spsk_info_t {
-                        hint: coap_bin_const_t {
-                            length: v.hint.len(),
-                            s: v.hint.as_ptr(),
-                        },
-                        key: coap_bin_const_t {
-                            length: v.key.len(),
-                            s: v.key.as_ptr(),
-                        },
-                    }))
-                })
-                .unwrap_or(std::ptr::null_mut())
-        } else {
-            std::ptr::null_mut()
-        }
+    let sni_value = CStr::from_ptr(sni).to_str();
+    if let Ok(sni_value) = sni_value {
+        context
+            .provide_raw_hint_for_sni(sni_value)
+            .map(|v| (v as *const coap_dtls_spsk_info_t))
+            .unwrap_or(std::ptr::null())
     } else {
-        std::ptr::null_mut()
+        std::ptr::null()
     }
 }

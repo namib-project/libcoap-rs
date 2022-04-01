@@ -316,7 +316,10 @@ impl CoapMessage {
         let mut len: usize = 0;
         let mut data = std::ptr::null();
         coap_get_data(raw_pdu, &mut len, &mut data);
-        let data = Vec::from(std::slice::from_raw_parts(data, len));
+        let data = match len {
+            0 => None,
+            len => Some(Vec::from(std::slice::from_raw_parts(data, len)).into_boxed_slice()),
+        };
         let raw_token = coap_pdu_get_token(raw_pdu);
         let token = Vec::from(std::slice::from_raw_parts(raw_token.s, raw_token.length));
         Ok(CoapMessage {
@@ -325,7 +328,7 @@ impl CoapMessage {
             mid: Some(coap_pdu_get_mid(raw_pdu)),
             options,
             token: Some(token.into_boxed_slice()),
-            data: Some(data.into_boxed_slice()),
+            data,
         })
     }
 
