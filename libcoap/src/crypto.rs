@@ -12,10 +12,7 @@ use std::{
 
 use libcoap_sys::{coap_bin_const_t, coap_dtls_cpsk_info_t, coap_dtls_spsk_info_t, coap_session_t, coap_str_const_t};
 
-use crate::{
-    context::CoapContext,
-    session::{CoapClientSession, CoapServerSession},
-};
+use crate::{context::CoapContext, session::CoapClientSession};
 
 /// Representation of cryptographic information used by a server.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -126,7 +123,7 @@ pub(crate) unsafe extern "C" fn dtls_ih_callback(
 
 pub(crate) unsafe extern "C" fn dtls_server_id_callback(
     identity: *mut coap_bin_const_t,
-    session: *mut coap_session_t,
+    _session: *mut coap_session_t,
     userdata: *mut c_void,
 ) -> *const coap_bin_const_t {
     let context = (userdata as *mut CoapContext).as_mut().unwrap();
@@ -139,7 +136,7 @@ pub(crate) unsafe extern "C" fn dtls_server_id_callback(
 
 pub(crate) unsafe extern "C" fn dtls_server_sni_callback(
     sni: *const c_char,
-    session: *mut coap_session_t,
+    _session: *mut coap_session_t,
     userdata: *mut c_void,
 ) -> *const coap_dtls_spsk_info_t {
     let context = (userdata as *mut CoapContext).as_mut().unwrap();
