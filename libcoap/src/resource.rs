@@ -312,7 +312,7 @@ impl<D: Any + ?Sized + Debug> CoapResource<D> {
             _ => {
                 rsp_message.set_type_(CoapMessageType::Rst);
                 // TODO some better error handling
-                session.send(rsp_message).is_ok();
+                session.send(rsp_message).expect("error while sending RST packet");
                 return;
             },
         };

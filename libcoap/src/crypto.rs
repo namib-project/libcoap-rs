@@ -129,7 +129,6 @@ pub(crate) unsafe extern "C" fn dtls_server_id_callback(
     session: *mut coap_session_t,
     userdata: *mut c_void,
 ) -> *const coap_bin_const_t {
-    let mut session = CoapServerSession::restore_from_raw(session);
     let context = (userdata as *mut CoapContext).as_mut().unwrap();
     let provided_identity = std::slice::from_raw_parts((*identity).s, (*identity).length);
     context
@@ -143,7 +142,6 @@ pub(crate) unsafe extern "C" fn dtls_server_sni_callback(
     session: *mut coap_session_t,
     userdata: *mut c_void,
 ) -> *const coap_dtls_spsk_info_t {
-    let mut session = CoapServerSession::restore_from_raw(session);
     let context = (userdata as *mut CoapContext).as_mut().unwrap();
     let sni_value = CStr::from_ptr(sni).to_str();
     if let Ok(sni_value) = sni_value {
