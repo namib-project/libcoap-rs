@@ -430,7 +430,7 @@ impl CoapResponseCode {
             CoapResponseCode::Unprocessable => coap_pdu_code_t::COAP_RESPONSE_CODE_UNPROCESSABLE,
             CoapResponseCode::UnsupportedContentFormat => {
                 coap_pdu_code_t::COAP_RESPONSE_CODE_UNSUPPORTED_CONTENT_FORMAT
-            }
+            },
             CoapResponseCode::Valid => coap_pdu_code_t::COAP_RESPONSE_CODE_VALID,
         }
     }
@@ -506,6 +506,7 @@ fn convert_to_fixed_size_slice(n: usize, val: &[u8]) -> Box<[u8]> {
     buffer.into_boxed_slice()
 }
 
+// TODO the following functions should probably return a result and use generics.
 pub(crate) fn decode_var_len_u32(val: &[u8]) -> u32 {
     u32::from_be_bytes(convert_to_fixed_size_slice(4, val)[..4].try_into().unwrap())
 }
