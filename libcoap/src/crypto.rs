@@ -24,6 +24,7 @@ pub struct CoapCryptoPskInfo {
 }
 
 impl CoapCryptoPskInfo {
+    /// Apply this key information to a coap_dtls_cpsk_info_t struct for use in libcoap.
     pub fn apply_to_cpsk_info(&self, info: &mut coap_dtls_cpsk_info_t) {
         info.identity.s = self.identity.as_ptr();
         info.identity.length = self.identity.len();
@@ -31,6 +32,7 @@ impl CoapCryptoPskInfo {
         info.key.length = self.key.len();
     }
 
+    /// Apply this key information to a coap_dtls_spsk_info_t struct for use in libcoap.
     pub fn apply_to_spsk_info(&self, info: &mut coap_dtls_spsk_info_t) {
         info.hint.s = self.identity.as_ptr();
         info.hint.length = self.identity.len();
