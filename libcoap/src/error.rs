@@ -84,9 +84,9 @@ pub enum MessageConversionError {
     InvalidOptionForMessageType(CoapOptionType),
     #[error("CoAP message conversion error: non-repeatable option of type {:?} repeated", .0)]
     NonRepeatableOptionRepeated(CoapOptionType),
-    #[error("CoAP message conversion error: provided url does not have scheme valid for CoAP")]
+    #[error("CoAP message conversion error: provided uri does not have scheme valid for CoAP")]
     NotACoapUri(UriParsingError),
-    #[error("CoAP message conversion error: invalid url (malformed proxy URL?)")]
+    #[error("CoAP message conversion error: invalid uri (malformed proxy URL?)")]
     InvalidUri(url::ParseError),
     #[error("CoAP message conversion error: invalid message code")]
     InvalidMessageCode(#[from] MessageCodeError),

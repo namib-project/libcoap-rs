@@ -14,16 +14,15 @@ use std::{
 };
 
 use libcoap_sys::{
-    coap_bin_const_t, coap_context_t, coap_dtls_cpsk_info_t, coap_dtls_spsk_info_t, coap_fixed_point_t, coap_mid_t,
-    coap_new_message_id, coap_pdu_get_token, coap_pdu_t, coap_response_t, coap_send,
-    coap_session_get_ack_random_factor, coap_session_get_ack_timeout, coap_session_get_addr_local,
-    coap_session_get_addr_remote, coap_session_get_app_data, coap_session_get_ifindex, coap_session_get_max_retransmit,
-    coap_session_get_proto, coap_session_get_psk_hint, coap_session_get_psk_identity, coap_session_get_psk_key,
-    coap_session_get_state, coap_session_get_type, coap_session_init_token, coap_session_max_pdu_size,
-    coap_session_new_token, coap_session_reference, coap_session_release, coap_session_send_ping,
-    coap_session_set_ack_random_factor, coap_session_set_ack_timeout, coap_session_set_app_data,
-    coap_session_set_max_retransmit, coap_session_set_mtu, coap_session_set_type_client, coap_session_state_t,
-    coap_session_t, coap_session_type_t,
+    coap_bin_const_t, coap_context_t, coap_dtls_cpsk_info_t, coap_fixed_point_t, coap_mid_t, coap_new_message_id,
+    coap_pdu_get_token, coap_pdu_t, coap_response_t, coap_send, coap_session_get_ack_random_factor,
+    coap_session_get_ack_timeout, coap_session_get_addr_local, coap_session_get_addr_remote, coap_session_get_app_data,
+    coap_session_get_ifindex, coap_session_get_max_retransmit, coap_session_get_proto, coap_session_get_psk_hint,
+    coap_session_get_psk_identity, coap_session_get_psk_key, coap_session_get_state, coap_session_get_type,
+    coap_session_init_token, coap_session_max_pdu_size, coap_session_new_token, coap_session_reference,
+    coap_session_release, coap_session_send_ping, coap_session_set_ack_random_factor, coap_session_set_ack_timeout,
+    coap_session_set_app_data, coap_session_set_max_retransmit, coap_session_set_mtu, coap_session_set_type_client,
+    coap_session_state_t, coap_session_t, coap_session_type_t,
 };
 use rand::Rng;
 

@@ -30,8 +30,7 @@ use libcoap_sys::{
 use crate::{
     crypto::{
         dtls_ih_callback, dtls_server_id_callback, dtls_server_sni_callback, CoapClientCryptoProvider,
-        CoapCryptoProviderResponse, CoapCryptoPskData, CoapCryptoPskIdentity, CoapCryptoPskInfo,
-        CoapServerCryptoProvider,
+        CoapCryptoProviderResponse, CoapCryptoPskIdentity, CoapCryptoPskInfo, CoapServerCryptoProvider,
     },
     error::{ContextCreationError, EndpointCreationError, IoProcessError, SessionCreationError},
     resource::{CoapResource, UntypedCoapResource},
@@ -223,7 +222,7 @@ impl CoapContext<'_> {
     }
 
     /// Returns a reference to the server-side cryptography information provider.
-    pub(crate) fn server_crypto_provider(&mut self) -> Option<&mut Box<dyn CoapServerCryptoProvider>> {
+    pub fn server_crypto_provider(&mut self) -> Option<&mut Box<dyn CoapServerCryptoProvider>> {
         self.crypto_provider.as_mut()
     }
 
@@ -324,17 +323,10 @@ impl CoapContext<'_> {
                     .apply_to_spsk_info(&mut self.crypto_last_info_ref);
                 Some(&self.crypto_last_info_ref.key)
             },
-            Some(CoapCryptoProviderResponse::UseCurrent) => {
-                if self.crypto_current_data.is_some() {
-                    self.crypto_current_data
-                        .as_ref()
-                        .unwrap()
-                        .apply_to_spsk_info(&mut self.crypto_last_info_ref);
-                    Some(&self.crypto_last_info_ref.key)
-                } else {
-                    None
-                }
-            },
+            Some(CoapCryptoProviderResponse::UseCurrent) => self.crypto_current_data.as_ref().map(|v| {
+                v.apply_to_spsk_info(&mut self.crypto_last_info_ref);
+                &self.crypto_last_info_ref.key
+            }),
             None | Some(CoapCryptoProviderResponse::Unacceptable) => None,
         }
     }

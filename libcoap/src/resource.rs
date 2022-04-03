@@ -311,7 +311,8 @@ impl<D: Any + ?Sized + Debug> CoapResource<D> {
             CoapMessageCode::Request(req_code) => req_code,
             _ => {
                 rsp_message.set_type_(CoapMessageType::Rst);
-                session.send(rsp_message);
+                // TODO some better error handling
+                session.send(rsp_message).is_ok();
                 return;
             },
         };
