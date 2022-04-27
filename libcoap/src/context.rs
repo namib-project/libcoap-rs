@@ -6,12 +6,16 @@
  */
 use std::{
     any::Any,
+    cell::Ref,
     cell::RefCell,
+    cell::RefMut,
     collections::HashMap,
     ffi::c_void,
     fmt::Debug,
     marker::PhantomData,
     net::SocketAddr,
+    ops::Deref,
+    ops::DerefMut,
     ops::Sub,
     rc::Rc,
     slice::{Iter, IterMut},
@@ -23,10 +27,11 @@ use libcoap_sys::{
     coap_context_t, coap_dtls_cpsk_info_t, coap_dtls_cpsk_t, coap_dtls_spsk_info_t, coap_dtls_spsk_t,
     coap_free_context, coap_io_process, coap_new_client_session, coap_new_client_session_psk2, coap_new_context,
     coap_proto_t::{COAP_PROTO_DTLS, COAP_PROTO_UDP},
-    coap_register_response_handler, coap_session_get_app_data, coap_session_release, COAP_BLOCK_SINGLE_BODY,
-    COAP_BLOCK_USE_LIBCOAP, COAP_DTLS_SPSK_SETUP_VERSION, COAP_IO_WAIT,
+    coap_register_response_handler, coap_session_get_app_data, coap_session_release, coap_set_app_data,
+    COAP_BLOCK_SINGLE_BODY, COAP_BLOCK_USE_LIBCOAP, COAP_DTLS_SPSK_SETUP_VERSION, COAP_IO_WAIT,
 };
 
+use crate::types::FfiPassthroughRefContainer;
 use crate::{
     crypto::{
         dtls_ih_callback, dtls_server_id_callback, dtls_server_sni_callback, CoapClientCryptoProvider,
@@ -39,11 +44,8 @@ use crate::{
     types::{CoapAddress, CoapAppDataRef},
 };
 
-/// A CoAP Context – container for general state and configuration information relating to CoAP
-///
-/// The equivalent to the [coap_context_t] type in libcoap.
 #[derive(Debug)]
-pub struct CoapContext<'a> {
+pub struct CoapContextInner {
     /// Reference to the raw context this context wraps around.
     raw_context: *mut coap_context_t,
     /// A list of endpoints that this context is currently associated with.
@@ -64,6 +66,14 @@ pub struct CoapContext<'a> {
     // The caller of the validate_sni_call_back will make a defensive copy, so this one only has
     // to be valid for a very short time and can always be overridden by dtls_server_sni_callback().
     crypto_last_info_ref: coap_dtls_spsk_info_t,
+}
+
+/// A CoAP Context – container for general state and configuration information relating to CoAP
+///
+/// The equivalent to the [coap_context_t] type in libcoap.
+#[derive(Debug)]
+pub struct CoapContext<'a> {
+    inner: FfiPassthroughRefContainer<'static, CoapContextInner>,
     _context_lifetime_marker: PhantomData<&'a coap_context_t>,
 }
 
@@ -79,7 +89,7 @@ impl<'a> CoapContext<'a> {
             coap_context_set_block_mode(raw_context, (COAP_BLOCK_USE_LIBCOAP | COAP_BLOCK_SINGLE_BODY) as u8);
             coap_register_response_handler(raw_context, Some(session_response_handler));
         }
-        Ok(CoapContext {
+        let inner = FfiPassthroughRefContainer::new(CoapContextInner {
             raw_context,
             endpoints: Vec::new(),
             resources: Vec::new(),
@@ -98,6 +108,17 @@ impl<'a> CoapContext<'a> {
                     s: std::ptr::null(),
                 },
             },
+        });
+
+        unsafe {
+            coap_set_app_data(
+                raw_context,
+                Box::into_raw(Box::new(RefCell::new(inner.downgrade()))) as *mut c_void,
+            );
+        }
+
+        Ok(CoapContext {
+            inner,
             _context_lifetime_marker: Default::default(),
         })
     }
@@ -111,13 +132,14 @@ impl<'a> CoapContext<'a> {
         addr: SocketAddr,
         mut crypto_provider: P,
     ) -> Result<CoapSessionHandle<'a, CoapClientSession>, SessionCreationError> {
+        let mut inner_ref = self.inner_mut();
         // Get default identity.
         let id = crypto_provider.provide_default_info();
         // SAFETY: self.raw_context is guaranteed to be valid, local_if can be null, constructed
         // coap_dtls_cpsk_t is of valid format and has no out-of-bounds issues.
         let session = unsafe {
             coap_new_client_session_psk2(
-                self.raw_context,
+                inner_ref.raw_context,
                 std::ptr::null(),
                 CoapAddress::from(addr).as_raw_address(),
                 COAP_PROTO_DTLS,
@@ -149,7 +171,7 @@ impl<'a> CoapContext<'a> {
             .borrow_mut()
             .set_crypto_provider(Some(Box::new(crypto_provider)));
         session.borrow_mut().crypto_current_data = Some(id);
-        self.client_sessions.insert(addr, (&session).clone());
+        inner_ref.client_sessions.insert(addr, (&session).clone());
         let handle = CoapSessionHandle::new(session);
         Ok(handle)
     }
@@ -159,10 +181,11 @@ impl<'a> CoapContext<'a> {
         &mut self,
         addr: SocketAddr,
     ) -> Result<CoapSessionHandle<'a, CoapClientSession>, SessionCreationError> {
+        let mut inner_ref = self.inner_mut();
         // SAFETY: self.raw_context is guaranteed to be valid, local_if can be null.
         let session = unsafe {
             coap_new_client_session(
-                self.raw_context,
+                inner_ref.raw_context,
                 std::ptr::null(),
                 CoapAddress::from(addr).as_raw_address(),
                 COAP_PROTO_UDP,
@@ -173,24 +196,47 @@ impl<'a> CoapContext<'a> {
         }
         // SAFETY: We just checked that the raw session is valid.
         let session = unsafe { CoapClientSession::from_raw(session) };
-        self.client_sessions.insert(addr, session.clone());
+        inner_ref.client_sessions.insert(addr, session.clone());
         return Ok(CoapSessionHandle::new(session));
     }
 }
 
 impl CoapContext<'_> {
+    fn inner_ref(&self) -> Ref<'_, CoapContextInner> {
+        self.inner.borrow()
+    }
+
+    fn inner_mut(&mut self) -> RefMut<'_, CoapContextInner> {
+        self.inner.borrow_mut()
+    }
+
+    /// Performs a controlled shutdown of the CoAP context.
+    ///
+    /// This will perform all still outstanding IO operations until [coap_can_exit()] confirms that
+    /// the context has no more outstanding IO and can be dropped without interrupting sessions.
+    pub fn shutdown(mut self, exit_wait_timeout: Option<Duration>) -> Result<(), IoProcessError> {
+        let mut remaining_time = exit_wait_timeout;
+        // Send remaining packets until we can cleanly shutdown.
+        while unsafe { coap_can_exit(self.inner_mut().raw_context) } == 0 {
+            let spent_time = self.do_io(remaining_time)?;
+            remaining_time = remaining_time.map(|v| v.sub(spent_time));
+        }
+        Ok(())
+    }
+
     /// Creates a new UDP endpoint that is bound to the given address.
-    pub fn add_endpoint_udp(&mut self, addr: SocketAddr) -> Result<&mut CoapEndpoint, EndpointCreationError> {
+    pub fn add_endpoint_udp(&mut self, addr: SocketAddr) -> Result<(), EndpointCreationError> {
         // SAFETY: Because we never return an owned reference to the endpoint, it cannot outlive the
         // context it is bound to (i.e. this one).
         let endpoint = unsafe { CoapUdpEndpoint::new(self, addr)? }.into();
-        self.endpoints.push(endpoint);
+        let mut inner_ref = self.inner_mut();
+        inner_ref.endpoints.push(endpoint);
         // Cannot fail, we just pushed to the Vec.
-        Ok(self.endpoints.last_mut().unwrap())
+        Ok(())
     }
 
     /// TODO
-    pub fn add_endpoint_tcp(&mut self, _addr: SocketAddr) -> Result<&mut CoapEndpoint, EndpointCreationError> {
+    pub fn add_endpoint_tcp(&mut self, _addr: SocketAddr) -> Result<(), EndpointCreationError> {
         todo!()
     }
 
@@ -198,80 +244,68 @@ impl CoapContext<'_> {
     ///
     /// Note that in order to actually connect to DTLS clients, you need to set a crypto provider
     /// using [set_server_crypto_provider()](CoapContext::set_server_crypto_provider())
-    pub fn add_endpoint_dtls(&mut self, addr: SocketAddr) -> Result<&mut CoapEndpoint, EndpointCreationError> {
+    pub fn add_endpoint_dtls(&mut self, addr: SocketAddr) -> Result<(), EndpointCreationError> {
         let endpoint = unsafe { CoapDtlsEndpoint::new(self, addr)? }.into();
-        self.endpoints.push(endpoint);
+        let mut inner_ref = self.inner_mut();
+        inner_ref.endpoints.push(endpoint);
         // Cannot fail, we just pushed to the Vec.
-        Ok(self.endpoints.last_mut().unwrap())
+        Ok(())
     }
 
     /// TODO
-    pub fn add_endpoint_tls(&mut self, _addr: SocketAddr) -> Result<&mut CoapEndpoint, EndpointCreationError> {
+    pub fn add_endpoint_tls(&mut self, _addr: SocketAddr) -> Result<(), EndpointCreationError> {
         todo!()
     }
 
     /// Adds the given resource to the resource pool of this context.
     pub fn add_resource<D: Any + ?Sized + Debug>(&mut self, res: CoapResource<D>) {
-        self.resources.push(Box::new(res));
+        let mut inner_ref = self.inner_mut();
+        inner_ref.resources.push(Box::new(res));
         // SAFETY: raw context is valid, raw resource is also guaranteed to be valid as long as
         // contract of CoapResource is upheld (most importantly,
         // UntypedCoapResource::drop_inner_exclusive() must not have been called).
         unsafe {
-            coap_add_resource(self.raw_context, self.resources.last().unwrap().raw_resource());
+            coap_add_resource(
+                inner_ref.raw_context,
+                inner_ref.resources.last().unwrap().raw_resource(),
+            );
         };
-    }
-
-    /// Returns a reference to the server-side cryptography information provider.
-    pub fn server_crypto_provider(&mut self) -> Option<&mut Box<dyn CoapServerCryptoProvider>> {
-        self.crypto_provider.as_mut()
     }
 
     /// Sets the server-side cryptography information provider.
     pub fn set_server_crypto_provider(&mut self, provider: Option<Box<dyn CoapServerCryptoProvider>>) {
+        let mut inner_ref = self.inner_mut();
         // TODO replace Option<Box<Something>> with Option<Borrow<Something>> in libcoap-rs to simplify API.
-        self.crypto_provider = provider;
-        if let Some(provider) = &mut self.crypto_provider {
-            self.crypto_default_info = Some(provider.provide_default_info());
+        inner_ref.crypto_provider = provider;
+        if let Some(provider) = &mut inner_ref.crypto_provider {
+            inner_ref.crypto_default_info = Some(provider.provide_default_info());
             let initial_data = coap_dtls_spsk_info_t {
                 hint: coap_bin_const_t {
-                    length: self.crypto_default_info.as_ref().unwrap().key.len(),
-                    s: self.crypto_default_info.as_ref().unwrap().key.as_ptr(),
+                    length: inner_ref.crypto_default_info.as_ref().unwrap().key.len(),
+                    s: inner_ref.crypto_default_info.as_ref().unwrap().key.as_ptr(),
                 },
                 key: coap_bin_const_t {
-                    length: self.crypto_default_info.as_ref().unwrap().key.len(),
-                    s: self.crypto_default_info.as_ref().unwrap().key.as_ptr(),
+                    length: inner_ref.crypto_default_info.as_ref().unwrap().key.len(),
+                    s: inner_ref.crypto_default_info.as_ref().unwrap().key.as_ptr(),
                 },
             };
             // SAFETY: raw context is valid, setup_data is of the right type and contains
             // only valid information.
             unsafe {
                 coap_context_set_psk2(
-                    self.raw_context,
+                    inner_ref.raw_context,
                     Box::leak(Box::new(coap_dtls_spsk_t {
                         version: COAP_DTLS_SPSK_SETUP_VERSION as u8,
                         reserved: [0; 7],
                         validate_id_call_back: Some(dtls_server_id_callback),
-                        id_call_back_arg: (self) as *mut CoapContext as *mut c_void,
+                        id_call_back_arg: inner_ref.raw_context as *mut c_void,
                         validate_sni_call_back: Some(dtls_server_sni_callback),
-                        sni_call_back_arg: (self) as *const CoapContext as *mut c_void,
+                        sni_call_back_arg: inner_ref.raw_context as *mut c_void,
                         psk_info: initial_data,
                     })),
                 )
             };
         }
-    }
-
-    /// Returns a reference to the resource with the provided `uri_path`.
-    ///
-    /// Note that because the type of the user data inside of the resource is unknown, the returned
-    /// value is a trait object of the [UntypedCoapResource] trait.
-    /// To interact with the user data, use [UntypedCoapResource::as_any()] and downcast as
-    /// necessary or use trait upcasting if you are on unstable rust (`resource as Any`).
-    pub fn resource_by_uri_path(&self, uri_path: &str) -> Option<&dyn UntypedCoapResource> {
-        self.resources
-            .iter()
-            .find(|r| r.uri_path() == uri_path)
-            .map(|r| r.as_ref())
     }
 
     /// Performs currently outstanding IO operations, waiting for a maximum duration of `timeout`.
@@ -280,6 +314,7 @@ impl CoapContext<'_> {
     /// executed. It is recommended to call this function in a loop for as long as the CoAP context
     /// is used.
     pub fn do_io(&mut self, timeout: Option<Duration>) -> Result<Duration, IoProcessError> {
+        let mut inner_ref = self.inner_mut();
         let timeout = if let Some(timeout) = timeout {
             let mut temp_timeout = u32::try_from(timeout.as_millis()).unwrap_or(u32::MAX);
             if timeout.subsec_micros() > 0 || timeout.subsec_nanos() > 0 {
@@ -289,65 +324,70 @@ impl CoapContext<'_> {
         } else {
             COAP_IO_WAIT
         };
-        let spent_time = unsafe { coap_io_process(self.raw_context, timeout) };
+        let spent_time = unsafe { coap_io_process(inner_ref.raw_context, timeout) };
         if spent_time < 0 {
             return Err(IoProcessError::Unknown);
         }
         Ok(Duration::from_millis(spent_time.unsigned_abs() as u64))
     }
 
-    /// Returns an iterator over all endpoints associated with this context.
-    pub fn endpoints(&self) -> Iter<'_, CoapEndpoint> {
-        self.endpoints.iter()
-    }
-
-    /// Returns a mutable iterator over all endpoints associated with this context.
-    pub fn endpoints_mut(&mut self) -> IterMut<'_, CoapEndpoint> {
-        self.endpoints.iter_mut()
-    }
-
-    pub fn provide_raw_key_for_identity(&mut self, identity: &CoapCryptoPskIdentity) -> Option<&coap_bin_const_t> {
-        match self
+    /// Provide a raw key for a given identity using the CoapContext's set server crypto provider.
+    ///
+    /// # Safety
+    /// Returned pointer should only be used if the context is borrowed.
+    /// Calling this function may override previous returned values of this function.
+    pub(crate) unsafe fn provide_raw_key_for_identity(
+        &mut self,
+        identity: &CoapCryptoPskIdentity,
+    ) -> Option<*const coap_bin_const_t> {
+        let mut inner_ref = &mut *self.inner_mut();
+        match inner_ref
             .crypto_provider
             .as_mut()
             .map(|v| v.provide_key_for_identity(identity))
         {
             Some(CoapCryptoProviderResponse::UseNew(new_data)) => {
-                self.crypto_current_data = Some(CoapCryptoPskInfo {
+                inner_ref.crypto_current_data = Some(CoapCryptoPskInfo {
                     identity: Box::from(identity),
                     key: new_data,
                 });
-                self.crypto_current_data
-                    .as_ref()
-                    .unwrap()
-                    .apply_to_spsk_info(&mut self.crypto_last_info_ref);
-                Some(&self.crypto_last_info_ref.key)
+                let curr_data = inner_ref.crypto_current_data.as_ref().unwrap();
+                curr_data.apply_to_spsk_info(&mut inner_ref.crypto_last_info_ref);
+                Some(&inner_ref.crypto_last_info_ref.key as *const coap_bin_const_t)
             },
-            Some(CoapCryptoProviderResponse::UseCurrent) => self.crypto_current_data.as_ref().map(|v| {
-                v.apply_to_spsk_info(&mut self.crypto_last_info_ref);
-                &self.crypto_last_info_ref.key
+            Some(CoapCryptoProviderResponse::UseCurrent) => inner_ref.crypto_current_data.as_ref().map(|v| {
+                v.apply_to_spsk_info(&mut inner_ref.crypto_last_info_ref);
+                &inner_ref.crypto_last_info_ref.key as *const coap_bin_const_t
             }),
             None | Some(CoapCryptoProviderResponse::Unacceptable) => None,
         }
     }
 
-    pub fn provide_raw_hint_for_sni(&mut self, sni: &str) -> Option<&coap_dtls_spsk_info_t> {
-        match self.crypto_provider.as_mut().map(|v| v.provide_hint_for_sni(sni)) {
+    /// Provide a hint for a given SNI name using the CoapContext's set server crypto provider.
+    ///
+    /// # Safety
+    /// Returned pointer should only be used if the context is borrowed.
+    /// Calling this function may override previous returned values of this function.
+    pub unsafe fn provide_raw_hint_for_sni(&mut self, sni: &str) -> Option<*const coap_dtls_spsk_info_t> {
+        let mut inner_ref = &mut *self.inner_mut();
+        match inner_ref.crypto_provider.as_mut().map(|v| v.provide_hint_for_sni(sni)) {
             Some(CoapCryptoProviderResponse::UseNew(new_info)) => {
-                self.crypto_sni_info_container.push(new_info);
-                self.crypto_sni_info_container
+                inner_ref.crypto_sni_info_container.push(new_info);
+                inner_ref
+                    .crypto_sni_info_container
                     .last()
                     .unwrap()
-                    .apply_to_spsk_info(&mut self.crypto_last_info_ref);
-                Some(&self.crypto_last_info_ref)
+                    .apply_to_spsk_info(&mut inner_ref.crypto_last_info_ref);
+                Some(&inner_ref.crypto_last_info_ref as *const coap_dtls_spsk_info_t)
             },
             Some(CoapCryptoProviderResponse::UseCurrent) => {
-                if self.crypto_default_info.is_some() {
-                    self.crypto_default_info
+                if inner_ref.crypto_default_info.is_some() {
+                    inner_ref
+                        .crypto_default_info
                         .as_ref()
                         .unwrap()
-                        .apply_to_spsk_info(&mut self.crypto_last_info_ref);
-                    Some(&self.crypto_last_info_ref)
+                        .apply_to_spsk_info(&mut inner_ref.crypto_last_info_ref);
+                    Some(&inner_ref.crypto_last_info_ref as *const coap_dtls_spsk_info_t)
                 } else {
                     None
                 }
@@ -357,7 +397,8 @@ impl CoapContext<'_> {
     }
 
     pub fn provide_default_info(&mut self) -> Option<CoapCryptoPskInfo> {
-        self.crypto_provider
+        self.inner_mut()
+            .crypto_provider
             .as_mut()
             .map(|provider| provider.provide_default_info())
     }
@@ -380,7 +421,7 @@ impl CoapContext<'_> {
         // freed by anything outside of here (assuming the contract of this function is kept), and
         // the default (elided) lifetimes are correct (the pointer is valid as long as the endpoint
         // is).
-        &*self.raw_context
+        &*self.inner_ref().raw_context
     }
 
     /// Returns a mutable reference to the raw context contained in this struct.
@@ -401,21 +442,7 @@ impl CoapContext<'_> {
         // freed by anything outside of here (assuming the contract of this function is kept), and
         // the default (elided) lifetimes are correct (the pointer is valid as long as the endpoint
         // is).
-        &mut *self.raw_context
-    }
-
-    /// Performs a controlled shutdown of the CoAP context.
-    ///
-    /// This will perform all still outstanding IO operations until [coap_can_exit()] confirms that
-    /// the context has no more outstanding IO and can be dropped without interrupting sessions.
-    pub fn shutdown(mut self, exit_wait_timeout: Option<Duration>) -> Result<(), IoProcessError> {
-        let mut remaining_time = exit_wait_timeout;
-        // Send remaining packets until we can cleanly shutdown.
-        while unsafe { coap_can_exit(self.raw_context) } == 0 {
-            let spent_time = self.do_io(remaining_time)?;
-            remaining_time = remaining_time.map(|v| v.sub(spent_time));
-        }
-        Ok(())
+        &mut *self.inner_mut().raw_context
     }
 
     // TODO coap_session_get_by_peer
@@ -424,8 +451,8 @@ impl CoapContext<'_> {
 impl<'a> Drop for CoapContext<'a> {
     fn drop(&mut self) {
         // Clear endpoints because coap_free_context() would free their underlying raw structs.
-        self.endpoints.clear();
-        for (_addr, mut session) in std::mem::take(&mut self.client_sessions).into_iter() {
+        self.inner_mut().endpoints.clear();
+        for (_addr, mut session) in std::mem::take(&mut self.inner_mut().client_sessions).into_iter() {
             // SAFETY: The sessions here should have valid raw references whose userdata should
             // point to the reference counter, because we didn't provide methods that would allow
             // modifying this user data.
@@ -454,7 +481,7 @@ impl<'a> Drop for CoapContext<'a> {
         // the actual context, and our raw context reference is valid (as long as the contracts of
         // [as_mut_raw_context()] and [as_mut_context()] are fulfilled).
         unsafe {
-            coap_free_context(self.raw_context);
+            coap_free_context(self.inner_mut().raw_context);
         }
     }
 }

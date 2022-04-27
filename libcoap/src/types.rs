@@ -5,6 +5,12 @@
  * See the README as well as the LICENSE file for more information.
  */
 //! Types required for conversion between libcoap C library abstractions and Rust types.
+use std::borrow::{Borrow, BorrowMut};
+use std::ops::Deref;
+
+use std::mem::ManuallyDrop;
+use std::ops::DerefMut;
+use std::ptr::{addr_of, addr_of_mut};
 use std::{
     cell::{Ref, RefCell, RefMut},
     convert::Infallible,
@@ -85,7 +91,7 @@ impl ToSocketAddrs for CoapAddress {
                     u16::from_be(raw_addr.sin_port),
                 )
                 .into()
-            }
+            },
             AF_INET6 => {
                 // SAFETY: Validity of addr is an invariant, and we checked that the type of the
                 // underlying sockaddr is actually sockaddr_in6.
@@ -97,7 +103,7 @@ impl ToSocketAddrs for CoapAddress {
                     raw_addr.sin6_scope_id,
                 )
                 .into()
-            }
+            },
             // This should not happen as long as the invariants are kept.
             _ => panic!("sa_family_t of underlying coap_address_t is invalid!"),
         };
@@ -127,7 +133,7 @@ impl From<SocketAddr> for CoapAddress {
                     };
                     CoapAddress(coap_addr)
                 }
-            }
+            },
             SocketAddr::V6(addr) => {
                 // addr is a bindgen-type union wrapper, so we can't assign to it directly and have
                 // to use a pointer instead.
@@ -148,7 +154,7 @@ impl From<SocketAddr> for CoapAddress {
                     };
                     CoapAddress(coap_addr)
                 }
-            }
+            },
         }
     }
 }
@@ -533,5 +539,48 @@ pub enum CoapProtocol {
 impl From<coap_proto_t> for CoapProtocol {
     fn from(raw_proto: coap_proto_t) -> Self {
         <CoapProtocol as FromPrimitive>::from_u32(raw_proto as u32).expect("unknown protocol")
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FfiPassthroughRefContainer<'a, T: 'a>(Rc<RefCell<T>>, Rc<RefCell<Option<RefMut<'a, T>>>>);
+
+pub struct FfiPassthroughWeakContainer<'a, T: 'a>(Weak<RefCell<T>>, Weak<RefCell<Option<RefMut<'a, T>>>>);
+
+impl<'a, T> FfiPassthroughRefContainer<'a, T> {
+    pub fn borrow_mut(&self) -> RefMut<'_, T> {
+        if RefCell::borrow(&self.1).is_some() {
+            RefCell::borrow_mut(&self.1).take().unwrap()
+        } else {
+            RefCell::borrow_mut(&self.0)
+        }
+    }
+
+    pub fn borrow(&self) -> Ref<'_, T> {
+        // TODO handle passed reference
+        RefCell::borrow(&self.0)
+    }
+
+    pub fn store_ref_mut(&mut self, refer: RefMut<'a, T>) {
+        RefCell::borrow_mut(&self.1).replace(refer);
+    }
+
+    pub fn downgrade(&self) -> FfiPassthroughWeakContainer<'a, T> {
+        FfiPassthroughWeakContainer(Rc::downgrade(&self.0), Rc::downgrade(&self.1))
+    }
+}
+
+impl<'a, T> FfiPassthroughWeakContainer<'a, T> {
+    pub fn upgrade(&self) -> Option<FfiPassthroughRefContainer<'a, T>> {
+        self.0
+            .upgrade()
+            .zip(self.1.upgrade())
+            .map(|(v0, v1)| FfiPassthroughRefContainer(v0, v1))
+    }
+}
+
+impl<'a, V: 'a> FfiPassthroughRefContainer<'a, V> {
+    pub fn new(value: V) -> FfiPassthroughRefContainer<'a, V> {
+        FfiPassthroughRefContainer(Rc::new(RefCell::new(value)), Rc::new(RefCell::new(None)))
     }
 }
