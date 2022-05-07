@@ -5,13 +5,14 @@ use std::{
     time::Duration,
 };
 
+use libcoap::session::CoapClientSession;
 use libcoap::{
     context::CoapContext,
     message::CoapMessageCommon,
     protocol::{CoapMessageCode, CoapMessageType, CoapRequestCode, CoapResponseCode},
     request::{CoapRequest, CoapResponse},
     resource::{CoapRequestHandler, CoapResource},
-    session::{CoapSessionCommon},
+    session::CoapSessionCommon,
     types::{CoapUri, CoapUriHost},
 };
 
@@ -66,7 +67,7 @@ pub fn test_basic_client_server() {
     });
 
     let mut context = CoapContext::new().unwrap();
-    let mut session = context.connect_udp(server_address).unwrap();
+    let mut session = CoapClientSession::connect_udp(&mut context, server_address).unwrap();
 
     let uri = CoapUri::new(
         None,

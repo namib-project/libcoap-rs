@@ -337,7 +337,7 @@ impl CoapMessage {
     ///
     /// The caller is responsible for freeing the returned PDU, either by calling [coap_send()](libcoap_sys::coap_send()) or
     /// [coap_delete_pdu()].
-    pub fn into_raw_pdu<S: CoapSessionCommon + ?Sized>(
+    pub fn into_raw_pdu<'a, S: CoapSessionCommon<'a> + ?Sized>(
         mut self,
         session: &mut S,
     ) -> Result<*mut coap_pdu_t, MessageConversionError> {
@@ -379,7 +379,7 @@ impl CoapMessage {
     ///
     /// # Safety
     /// raw_pdu must point to a valid mutable instance of coap_pdu_t.
-    pub unsafe fn apply_to_raw_pdu<S: CoapSessionCommon + ?Sized>(
+    pub unsafe fn apply_to_raw_pdu<'a, S: CoapSessionCommon<'a> + ?Sized>(
         mut self,
         raw_pdu: *mut coap_pdu_t,
         session: &mut S,

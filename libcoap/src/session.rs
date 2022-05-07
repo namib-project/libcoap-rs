@@ -5,6 +5,8 @@
  * See the README as well as the LICENSE file for more information.
  */
 
+use std::borrow::{Borrow, BorrowMut};
+use std::cell::{Ref, RefMut};
 use std::{
     any::Any,
     collections::{vec_deque::Drain, HashMap, VecDeque},
@@ -14,22 +16,26 @@ use std::{
 };
 
 use libcoap_sys::{
-    coap_bin_const_t, coap_context_t, coap_dtls_cpsk_info_t, coap_fixed_point_t, coap_mid_t, coap_new_message_id,
-    coap_pdu_get_token, coap_pdu_t, coap_response_t, coap_send, coap_session_get_ack_random_factor,
-    coap_session_get_ack_timeout, coap_session_get_addr_local, coap_session_get_addr_remote, coap_session_get_app_data,
-    coap_session_get_ifindex, coap_session_get_max_retransmit, coap_session_get_proto, coap_session_get_psk_hint,
-    coap_session_get_psk_identity, coap_session_get_psk_key, coap_session_get_state, coap_session_get_type,
-    coap_session_init_token, coap_session_max_pdu_size, coap_session_new_token, coap_session_reference,
-    coap_session_release, coap_session_send_ping, coap_session_set_ack_random_factor, coap_session_set_ack_timeout,
+    coap_bin_const_t, coap_context_t, coap_dtls_cpsk_info_t, coap_dtls_cpsk_t, coap_fixed_point_t, coap_mid_t,
+    coap_new_client_session, coap_new_client_session_psk2, coap_new_message_id, coap_pdu_get_token, coap_pdu_t,
+    coap_proto_t, coap_response_t, coap_send, coap_session_get_ack_random_factor, coap_session_get_ack_timeout,
+    coap_session_get_addr_local, coap_session_get_addr_remote, coap_session_get_app_data, coap_session_get_ifindex,
+    coap_session_get_max_retransmit, coap_session_get_proto, coap_session_get_psk_hint, coap_session_get_psk_identity,
+    coap_session_get_psk_key, coap_session_get_state, coap_session_get_type, coap_session_init_token,
+    coap_session_max_pdu_size, coap_session_new_token, coap_session_reference, coap_session_release,
+    coap_session_send_ping, coap_session_set_ack_random_factor, coap_session_set_ack_timeout,
     coap_session_set_app_data, coap_session_set_max_retransmit, coap_session_set_mtu, coap_session_set_type_client,
-    coap_session_state_t, coap_session_t, coap_session_type_t,
+    coap_session_state_t, coap_session_t, coap_session_type_t, COAP_DTLS_SPSK_SETUP_VERSION,
 };
 use rand::Rng;
 
+use crate::context::CoapContextInner;
 use crate::crypto::{CoapCryptoProviderResponse, CoapCryptoPskData};
+use crate::types::DropInnerExclusively;
 use crate::{
-    crypto::{CoapClientCryptoProvider, CoapCryptoPskIdentity, CoapCryptoPskInfo},
-    error::{MessageConversionError, SessionGetAppDataError},
+    context::CoapContext,
+    crypto::{dtls_ih_callback, CoapClientCryptoProvider, CoapCryptoPskIdentity, CoapCryptoPskInfo},
+    error::{MessageConversionError, SessionCreationError, SessionGetAppDataError},
     message::{CoapMessage, CoapMessageCommon},
     protocol::CoapToken,
     request::{CoapRequest, CoapResponse},
@@ -60,124 +66,26 @@ impl From<coap_session_state_t> for CoapSessionState {
 }
 
 /// Trait for functions that are common between client and server sessions.
-pub trait CoapSessionCommon {
+pub trait CoapSessionCommon<'a> {
     /// Returns the application specific data stored alongside this session.
-    fn app_data<T: Any>(&self) -> Result<Option<Rc<T>>, SessionGetAppDataError>;
-
-    /// Sets the application-specific data stored alongside this session.
-    fn set_app_data<T: 'static + Any>(&mut self, value: Option<T>);
-
-    /// Clears the application-specific data stored alongside this session.
-    fn clear_app_data(&mut self);
-
-    /// Returns the Ack-Random-Factor used by libcoap.
-    ///
-    /// The returned value is a tuple consisting of an integer and a fractional part, where the
-    /// fractional part is a value from 0-999 and represents the first three digits after the comma.
-    fn ack_random_factor(&self) -> (u16, u16);
-
-    /// Sets the Ack-Random-Factor used by libcoap.
-    fn set_ack_random_factor(&mut self, integer_part: u16, fractional_part: u16);
-
-    /// Returns the current value of the Acknowledgement Timeout for this session (in seconds).
-    ///
-    /// The returned value is a tuple consisting of an integer and a fractional part, where the
-    /// fractional part is a value from 0-999 and represents the first three digits after the comma.
-    fn ack_timeout(&self) -> (u16, u16);
-
-    /// Sets the value of the Acknowledgement Timeout for this session.
-    fn set_ack_timeout(&mut self, integer_part: u16, fractional_part: u16);
-
-    /// Returns the local address for this session.
-    fn addr_local(&self) -> SocketAddr;
-
-    /// Returns the remote address for this session.
-    fn addr_remote(&self) -> SocketAddr;
-
-    /// Returns the interface index for this session.
-    fn if_index(&self) -> IfIndex;
-
-    /// Returns the maximum number of retransmissions for this session.
-    fn max_retransmit(&self) -> MaxRetransmit;
-
-    /// Sets the maximum number of retransmissions for this session.
-    fn set_max_retransmit(&mut self, value: MaxRetransmit);
-
-    /// Returns the underlying transport protocol used for this session.
-    fn proto(&self) -> CoapProtocol;
-
-    /// Returns the current PSK hint for this session.
-    fn psk_hint(&self) -> Option<Box<[u8]>>;
-
-    /// Returns the current PSK identity for this session.
-    fn psk_identity(&self) -> Option<Box<[u8]>>;
-
-    /// Returns the current PSK key for this session.
-    fn psk_key(&self) -> Option<Box<[u8]>>;
-
-    /// Returns the current state of this session.
-    fn state(&self) -> CoapSessionState;
-
-    /// Initializes the token value used by libcoap.
-    ///
-    /// Note that this function does not do anything if you are not setting the token manually using
-    /// [new_token()](CoapSessionCommon::new_token), because the wrapper will use a random number
-    /// generator to set the tokens instead.
-    fn init_token(&mut self, token: &[u8; 8]);
-
-    /// Returns the maximum size of a PDU for this session.
-    fn max_pdu_size(&self) -> usize;
-
-    /// Sets the maximum size of a PDU for this session.
-    fn set_mtu(&mut self, mtu: u32);
-
-    /// Returns the next message ID that should be used for this session.
-    fn next_message_id(&mut self) -> CoapMessageId;
-
-    /// Returns the next token that should be used for requests.
-    fn new_token(&mut self, token: &mut [u8; 8]) -> usize;
-
-    /// Send a ping message to the remote peer.
-    fn send_ping(&mut self) -> CoapMessageId;
-
-    /// Send the given message-like object to the peer.
-    ///
-    /// Returns a MessageConversionError if the supplied object cannot be converted to a message.
-    fn send<P: Into<CoapMessage>>(&mut self, pdu: P) -> Result<CoapMessageId, MessageConversionError>;
-
-    /// Returns a mutable reference to the underlying raw session.
-    ///
-    /// # Safety
-    /// Do not do anything that would interfere with the functionality of this wrapper.
-    /// Most importantly, *do not* free the session yourself.
-    unsafe fn raw_session_mut(&mut self) -> *mut coap_session_t;
-
-    /// Returns a reference to the underlying raw session.
-    ///
-    /// # Safety
-    /// Do not do anything that would interfere with the functionality of this wrapper.
-    /// Most importantly, *do not* free the session yourself.
-    unsafe fn raw_session(&self) -> *const coap_session_t;
-}
-
-impl<S: AsRef<CoapSessionInner> + AsMut<CoapSessionInner>> CoapSessionCommon for S {
     fn app_data<T: Any>(&self) -> Result<Option<Rc<T>>, SessionGetAppDataError> {
-        let inner = self.as_ref();
-        inner
+        self.inner_ref()
             .app_data
             .as_ref()
             .map(|v| v.clone().downcast().map_err(|_v| SessionGetAppDataError::WrongType))
             .transpose()
     }
 
+    /// Sets the application-specific data stored alongside this session.
     fn set_app_data<T: 'static + Any>(&mut self, value: Option<T>) {
-        let inner = self.as_mut();
+        let mut inner = self.inner_mut();
         let new_box: Option<Rc<dyn Any>> = value.map(|v| Rc::new(v) as Rc<dyn Any>);
         inner.app_data = new_box;
     }
 
+    /// Clears the application-specific data stored alongside this session.
     fn clear_app_data(&mut self) {
-        let inner = self.as_mut();
+        let mut inner = self.inner_mut();
         inner.app_data = None;
         let raw_inner_ptr = unsafe { coap_session_get_app_data(inner.raw_session) };
         if !raw_inner_ptr.is_null() {
@@ -185,15 +93,20 @@ impl<S: AsRef<CoapSessionInner> + AsMut<CoapSessionInner>> CoapSessionCommon for
         }
     }
 
+    /// Returns the Ack-Random-Factor used by libcoap.
+    ///
+    /// The returned value is a tuple consisting of an integer and a fractional part, where the
+    /// fractional part is a value from 0-999 and represents the first three digits after the comma.
     fn ack_random_factor(&self) -> (u16, u16) {
-        let random_factor = unsafe { coap_session_get_ack_random_factor(self.as_ref().raw_session) };
+        let random_factor = unsafe { coap_session_get_ack_random_factor(self.inner_ref().raw_session) };
         (random_factor.integer_part, random_factor.fractional_part)
     }
 
+    /// Sets the Ack-Random-Factor used by libcoap.
     fn set_ack_random_factor(&mut self, integer_part: u16, fractional_part: u16) {
         unsafe {
             coap_session_set_ack_random_factor(
-                self.as_mut().raw_session,
+                self.inner_mut().raw_session,
                 coap_fixed_point_t {
                     integer_part,
                     fractional_part,
@@ -202,15 +115,20 @@ impl<S: AsRef<CoapSessionInner> + AsMut<CoapSessionInner>> CoapSessionCommon for
         };
     }
 
+    /// Returns the current value of the Acknowledgement Timeout for this session (in seconds).
+    ///
+    /// The returned value is a tuple consisting of an integer and a fractional part, where the
+    /// fractional part is a value from 0-999 and represents the first three digits after the comma.
     fn ack_timeout(&self) -> (u16, u16) {
-        let random_factor = unsafe { coap_session_get_ack_timeout(self.as_ref().raw_session) };
+        let random_factor = unsafe { coap_session_get_ack_timeout(self.inner_ref().raw_session) };
         (random_factor.integer_part, random_factor.fractional_part)
     }
 
+    /// Sets the value of the Acknowledgement Timeout for this session.
     fn set_ack_timeout(&mut self, integer_part: u16, fractional_part: u16) {
         unsafe {
             coap_session_set_ack_timeout(
-                self.as_ref().raw_session,
+                self.inner_ref().raw_session,
                 coap_fixed_point_t {
                     integer_part,
                     fractional_part,
@@ -219,17 +137,10 @@ impl<S: AsRef<CoapSessionInner> + AsMut<CoapSessionInner>> CoapSessionCommon for
         };
     }
 
+    /// Returns the local address for this session.
     fn addr_local(&self) -> SocketAddr {
-        CoapAddress::from(unsafe { coap_session_get_addr_local(self.as_ref().raw_session).as_ref().unwrap() })
-            .to_socket_addrs()
-            .unwrap()
-            .next()
-            .unwrap()
-    }
-
-    fn addr_remote(&self) -> SocketAddr {
         CoapAddress::from(unsafe {
-            coap_session_get_addr_remote(self.as_ref().raw_session)
+            coap_session_get_addr_local(self.inner_ref().raw_session)
                 .as_ref()
                 .unwrap()
         })
@@ -239,117 +150,176 @@ impl<S: AsRef<CoapSessionInner> + AsMut<CoapSessionInner>> CoapSessionCommon for
         .unwrap()
     }
 
-    fn if_index(&self) -> IfIndex {
-        unsafe { coap_session_get_ifindex(self.as_ref().raw_session) }
+    /// Returns the remote address for this session.
+    fn addr_remote(&self) -> SocketAddr {
+        CoapAddress::from(unsafe {
+            coap_session_get_addr_remote(self.inner_ref().raw_session)
+                .as_ref()
+                .unwrap()
+        })
+        .to_socket_addrs()
+        .unwrap()
+        .next()
+        .unwrap()
     }
 
+    /// Returns the interface index for this session.
+    fn if_index(&self) -> IfIndex {
+        unsafe { coap_session_get_ifindex(self.inner_ref().raw_session) }
+    }
+
+    /// Sets the maximum number of retransmissions for this session.
     fn max_retransmit(&self) -> MaxRetransmit {
-        unsafe { coap_session_get_max_retransmit(self.as_ref().raw_session) }
+        unsafe { coap_session_get_max_retransmit(self.inner_ref().raw_session) }
     }
 
     fn set_max_retransmit(&mut self, value: MaxRetransmit) {
-        unsafe { coap_session_set_max_retransmit(self.as_ref().raw_session, value) }
+        unsafe { coap_session_set_max_retransmit(self.inner_ref().raw_session, value) }
     }
 
+    /// Returns the underlying transport protocol used for this session.
     fn proto(&self) -> CoapProtocol {
-        unsafe { coap_session_get_proto(self.as_ref().raw_session) }.into()
+        unsafe { coap_session_get_proto(self.inner_ref().raw_session) }.into()
     }
 
+    /// Returns the current PSK hint for this session.
     fn psk_hint(&self) -> Option<Box<CoapCryptoPskIdentity>> {
         unsafe {
-            coap_session_get_psk_hint(self.as_ref().raw_session)
+            coap_session_get_psk_hint(self.inner_ref().raw_session)
                 .as_ref()
                 .map(|raw_hint| Box::from(std::slice::from_raw_parts(raw_hint.s, raw_hint.length)))
         }
     }
 
+    /// Returns the current PSK identity for this session.
     fn psk_identity(&self) -> Option<Box<CoapCryptoPskIdentity>> {
         unsafe {
-            coap_session_get_psk_identity(self.as_ref().raw_session)
+            coap_session_get_psk_identity(self.inner_ref().raw_session)
                 .as_ref()
                 .map(|raw_hint| Box::from(std::slice::from_raw_parts(raw_hint.s, raw_hint.length)))
         }
     }
 
+    /// Returns the current PSK key for this session.
     fn psk_key(&self) -> Option<Box<CoapCryptoPskData>> {
         unsafe {
-            coap_session_get_psk_key(self.as_ref().raw_session)
+            coap_session_get_psk_key(self.inner_ref().raw_session)
                 .as_ref()
                 .map(|raw_hint| Box::from(std::slice::from_raw_parts(raw_hint.s, raw_hint.length)))
         }
     }
 
+    /// Returns the current state of this session.
     fn state(&self) -> CoapSessionState {
-        unsafe { coap_session_get_state(self.as_ref().raw_session).into() }
+        unsafe { coap_session_get_state(self.inner_ref().raw_session).into() }
     }
 
+    /// Initializes the token value used by libcoap.
+    ///
+    /// Note that this function does not do anything if you are not setting the token manually using
+    /// [new_token()](CoapSessionCommon::new_token), because the wrapper will use a random number
+    /// generator to set the tokens instead.
     fn init_token(&mut self, token: &[u8; 8]) {
-        unsafe { coap_session_init_token(self.as_mut().raw_session, token.len(), token.as_ptr()) }
+        unsafe { coap_session_init_token(self.inner_mut().raw_session, token.len(), token.as_ptr()) }
     }
 
+    /// Returns the maximum size of a PDU for this session.
     fn max_pdu_size(&self) -> usize {
-        unsafe { coap_session_max_pdu_size(self.as_ref().raw_session) }
+        unsafe { coap_session_max_pdu_size(self.inner_ref().raw_session) }
     }
 
+    /// Sets the maximum size of a PDU for this session.
     fn set_mtu(&mut self, mtu: u32) {
-        unsafe { coap_session_set_mtu(self.as_mut().raw_session, mtu) }
+        unsafe { coap_session_set_mtu(self.inner_mut().raw_session, mtu) }
     }
 
+    /// Returns the next message ID that should be used for this session.
     fn next_message_id(&mut self) -> CoapMessageId {
-        unsafe { coap_new_message_id(self.as_mut().raw_session) as CoapMessageId }
+        unsafe { coap_new_message_id(self.inner_mut().raw_session) as CoapMessageId }
     }
 
+    /// Returns the next token that should be used for requests.
     fn new_token(&mut self, token: &mut [u8; 8]) -> usize {
         let mut length = 8;
-        unsafe { coap_session_new_token(self.as_mut().raw_session, &mut length, token.as_mut_ptr()) }
+        unsafe { coap_session_new_token(self.inner_mut().raw_session, &mut length, token.as_mut_ptr()) }
         length
     }
 
+    /// Send a ping message to the remote peer.
     fn send_ping(&mut self) -> CoapMessageId {
-        unsafe { coap_session_send_ping(self.as_mut().raw_session) }
+        unsafe { coap_session_send_ping(self.inner_mut().raw_session) }
     }
 
+    /// Send the given message-like object to the peer.
+    ///
+    /// Returns a MessageConversionError if the supplied object cannot be converted to a message.
     fn send<P: Into<CoapMessage>>(&mut self, pdu: P) -> Result<CoapMessageId, MessageConversionError> {
-        Ok(unsafe { coap_send(self.as_mut().raw_session, pdu.into().into_raw_pdu(self)?) })
+        let raw_pdu = pdu.into().into_raw_pdu(self)?;
+        let mid = unsafe { coap_send(self.inner_mut().raw_session, raw_pdu) };
+        Ok(mid)
     }
 
+    /// Returns a mutable reference to the underlying raw session.
+    ///
+    /// # Safety
+    /// Do not do anything that would interfere with the functionality of this wrapper.
+    /// Most importantly, *do not* free the session yourself.
     unsafe fn raw_session_mut(&mut self) -> *mut coap_session_t {
-        self.as_mut().raw_session
+        self.inner_mut().raw_session
     }
 
+    /// Returns a reference to the underlying raw session.
+    ///
+    /// # Safety
+    /// Do not do anything that would interfere with the functionality of this wrapper.
+    /// Most importantly, *do not* free the session yourself.
     unsafe fn raw_session(&self) -> *const coap_session_t {
-        self.as_ref().raw_session
+        self.inner_ref().raw_session
     }
+
+    fn inner_ref<'b>(&'b self) -> Ref<'b, CoapSessionInner<'a>>;
+
+    fn inner_mut<'b>(&'b mut self) -> RefMut<'b, CoapSessionInner<'a>>;
 }
 
 #[derive(Debug)]
-pub enum CoapSession {
-    Client(CoapClientSession),
-    Server(CoapServerSession),
+pub enum CoapSession<'a> {
+    Client(CoapClientSession<'a>),
+    Server(CoapServerSession<'a>),
 }
 
-impl AsRef<CoapSessionInner> for CoapSession {
-    fn as_ref(&self) -> &CoapSessionInner {
+impl<'a> CoapSessionCommon<'a> for CoapSession<'a> {
+    fn inner_ref<'b>(&'b self) -> Ref<'b, CoapSessionInner<'a>> {
         match self {
-            CoapSession::Client(client) => client.as_ref(),
-            CoapSession::Server(server) => server.as_ref(),
+            CoapSession::Client(sess) => sess.inner_ref(),
+            CoapSession::Server(sess) => sess.inner_ref(),
+        }
+    }
+
+    fn inner_mut<'b>(&'b mut self) -> RefMut<'b, CoapSessionInner<'a>> {
+        match self {
+            CoapSession::Client(sess) => sess.inner_mut(),
+            CoapSession::Server(sess) => sess.inner_mut(),
         }
     }
 }
 
-impl AsMut<CoapSessionInner> for CoapSession {
-    fn as_mut(&mut self) -> &mut CoapSessionInner {
-        match self {
-            CoapSession::Client(client) => client.as_mut(),
-            CoapSession::Server(server) => server.as_mut(),
-        }
+impl<'a> From<CoapClientSession<'a>> for CoapSession<'a> {
+    fn from(session: CoapClientSession<'a>) -> Self {
+        CoapSession::Client(session)
+    }
+}
+
+impl<'a> From<CoapServerSession<'a>> for CoapSession<'a> {
+    fn from(session: CoapServerSession<'a>) -> Self {
+        CoapSession::Server(session)
     }
 }
 
 /// Representation of a client-side CoAP session.
 #[derive(Debug)]
-pub struct CoapClientSession {
-    inner: CoapSessionInner,
+pub struct CoapClientSessionInner<'a> {
+    inner: CoapSessionInner<'a>,
     pub(crate) crypto_provider: Option<Box<dyn CoapClientCryptoProvider>>,
     pub(crate) crypto_current_data: Option<CoapCryptoPskInfo>,
     received_responses: HashMap<CoapToken, VecDeque<CoapResponse>>,
@@ -359,8 +329,132 @@ pub struct CoapClientSession {
     pub(crate) crypto_last_info_ref: coap_dtls_cpsk_info_t,
 }
 
-impl CoapClientSession {
-    /// Creates a CoapClientSession from a raw session
+#[derive(Debug, Clone)]
+pub struct CoapClientSession<'a> {
+    inner: CoapAppDataRef<CoapClientSessionInner<'a>>,
+}
+
+impl CoapClientSession<'_> {
+    /// Create a new DTLS encrypted session with the given peer.
+    ///
+    /// To supply cryptographic information (like PSK hints or key data), you have to provide a
+    /// struct implementing [CoapClientCryptoProvider].
+    pub fn connect_dtls<'a, 'b, P: 'static + CoapClientCryptoProvider>(
+        ctx: &'b mut CoapContext<'a>,
+        addr: SocketAddr,
+        mut crypto_provider: P,
+    ) -> Result<CoapClientSession<'a>, SessionCreationError> {
+        // Get default identity.
+        let id = crypto_provider.provide_default_info();
+        let client_setup_data = Box::into_raw(Box::new(coap_dtls_cpsk_t {
+            version: COAP_DTLS_SPSK_SETUP_VERSION as u8,
+            reserved: [0; 7],
+            validate_ih_call_back: Some(dtls_ih_callback),
+            ih_call_back_arg: std::ptr::null_mut(),
+            client_sni: std::ptr::null_mut(),
+            psk_info: coap_dtls_cpsk_info_t {
+                identity: coap_bin_const_t {
+                    length: id.identity.len(),
+                    s: id.identity.as_ptr(),
+                },
+                key: coap_bin_const_t {
+                    length: id.key.len(),
+                    s: id.key.as_ptr(),
+                },
+            },
+        }));
+        // SAFETY: self.raw_context is guaranteed to be valid, local_if can be null, constructed
+        // coap_dtls_cpsk_t is of valid format and has no out-of-bounds issues.
+        let raw_session = unsafe {
+            coap_new_client_session_psk2(
+                ctx.as_mut_raw_context(),
+                std::ptr::null(),
+                CoapAddress::from(addr).as_raw_address(),
+                coap_proto_t::COAP_PROTO_DTLS,
+                client_setup_data,
+            )
+        };
+
+        if raw_session.is_null() {
+            return Err(SessionCreationError::Unknown);
+        }
+
+        Ok(CoapClientSession::new(
+            ctx,
+            raw_session,
+            Some(id),
+            Some(Box::new(crypto_provider)),
+        ))
+    }
+
+    /// Create a new unencrypted session with the given peer over UDP.
+    pub fn connect_udp<'a>(
+        ctx: &mut CoapContext<'a>,
+        addr: SocketAddr,
+    ) -> Result<CoapClientSession<'a>, SessionCreationError> {
+        // SAFETY: self.raw_context is guaranteed to be valid, local_if can be null.
+        let session = unsafe {
+            coap_new_client_session(
+                ctx.as_mut_raw_context(),
+                std::ptr::null(),
+                CoapAddress::from(addr).as_raw_address(),
+                coap_proto_t::COAP_PROTO_UDP,
+            )
+        };
+        if session.is_null() {
+            return Err(SessionCreationError::Unknown);
+        }
+        Ok(CoapClientSession::new(ctx, session as *mut coap_session_t, None, None))
+    }
+
+    fn new<'a>(
+        ctx: &mut CoapContext<'a>,
+        raw_session: *mut coap_session_t,
+        crypto_current_data: Option<CoapCryptoPskInfo>,
+        crypto_provider: Option<Box<dyn CoapClientCryptoProvider>>,
+    ) -> CoapClientSession<'a> {
+        let inner_session = CoapAppDataRef::new(CoapClientSessionInner {
+            inner: CoapSessionInner {
+                raw_session,
+                app_data: None,
+                _context_lifetime_marker: Default::default(),
+            },
+            crypto_provider,
+            crypto_current_data,
+            received_responses: Default::default(),
+            crypto_last_info_ref: coap_dtls_cpsk_info_t {
+                identity: coap_bin_const_t {
+                    length: 0,
+                    s: std::ptr::null(),
+                },
+                key: coap_bin_const_t {
+                    length: 0,
+                    s: std::ptr::null(),
+                },
+            },
+        });
+
+        let client_session = CoapClientSession {
+            inner: inner_session.clone(),
+        };
+        // TODO Safety
+        unsafe {
+            coap_session_set_app_data(raw_session, inner_session.create_raw_weak());
+            // TODO the client sessions are now only deleted if the context goes out of scope, i guess we need to work with weak references or pointers to the raw client sessions here.
+            ctx.attach_client_session(client_session.clone());
+        }
+
+        client_session
+    }
+
+    /// Restores a CoapClientSession from its raw counterpart.
+    ///
+    /// Note that it is not possible to statically infer the lifetime of the created session from
+    /// the raw pointer, i.e., the session will be created with an arbitrary lifetime.
+    /// Therefore, callers of this function should ensure that the created session instance does not
+    /// outlive the context it is bound to.
+    /// Failing to do so will result in a panic/abort in the context destructor as it is unable to
+    /// claim exclusive ownership of the client session.
     ///
     /// # Panics
     /// Panics if the given pointer is a null pointer or the raw session is not a client-side
@@ -368,72 +462,21 @@ impl CoapClientSession {
     ///
     /// # Safety
     /// The provided pointer must be valid.
-    /// The existing value in the `app_data` field of the raw session will be overridden.
-    /// Make sure that this is actually okay to do so — most importantly, no other [CoapSession] may
-    /// already be stored there.
-    ///
-    /// If you wish to restore an existing [CoapSession] from its raw counterpart, use
-    /// [restore_from_raw()](CoapClientSession::restore_from_raw) instead.
-    pub unsafe fn from_raw(raw_session: *mut coap_session_t) -> CoapAppDataRef<CoapClientSession> {
+    pub(crate) unsafe fn from_raw<'a>(raw_session: *mut coap_session_t) -> CoapClientSession<'a> {
         assert!(!raw_session.is_null(), "provided raw session was null");
         let raw_session_type = coap_session_get_type(raw_session);
-        let inner = CoapSessionInner::from_raw(raw_session);
-        let psk_id = coap_session_get_psk_identity(raw_session).as_ref();
-        let psk_key = coap_session_get_psk_key(raw_session).as_ref();
         match raw_session_type {
             coap_session_type_t::COAP_SESSION_TYPE_NONE => panic!("provided session has no type"),
             coap_session_type_t::COAP_SESSION_TYPE_CLIENT => {
-                let crypto_info = match (psk_id, psk_key) {
-                    (Some(id), Some(key)) => Some(CoapCryptoPskInfo {
-                        identity: Box::from(std::slice::from_raw_parts(id.s, id.length)),
-                        key: Box::from(std::slice::from_raw_parts(key.s, key.length)),
-                    }),
-                    (_, _) => None,
-                };
-                let client_session = CoapClientSession {
-                    inner,
-                    crypto_provider: None,
-                    crypto_current_data: crypto_info,
-                    received_responses: HashMap::new(),
-                    crypto_last_info_ref: coap_dtls_cpsk_info_t {
-                        identity: coap_bin_const_t {
-                            length: 0,
-                            s: std::ptr::null(),
-                        },
-                        key: coap_bin_const_t {
-                            length: 0,
-                            s: std::ptr::null(),
-                        },
-                    },
-                };
-                let session_ref = CoapAppDataRef::new(client_session);
-                coap_session_set_app_data(raw_session, session_ref.create_raw_rc());
-                session_ref
+                let raw_app_data_ptr = coap_session_get_app_data(raw_session);
+                assert!(!raw_app_data_ptr.is_null(), "provided raw session has no app data");
+                let inner = CoapAppDataRef::clone_raw_rc(raw_app_data_ptr);
+                CoapClientSession { inner }
             },
             coap_session_type_t::COAP_SESSION_TYPE_SERVER => {
                 panic!("attempted to create CoapClientSession from raw server session")
             },
             _ => unreachable!("unknown session type"),
-        }
-    }
-
-    /// Restores a CoapClientSession from its raw counterpart.
-    /// If no CoapClientSession is stored in the app_data field, a new CoapClientSession is created
-    /// and associated with the raw session.
-    ///
-    /// # Panics
-    /// Panics if the provided raw session pointer is null or the raw session is not a client-side
-    /// session.
-    ///
-    /// # Safety
-    /// The provided pointer must be valid.
-    pub unsafe fn restore_from_raw(raw_session: *mut coap_session_t) -> CoapAppDataRef<CoapClientSession> {
-        assert!(!raw_session.is_null(), "provided raw session was null");
-        let session_ptr = coap_session_get_app_data(raw_session);
-        if session_ptr.is_null() {
-            CoapClientSession::from_raw(raw_session)
-        } else {
-            CoapAppDataRef::clone_raw_rc(session_ptr)
         }
     }
 
@@ -452,22 +495,27 @@ impl CoapClientSession {
         if req.mid().is_none() {
             req.set_mid(Some(self.next_message_id()))
         }
-        self.received_responses.insert(token.clone(), VecDeque::new());
+        self.inner
+            .borrow_mut()
+            .received_responses
+            .insert(token.clone(), VecDeque::new());
         self.send(req.into_message()).map(|v| CoapRequestHandle::new(v, token))
     }
 
     /// Polls whether the request for the given handle already has pending responses.
     ///
     /// Returns an iterator over all responses associated with the request.
-    pub fn poll_handle(&mut self, handle: &CoapRequestHandle) -> Drain<CoapResponse> {
-        self.received_responses
-            .get_mut(&handle.token)
+    pub fn poll_handle(&mut self, handle: &CoapRequestHandle) -> std::collections::vec_deque::IntoIter<CoapResponse> {
+        self.inner
+            .borrow_mut()
+            .received_responses
+            .insert(handle.token.clone(), VecDeque::new())
             .expect("Attempted to poll handle that does not refer to a valid token")
-            .drain(..)
+            .into_iter()
     }
 
     fn is_waiting_for_token(&self, token: &CoapToken) -> bool {
-        self.received_responses.contains_key(token)
+        self.inner.borrow().received_responses.contains_key(token)
     }
 
     /// Stops listening for responses to this request handle.
@@ -475,43 +523,55 @@ impl CoapClientSession {
     /// Any future responses to the request associated with this handle will be responded to with an
     /// RST message.
     pub fn remove_handle(&mut self, handle: CoapRequestHandle) {
-        self.received_responses.remove(&handle.token);
+        self.inner.borrow_mut().received_responses.remove(&handle.token);
     }
 
     /// Sets the provider for cryptographic information for this session.
     pub fn set_crypto_provider(&mut self, crypto_provider: Option<Box<dyn CoapClientCryptoProvider>>) {
-        self.crypto_provider = crypto_provider;
+        self.inner.borrow_mut().crypto_provider = crypto_provider;
     }
 
     fn add_response(&mut self, pdu: CoapResponse) {
         let token = pdu.token();
         if let Some(token) = token {
-            if self.received_responses.contains_key(token) {
-                self.received_responses.get_mut(token).unwrap().push_back(pdu);
+            if self.inner.borrow().received_responses.contains_key(token) {
+                self.inner
+                    .borrow_mut()
+                    .received_responses
+                    .get_mut(token)
+                    .unwrap()
+                    .push_back(pdu);
             }
         }
     }
 
-    pub fn provide_raw_key_for_hint(&mut self, hint: &CoapCryptoPskIdentity) -> Option<&coap_dtls_cpsk_info_t> {
-        match self.crypto_provider.as_mut().map(|v| v.provide_key_for_hint(hint)) {
+    pub(crate) fn provide_raw_key_for_hint(
+        &mut self,
+        hint: &CoapCryptoPskIdentity,
+    ) -> Option<*const coap_dtls_cpsk_info_t> {
+        let inner_ref = &mut *self.inner.borrow_mut();
+
+        match inner_ref.crypto_provider.as_mut().map(|v| v.provide_key_for_hint(hint)) {
             Some(CoapCryptoProviderResponse::UseNew(new_data)) => {
-                self.crypto_current_data = Some(CoapCryptoPskInfo {
+                inner_ref.crypto_current_data = Some(CoapCryptoPskInfo {
                     identity: Box::from(hint),
                     key: new_data,
                 });
-                self.crypto_current_data
+                inner_ref
+                    .crypto_current_data
                     .as_ref()
                     .unwrap()
-                    .apply_to_cpsk_info(&mut self.crypto_last_info_ref);
-                Some(&self.crypto_last_info_ref)
+                    .apply_to_cpsk_info(&mut inner_ref.crypto_last_info_ref);
+                Some(&inner_ref.crypto_last_info_ref as *const coap_dtls_cpsk_info_t)
             },
             Some(CoapCryptoProviderResponse::UseCurrent) => {
-                if self.crypto_current_data.is_some() {
-                    self.crypto_current_data
+                if inner_ref.crypto_current_data.is_some() {
+                    inner_ref
+                        .crypto_current_data
                         .as_ref()
                         .unwrap()
-                        .apply_to_cpsk_info(&mut self.crypto_last_info_ref);
-                    Some(&self.crypto_last_info_ref)
+                        .apply_to_cpsk_info(&mut inner_ref.crypto_last_info_ref);
+                    Some(&inner_ref.crypto_last_info_ref as *const coap_dtls_cpsk_info_t)
                 } else {
                     None
                 }
@@ -521,56 +581,69 @@ impl CoapClientSession {
     }
 
     pub fn provide_default_info(&mut self) -> Option<CoapCryptoPskInfo> {
-        self.crypto_provider
+        self.inner
+            .borrow_mut()
+            .crypto_provider
             .as_mut()
             .map(|provider| provider.provide_default_info())
     }
 }
 
-impl AsRef<CoapSessionInner> for CoapClientSession {
-    fn as_ref(&self) -> &CoapSessionInner {
-        &self.inner
+impl<'a> CoapSessionCommon<'a> for CoapClientSession<'a> {
+    fn inner_ref<'b>(&'b self) -> Ref<'b, CoapSessionInner<'a>> {
+        Ref::map(self.inner.borrow(), |v| &v.inner)
+    }
+    fn inner_mut<'b>(&'b mut self) -> RefMut<'b, CoapSessionInner<'a>> {
+        RefMut::map(self.inner.borrow_mut(), |v| &mut v.inner)
     }
 }
 
-impl AsMut<CoapSessionInner> for CoapClientSession {
-    fn as_mut(&mut self) -> &mut CoapSessionInner {
-        &mut self.inner
+impl DropInnerExclusively for CoapClientSession<'_> {
+    fn drop_exclusively(mut self) {
+        self.inner.drop_exclusively();
     }
 }
 
-impl From<CoapServerSession> for CoapClientSession {
-    fn from(mut server_session: CoapServerSession) -> Self {
+impl DropInnerExclusively for CoapServerSession<'_> {
+    fn drop_exclusively(mut self) {
+        self.inner.drop_exclusively();
+    }
+}
+
+impl Drop for CoapClientSessionInner<'_> {
+    fn drop(&mut self) {
         unsafe {
-            coap_session_set_type_client(server_session.as_mut().raw_session);
+            let app_data = coap_session_get_app_data(self.inner.raw_session);
+            assert!(!app_data.is_null());
+            CoapAppDataRef::<CoapClientSessionInner>::raw_ptr_to_weak(app_data);
+            coap_session_release(self.inner.raw_session);
         }
-        CoapClientSession {
-            inner: server_session.inner,
-            crypto_provider: None,
-            crypto_current_data: server_session.crypto_current_data,
-            received_responses: HashMap::new(),
-            crypto_last_info_ref: coap_dtls_cpsk_info_t {
-                identity: coap_bin_const_t {
-                    length: 0,
-                    s: std::ptr::null(),
-                },
-                key: coap_bin_const_t {
-                    length: 0,
-                    s: std::ptr::null(),
-                },
-            },
+    }
+}
+
+impl Drop for CoapServerSessionInner<'_> {
+    fn drop(&mut self) {
+        unsafe {
+            let app_data = coap_session_get_app_data(self.inner.raw_session);
+            assert!(!app_data.is_null());
+            CoapAppDataRef::<CoapServerSessionInner>::raw_ptr_to_weak(app_data);
         }
     }
 }
 
 /// Representation of a server-side CoAP session.
+#[derive(Debug, Clone)]
+pub struct CoapServerSession<'a> {
+    inner: CoapAppDataRef<CoapServerSessionInner<'a>>,
+}
+
 #[derive(Debug)]
-pub struct CoapServerSession {
-    inner: CoapSessionInner,
+pub struct CoapServerSessionInner<'a> {
+    inner: CoapSessionInner<'a>,
     pub(crate) crypto_current_data: Option<CoapCryptoPskInfo>,
 }
 
-impl CoapServerSession {
+impl CoapServerSession<'_> {
     /// Creates a CoapServerSession from a raw session
     ///
     /// # Panics
@@ -585,36 +658,40 @@ impl CoapServerSession {
     ///
     /// If you wish to restore an existing [CoapSession] from its raw counterpart, use
     /// [restore_from_raw()](CoapServerSession::restore_from_raw) instead.
-    pub unsafe fn from_raw(raw_session: *mut coap_session_t) -> CoapAppDataRef<CoapServerSession> {
+    pub(crate) unsafe fn initialize_raw<'a>(raw_session: *mut coap_session_t) -> CoapServerSession<'a> {
         assert!(!raw_session.is_null(), "provided raw session was null");
         let raw_session_type = coap_session_get_type(raw_session);
-        let inner = CoapSessionInner::from_raw(raw_session);
-        let psk_identity = coap_session_get_psk_identity(raw_session).as_ref();
-        let psk_key = coap_session_get_psk_key(raw_session).as_ref();
-        let session = match raw_session_type {
+        let inner = CoapSessionInner {
+            raw_session,
+            app_data: None,
+            _context_lifetime_marker: Default::default(),
+        };
+        let session_inner = match raw_session_type {
             coap_session_type_t::COAP_SESSION_TYPE_NONE => panic!("provided session has no type"),
             coap_session_type_t::COAP_SESSION_TYPE_CLIENT => {
                 panic!("attempted to create server session from raw client session")
             },
             coap_session_type_t::COAP_SESSION_TYPE_SERVER => {
+                let psk_identity = coap_session_get_psk_identity(raw_session).as_ref();
+                let psk_key = coap_session_get_psk_key(raw_session).as_ref();
                 let crypto_info = psk_identity.zip(psk_key).map(|(identity, key)| CoapCryptoPskInfo {
                     identity: Box::from(std::slice::from_raw_parts(identity.s, identity.length)),
                     key: Box::from(std::slice::from_raw_parts(key.s, key.length)),
                 });
-                CoapServerSession {
+                CoapServerSessionInner {
                     inner,
                     crypto_current_data: crypto_info,
                 }
             },
-            coap_session_type_t::COAP_SESSION_TYPE_HELLO => CoapServerSession {
+            coap_session_type_t::COAP_SESSION_TYPE_HELLO => CoapServerSessionInner {
                 inner,
                 crypto_current_data: None,
             },
             _ => unreachable!("unknown session type"),
         };
-        let session_ref = CoapAppDataRef::new(session);
-        coap_session_set_app_data(raw_session, session_ref.create_raw_rc());
-        session_ref
+        let session_ref = CoapAppDataRef::new(session_inner);
+        coap_session_set_app_data(raw_session, session_ref.create_raw_weak());
+        CoapServerSession { inner: session_ref }
     }
 
     /// Restores a CoapServerSession from its raw counterpart.
@@ -627,50 +704,33 @@ impl CoapServerSession {
     ///
     /// # Safety
     /// The provided pointer must be valid.
-    pub unsafe fn restore_from_raw(raw_session: *mut coap_session_t) -> CoapAppDataRef<CoapServerSession> {
+    pub(crate) unsafe fn from_raw<'a>(raw_session: *mut coap_session_t) -> CoapServerSession<'a> {
         assert!(!raw_session.is_null(), "provided raw session was null");
         let session_ptr = coap_session_get_app_data(raw_session);
         if session_ptr.is_null() {
-            CoapServerSession::from_raw(raw_session)
+            CoapServerSession::initialize_raw(raw_session)
         } else {
-            CoapAppDataRef::clone_raw_rc(session_ptr)
+            CoapServerSession {
+                inner: CoapAppDataRef::clone_raw_rc(session_ptr),
+            }
         }
     }
 }
 
-impl AsRef<CoapSessionInner> for CoapServerSession {
-    fn as_ref(&self) -> &CoapSessionInner {
-        &self.inner
+impl<'a> CoapSessionCommon<'a> for CoapServerSession<'a> {
+    fn inner_ref<'b>(&'b self) -> Ref<'b, CoapSessionInner<'a>> {
+        Ref::map(self.inner.borrow(), |v| &v.inner)
     }
-}
-
-impl AsMut<CoapSessionInner> for CoapServerSession {
-    fn as_mut(&mut self) -> &mut CoapSessionInner {
-        &mut self.inner
+    fn inner_mut<'b>(&'b mut self) -> RefMut<'b, CoapSessionInner<'a>> {
+        RefMut::map(self.inner.borrow_mut(), |v| &mut v.inner)
     }
 }
 
 #[derive(Debug)]
-pub struct CoapSessionInner {
+pub struct CoapSessionInner<'a> {
     raw_session: *mut coap_session_t,
     app_data: Option<Rc<dyn Any>>,
-}
-
-impl CoapSessionInner {
-    unsafe fn from_raw(raw_session: *mut coap_session_t) -> CoapSessionInner {
-        CoapSessionInner {
-            raw_session,
-            app_data: None,
-        }
-    }
-}
-
-impl Drop for CoapSessionInner {
-    fn drop(&mut self) {
-        unsafe {
-            coap_session_release(self.raw_session);
-        }
-    }
+    _context_lifetime_marker: PhantomData<&'a coap_context_t>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -696,7 +756,7 @@ pub(crate) unsafe extern "C" fn session_response_handler(
     received: *const coap_pdu_t,
     _id: coap_mid_t,
 ) -> coap_response_t {
-    let mut session = CoapClientSession::restore_from_raw(session);
+    let mut session = CoapClientSession::from_raw(session);
     let mut client = session.borrow_mut();
     // First check if the token is actually one we are currently waiting for.
     let raw_token = coap_pdu_get_token(received);
@@ -709,155 +769,5 @@ pub(crate) unsafe extern "C" fn session_response_handler(
         coap_response_t::COAP_RESPONSE_OK
     } else {
         coap_response_t::COAP_RESPONSE_FAIL
-    }
-}
-
-/// Handle to an underlying CoapSession, provided by a [CoapContext].
-#[derive(Debug)]
-pub struct CoapSessionHandle<'a, S: CoapSessionCommon> {
-    session_ref: CoapAppDataRef<S>,
-    _context_lifetime_marker: PhantomData<&'a mut coap_context_t>,
-}
-
-impl<'a, S: CoapSessionCommon> CoapSessionHandle<'a, S> {
-    pub(crate) fn new(mut session_ref: CoapAppDataRef<S>) -> CoapSessionHandle<'a, S> {
-        // Increase refcount to prevent the underlying session from being freed.
-        unsafe { coap_session_reference(session_ref.borrow_mut().raw_session_mut()) };
-        CoapSessionHandle {
-            session_ref,
-            _context_lifetime_marker: Default::default(),
-        }
-    }
-}
-
-impl<S: CoapSessionCommon> Drop for CoapSessionHandle<'_, S> {
-    fn drop(&mut self) {
-        unsafe { coap_session_release(self.session_ref.borrow_mut().raw_session_mut()) }
-    }
-}
-
-impl<S: CoapSessionCommon> CoapSessionCommon for CoapSessionHandle<'_, S> {
-    fn app_data<T: Any>(&self) -> Result<Option<Rc<T>>, SessionGetAppDataError> {
-        self.session_ref.borrow().app_data()
-    }
-
-    fn set_app_data<T: 'static + Any>(&mut self, value: Option<T>) {
-        self.session_ref.borrow_mut().set_app_data(value)
-    }
-
-    fn clear_app_data(&mut self) {
-        self.session_ref.borrow_mut().clear_app_data()
-    }
-
-    fn ack_random_factor(&self) -> (u16, u16) {
-        self.session_ref.borrow().ack_random_factor()
-    }
-
-    fn set_ack_random_factor(&mut self, integer_part: u16, fractional_part: u16) {
-        self.session_ref
-            .borrow_mut()
-            .set_ack_random_factor(integer_part, fractional_part)
-    }
-
-    fn ack_timeout(&self) -> (u16, u16) {
-        self.session_ref.borrow().ack_timeout()
-    }
-
-    fn set_ack_timeout(&mut self, integer_part: u16, fractional_part: u16) {
-        self.session_ref
-            .borrow_mut()
-            .set_ack_timeout(integer_part, fractional_part)
-    }
-
-    fn addr_local(&self) -> SocketAddr {
-        self.session_ref.borrow().addr_local()
-    }
-
-    fn addr_remote(&self) -> SocketAddr {
-        self.session_ref.borrow().addr_remote()
-    }
-
-    fn if_index(&self) -> IfIndex {
-        self.session_ref.borrow().if_index()
-    }
-
-    fn max_retransmit(&self) -> MaxRetransmit {
-        self.session_ref.borrow().max_retransmit()
-    }
-
-    fn set_max_retransmit(&mut self, value: MaxRetransmit) {
-        self.session_ref.borrow_mut().set_max_retransmit(value)
-    }
-
-    fn proto(&self) -> CoapProtocol {
-        self.session_ref.borrow().proto()
-    }
-
-    fn psk_hint(&self) -> Option<Box<[u8]>> {
-        self.session_ref.borrow().psk_identity()
-    }
-
-    fn psk_identity(&self) -> Option<Box<[u8]>> {
-        self.session_ref.borrow().psk_identity()
-    }
-
-    fn psk_key(&self) -> Option<Box<[u8]>> {
-        self.session_ref.borrow().psk_key()
-    }
-
-    fn state(&self) -> CoapSessionState {
-        self.session_ref.borrow().state()
-    }
-
-    fn init_token(&mut self, token: &[u8; 8]) {
-        self.session_ref.borrow_mut().init_token(token)
-    }
-
-    fn max_pdu_size(&self) -> usize {
-        self.session_ref.borrow().max_pdu_size()
-    }
-
-    fn set_mtu(&mut self, mtu: u32) {
-        self.session_ref.borrow_mut().set_mtu(mtu)
-    }
-
-    fn next_message_id(&mut self) -> CoapMessageId {
-        self.session_ref.borrow_mut().next_message_id()
-    }
-
-    fn new_token(&mut self, token: &mut [u8; 8]) -> usize {
-        self.session_ref.borrow_mut().new_token(token)
-    }
-
-    fn send_ping(&mut self) -> CoapMessageId {
-        self.session_ref.borrow_mut().send_ping()
-    }
-
-    fn send<P: Into<CoapMessage>>(&mut self, pdu: P) -> Result<CoapMessageId, MessageConversionError> {
-        self.session_ref.borrow_mut().send(pdu)
-    }
-
-    unsafe fn raw_session_mut(&mut self) -> *mut coap_session_t {
-        self.session_ref.borrow_mut().raw_session_mut()
-    }
-
-    unsafe fn raw_session(&self) -> *const coap_session_t {
-        self.session_ref.borrow().raw_session()
-    }
-}
-
-impl<'a> CoapSessionHandle<'a, CoapClientSession> {
-    pub fn send_request(&mut self, req: CoapRequest) -> Result<CoapRequestHandle, MessageConversionError> {
-        CoapAppDataRef::borrow_mut(&mut self.session_ref).send_request(req)
-    }
-
-    pub fn poll_handle(&mut self, handle: &CoapRequestHandle) -> Vec<CoapResponse> {
-        CoapAppDataRef::borrow_mut(&mut self.session_ref)
-            .poll_handle(handle)
-            .collect()
-    }
-
-    pub fn set_crypto_provider(&mut self, crypto_provider: Option<Box<dyn CoapClientCryptoProvider>>) {
-        CoapAppDataRef::borrow_mut(&mut self.session_ref).set_crypto_provider(crypto_provider)
     }
 }

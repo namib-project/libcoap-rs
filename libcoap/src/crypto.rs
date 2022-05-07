@@ -114,10 +114,9 @@ pub(crate) unsafe extern "C" fn dtls_ih_callback(
     session: *mut coap_session_t,
     _userdata: *mut c_void,
 ) -> *const coap_dtls_cpsk_info_t {
-    let mut session = CoapClientSession::restore_from_raw(session);
-    let mut client = session.borrow_mut();
+    let mut session = CoapClientSession::from_raw(session);
     let provided_identity = std::slice::from_raw_parts((*hint).s, (*hint).length);
-    client
+    session
         .provide_raw_key_for_hint(provided_identity)
         .map(|v| v as *const coap_dtls_cpsk_info_t)
         .unwrap_or(std::ptr::null())

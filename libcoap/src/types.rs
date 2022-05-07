@@ -449,7 +449,7 @@ impl<D> CoapAppDataRef<D> {
     /// used, see the struct-level documentation.
     ///
     /// To safely use this function, the following invariants must be kept:
-    /// - ptr is a valid pointer to a `Weak<UnsafeCell<D>>`
+    /// - ptr is a valid pointer to a `Weak<RefCell<D>>`
     /// - as soon as the returned `Weak<RefCell<D>>` is dropped, the provided pointer is treated as
     ///   invalid.
     pub unsafe fn raw_ptr_to_weak(ptr: *mut c_void) -> Weak<RefCell<D>> {
@@ -507,7 +507,7 @@ impl<D> CoapAppDataRef<D> {
     ///
     /// # Panics
     /// Panics if borrowing mutably here would violate Rusts aliasing rules.
-    pub fn borrow_mut(&mut self) -> RefMut<D> {
+    pub fn borrow_mut(&self) -> RefMut<D> {
         RefCell::borrow_mut(&self.0)
     }
 }
@@ -543,35 +543,156 @@ impl From<coap_proto_t> for CoapProtocol {
 }
 
 #[derive(Debug, Clone)]
-pub struct FfiPassthroughRefContainer<'a, T: 'a>(Rc<RefCell<T>>, Rc<RefCell<Option<RefMut<'a, T>>>>);
+pub struct FfiPassthroughRefContainer<T: Debug>(Rc<RefCell<T>>, Rc<RefCell<Option<*mut T>>>);
 
-pub struct FfiPassthroughWeakContainer<'a, T: 'a>(Weak<RefCell<T>>, Weak<RefCell<Option<RefMut<'a, T>>>>);
+pub struct FfiPassthroughWeakContainer<T: Debug>(Weak<RefCell<T>>, Weak<RefCell<Option<*mut T>>>);
 
-impl<'a, T> FfiPassthroughRefContainer<'a, T> {
-    pub fn borrow_mut(&self) -> RefMut<'_, T> {
-        if RefCell::borrow(&self.1).is_some() {
-            RefCell::borrow_mut(&self.1).take().unwrap()
-        } else {
-            RefCell::borrow_mut(&self.0)
+pub enum FfiPassthroughRefMut<'a, T> {
+    Owned(RefMut<'a, T>),
+    Borrowed(&'a mut T, Rc<RefCell<Option<*mut T>>>),
+}
+
+impl<T> Deref for FfiPassthroughRefMut<'_, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            FfiPassthroughRefMut::Owned(v) => v.deref(),
+            FfiPassthroughRefMut::Borrowed(v, _lend_container) => v,
+        }
+    }
+}
+
+impl<T> DerefMut for FfiPassthroughRefMut<'_, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        match self {
+            FfiPassthroughRefMut::Owned(v) => v.deref_mut(),
+            FfiPassthroughRefMut::Borrowed(v, _lend_container) => v,
+        }
+    }
+}
+
+impl<T> Drop for FfiPassthroughRefMut<'_, T> {
+    fn drop(&mut self) {
+        if let FfiPassthroughRefMut::Borrowed(refer, lend_container) = self {
+            let mut lend_container = RefCell::borrow_mut(lend_container);
+            if lend_container.is_some() {
+                panic!("somehow, multiple references are stored in the same FfiPassthroughRefContainer");
+            }
+            lend_container.insert(*refer);
+        }
+    }
+}
+
+pub enum FfiPassthroughRef<'a, T> {
+    Owned(Ref<'a, T>),
+    Borrowed(&'a mut T, Rc<RefCell<Option<*mut T>>>),
+}
+
+impl<T> Deref for FfiPassthroughRef<'_, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            FfiPassthroughRef::Owned(v) => v.deref(),
+            FfiPassthroughRef::Borrowed(v, _lend_container) => v,
+        }
+    }
+}
+
+impl<T> Drop for FfiPassthroughRef<'_, T> {
+    fn drop(&mut self) {
+        if let FfiPassthroughRef::Borrowed(refer, lend_container) = self {
+            let mut lend_container = RefCell::borrow_mut(lend_container);
+            if lend_container.is_some() {
+                panic!("somehow, multiple references are stored in the same FfiPassthroughRefContainer");
+            }
+            lend_container.insert(*refer);
+        }
+    }
+}
+
+pub struct FfiPassthroughRefLender<'a, T> {
+    lent_ref: &'a mut T,
+    lent_ptr_ctr: Weak<RefCell<Option<*mut T>>>,
+}
+
+impl<'a, T> FfiPassthroughRefLender<'a, T> {
+    fn new(refer: &'a mut T, container: &Rc<RefCell<Option<*mut T>>>) -> FfiPassthroughRefLender<'a, T> {
+        RefCell::borrow_mut(container).replace(refer as *mut T);
+        FfiPassthroughRefLender {
+            lent_ref: refer,
+            lent_ptr_ctr: Rc::downgrade(container),
         }
     }
 
-    pub fn borrow(&self) -> Ref<'_, T> {
-        // TODO handle passed reference
-        RefCell::borrow(&self.0)
+    pub(crate) fn unlend(self) {
+        std::mem::drop(self);
+    }
+}
+
+impl<T> Drop for FfiPassthroughRefLender<'_, T> {
+    fn drop(&mut self) {
+        if let Some(lent_ptr_ctr) = self.lent_ptr_ctr.upgrade() {
+            assert_eq!(
+                self.lent_ref as *mut T,
+                lent_ptr_ctr
+                    .take()
+                    .expect("unable to retrieve lent reference, implying that it may be in use somewhere"),
+                "somehow, multiple references are stored in the same FfiPassthroughRefContainer"
+            )
+        }
+    }
+}
+
+impl<T: Debug> FfiPassthroughRefContainer<T> {
+    pub fn borrow_mut(&self) -> FfiPassthroughRefMut<'_, T> {
+        if let Some(borrowed) = RefCell::borrow_mut(&self.1).take() {
+            // SAFETY: The aliasing rules are ensured here by making sure that only one person may
+            // retrieve the pointer value stored in the container at any time (as the value in the
+            // Option is always retrieved using _take()_.
+            // The validity of the pointer is ensured because the only way a value can be stored
+            // here is by calling FfiPassthroughRefContainer::lend_ref_mut(), which converts a
+            // reference into an always valid pointer.
+            FfiPassthroughRefMut::Borrowed(unsafe { borrowed.as_mut() }.unwrap(), Rc::clone(&self.1))
+        } else {
+            FfiPassthroughRefMut::Owned(RefCell::borrow_mut(&self.0))
+        }
     }
 
-    pub fn store_ref_mut(&mut self, refer: RefMut<'a, T>) {
-        RefCell::borrow_mut(&self.1).replace(refer);
+    pub fn borrow(&self) -> FfiPassthroughRef<'_, T> {
+        if let Some(borrowed) = RefCell::borrow_mut(&self.1).take() {
+            // SAFETY: The aliasing rules are ensured here by making sure that only one person may
+            // retrieve the pointer value stored in the container at any time (as the value in the
+            // Option is always retrieved using _take()_.
+            // The validity of the pointer is ensured because the only way a value can be stored
+            // here is by calling FfiPassthroughRefContainer::lend_ref_mut(), which converts a
+            // reference into an always valid pointer.
+            // TODO we may want to allow multiple immutable borrows at some point(?)
+            FfiPassthroughRef::Borrowed(unsafe { borrowed.as_mut() }.unwrap(), Rc::clone(&self.1))
+        } else {
+            FfiPassthroughRef::Owned(RefCell::borrow(&self.0))
+        }
     }
 
-    pub fn downgrade(&self) -> FfiPassthroughWeakContainer<'a, T> {
+    /// Stores a mutable reference to an instance of T for later retrieval by code running on the
+    /// other side of the FFI barrier.
+    pub fn lend_ref_mut<'a>(&self, refer: &'a mut T) -> FfiPassthroughRefLender<'a, T> {
+        assert_eq!(
+            RefCell::as_ptr(&self.0),
+            refer as *mut T,
+            "attempted to lend different object over FfiPassthroughRefContainer"
+        );
+        FfiPassthroughRefLender::new(refer, &self.1)
+    }
+
+    pub fn downgrade(&self) -> FfiPassthroughWeakContainer<T> {
         FfiPassthroughWeakContainer(Rc::downgrade(&self.0), Rc::downgrade(&self.1))
     }
 }
 
-impl<'a, T> FfiPassthroughWeakContainer<'a, T> {
-    pub fn upgrade(&self) -> Option<FfiPassthroughRefContainer<'a, T>> {
+impl<T: Debug> FfiPassthroughWeakContainer<T> {
+    pub fn upgrade(&self) -> Option<FfiPassthroughRefContainer<T>> {
         self.0
             .upgrade()
             .zip(self.1.upgrade())
@@ -579,8 +700,26 @@ impl<'a, T> FfiPassthroughWeakContainer<'a, T> {
     }
 }
 
-impl<'a, V: 'a> FfiPassthroughRefContainer<'a, V> {
-    pub fn new(value: V) -> FfiPassthroughRefContainer<'a, V> {
+impl<V: Debug> FfiPassthroughRefContainer<V> {
+    pub fn new(value: V) -> FfiPassthroughRefContainer<V> {
         FfiPassthroughRefContainer(Rc::new(RefCell::new(value)), Rc::new(RefCell::new(None)))
     }
+}
+
+impl<T: Debug> DropInnerExclusively for CoapAppDataRef<T> {
+    fn drop_exclusively(self) {
+        std::mem::drop(
+            Rc::try_unwrap(self.0).expect("unable to unwrap instance of CoapAppDataRef as it is still in use"),
+        )
+    }
+}
+
+pub(crate) trait DropInnerExclusively {
+    /// Consume this instance, ensuring that the inner (and potentially shared) part of the struct
+    /// referenced by this instance is also dropped.
+    ///
+    /// # Panics
+    /// Panics if the inner part of this struct cannot be exclusively dropped, i.e., it is still
+    /// used by another instance.
+    fn drop_exclusively(self);
 }
