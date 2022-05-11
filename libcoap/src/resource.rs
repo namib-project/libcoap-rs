@@ -4,17 +4,15 @@
  * Copyright (c) 2022 The NAMIB Project Developers, all rights reserved.
  * See the README as well as the LICENSE file for more information.
  */
-use libc::c_int;
+
 use std::{
     any::Any,
-    cell::RefCell,
-    ffi::c_void,
     fmt::{Debug, Formatter},
     marker::PhantomData,
-    mem::ManuallyDrop,
-    ops::Deref,
-    rc::{Rc, Weak},
+    rc::Rc,
 };
+
+use libc::c_int;
 
 use libcoap_sys::{
     coap_delete_resource, coap_new_str_const, coap_pdu_t, coap_pdu_type_t::COAP_MESSAGE_RST,
@@ -28,7 +26,6 @@ use crate::message::CoapMessageCommon;
 use crate::protocol::CoapMessageCode;
 use crate::protocol::CoapMessageType;
 use crate::session::CoapSessionCommon;
-
 use crate::types::DropInnerExclusively;
 use crate::{
     error::MessageConversionError,
@@ -199,6 +196,8 @@ impl<D: Any + ?Sized + Debug> CoapResourceHandlers<D> {
     }
 
     #[inline]
+    // Clippy complains about this being unused, but I'd like to keep it for consistency.
+    #[allow(unused)]
     fn handler_ref(&self, code: CoapRequestCode) -> &Option<CoapRequestHandler<D>> {
         match code {
             CoapRequestCode::Get => &self.get,

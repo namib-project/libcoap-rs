@@ -4,25 +4,10 @@
  * Copyright (c) 2022 The NAMIB Project Developers, all rights reserved.
  * See the README as well as the LICENSE file for more information.
  */
+
+use std::{any::Any, ffi::c_void, fmt::Debug, marker::PhantomData, net::SocketAddr, ops::Sub, time::Duration};
+
 use libc::c_uint;
-use std::rc::Weak;
-use std::{
-    any::Any,
-    cell::Ref,
-    cell::RefCell,
-    cell::RefMut,
-    collections::HashMap,
-    ffi::c_void,
-    fmt::Debug,
-    marker::PhantomData,
-    net::SocketAddr,
-    ops::Deref,
-    ops::DerefMut,
-    ops::Sub,
-    rc::Rc,
-    slice::{Iter, IterMut},
-    time::Duration,
-};
 
 use libcoap_sys::{
     coap_add_resource, coap_bin_const_t, coap_can_exit, coap_context_get_csm_max_message_size,
@@ -30,26 +15,23 @@ use libcoap_sys::{
     coap_context_get_session_timeout, coap_context_set_block_mode, coap_context_set_csm_max_message_size,
     coap_context_set_csm_timeout, coap_context_set_keepalive, coap_context_set_max_handshake_sessions,
     coap_context_set_max_idle_sessions, coap_context_set_psk2, coap_context_set_session_timeout, coap_context_t,
-    coap_dtls_cpsk_info_t, coap_dtls_cpsk_t, coap_dtls_spsk_info_t, coap_dtls_spsk_t, coap_event_t, coap_free_context,
-    coap_get_app_data, coap_io_process, coap_new_client_session, coap_new_client_session_psk2, coap_new_context,
-    coap_proto_t::{COAP_PROTO_DTLS, COAP_PROTO_UDP},
-    coap_register_response_handler, coap_session_get_app_data, coap_session_release, coap_set_app_data,
-    coap_set_event_handler, COAP_BLOCK_SINGLE_BODY, COAP_BLOCK_USE_LIBCOAP, COAP_DTLS_SPSK_SETUP_VERSION, COAP_IO_WAIT,
+    coap_dtls_spsk_info_t, coap_dtls_spsk_t, coap_event_t, coap_free_context, coap_get_app_data, coap_io_process,
+    coap_new_context, coap_register_response_handler, coap_set_app_data, coap_set_event_handler,
+    COAP_BLOCK_SINGLE_BODY, COAP_BLOCK_USE_LIBCOAP, COAP_DTLS_SPSK_SETUP_VERSION, COAP_IO_WAIT,
 };
 
 use crate::event::{event_handler_callback, CoapEventHandler};
 use crate::session::{CoapClientSession, CoapServerSession, CoapSession};
-use crate::types::{DropInnerExclusively, FfiPassthroughRef, FfiPassthroughRefContainer, FfiPassthroughWeakContainer};
+use crate::types::{DropInnerExclusively, FfiPassthroughRefContainer, FfiPassthroughWeakContainer};
 use crate::{
     crypto::{
-        dtls_ih_callback, dtls_server_id_callback, dtls_server_sni_callback, CoapClientCryptoProvider,
-        CoapCryptoProviderResponse, CoapCryptoPskIdentity, CoapCryptoPskInfo, CoapServerCryptoProvider,
+        dtls_server_id_callback, dtls_server_sni_callback, CoapCryptoProviderResponse, CoapCryptoPskIdentity,
+        CoapCryptoPskInfo, CoapServerCryptoProvider,
     },
-    error::{ContextCreationError, EndpointCreationError, IoProcessError, SessionCreationError},
+    error::{ContextCreationError, EndpointCreationError, IoProcessError},
     resource::{CoapResource, UntypedCoapResource},
-    session::{session_response_handler, CoapClientSessionInner, CoapSessionCommon},
+    session::session_response_handler,
     transport::{dtls::CoapDtlsEndpoint, udp::CoapUdpEndpoint, CoapEndpoint},
-    types::{CoapAddress, CoapAppDataRef},
 };
 
 #[derive(Debug)]
@@ -416,14 +398,6 @@ impl CoapContext<'_> {
         unsafe { coap_context_set_keepalive(self.inner.borrow().raw_context, seconds) };
     }
 
-    pub(crate) fn provide_default_info(&self) -> Option<CoapCryptoPskInfo> {
-        self.inner
-            .borrow_mut()
-            .crypto_provider
-            .as_mut()
-            .map(|provider| provider.provide_default_info())
-    }
-
     /// Provide a raw key for a given identity using the CoapContext's set server crypto provider.
     ///
     /// # Safety
@@ -502,6 +476,8 @@ impl CoapContext<'_> {
     /// - Calling `coap_free_context()` on this context (for obvious reasons, this will probably
     ///   cause a segfault if you don't immediately [std::mem::forget()] the CoapContext and never
     ///   use anything related to the context again, but why would you do that?)  
+    // Kept here for consistency, even though it is unused.
+    #[allow(unused)]
     pub(crate) unsafe fn as_raw_context(&self) -> &coap_context_t {
         // SAFETY: raw_context is checked to be a valid pointer on struct instantiation, cannot be
         // freed by anything outside of here (assuming the contract of this function is kept), and

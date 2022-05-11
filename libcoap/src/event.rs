@@ -5,11 +5,12 @@
  * See the README as well as the LICENSE file for more information.
  */
 
-use crate::context::CoapContext;
-use crate::session::{CoapClientSession, CoapServerSession, CoapSession, CoapSessionCommon};
-use crate::types::{CoapAppDataRef, FfiPassthroughRefContainer, FfiPassthroughWeakContainer};
-use libcoap_sys::{coap_event_t, coap_session_get_context, coap_session_get_type, coap_session_t, coap_session_type_t};
 use std::fmt::Debug;
+
+use libcoap_sys::{coap_event_t, coap_session_get_context, coap_session_t};
+
+use crate::context::CoapContext;
+use crate::session::{CoapServerSession, CoapSession};
 
 /// Trait for CoAP event handlers.
 ///
@@ -58,8 +59,10 @@ pub trait CoapEventHandler: Debug {
     fn handle_server_session_del(&mut self, session: &mut CoapServerSession) {}
 }
 
+// This should be fine as we don't provide this type to a FFI function, we only read from it.
+#[allow(improper_ctypes_definitions)]
 pub(crate) unsafe extern "C" fn event_handler_callback(raw_session: *mut coap_session_t, event: coap_event_t) -> i32 {
-    let mut session: CoapSession = if event == coap_event_t::COAP_EVENT_SERVER_SESSION_NEW {
+    let session: CoapSession = if event == coap_event_t::COAP_EVENT_SERVER_SESSION_NEW {
         CoapServerSession::initialize_raw(raw_session).into()
     } else {
         CoapSession::from_raw(raw_session)

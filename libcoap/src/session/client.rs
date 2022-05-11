@@ -5,44 +5,25 @@
  * See the README as well as the LICENSE file for more information.
  */
 
-use std::borrow::{Borrow, BorrowMut};
 use std::cell::{Ref, RefMut};
-use std::{
-    any::Any,
-    collections::{vec_deque::Drain, HashMap, VecDeque},
-    marker::PhantomData,
-    net::{SocketAddr, ToSocketAddrs},
-    rc::Rc,
-};
-
-use rand::Rng;
+use std::net::SocketAddr;
 
 use libcoap_sys::{
-    coap_bin_const_t, coap_context_t, coap_dtls_cpsk_info_t, coap_dtls_cpsk_t, coap_fixed_point_t, coap_mid_t,
-    coap_new_client_session, coap_new_client_session_psk2, coap_new_message_id, coap_pdu_get_token, coap_pdu_t,
-    coap_proto_t, coap_response_t, coap_send, coap_session_get_ack_random_factor, coap_session_get_ack_timeout,
-    coap_session_get_addr_local, coap_session_get_addr_remote, coap_session_get_app_data, coap_session_get_ifindex,
-    coap_session_get_max_retransmit, coap_session_get_proto, coap_session_get_psk_hint, coap_session_get_psk_identity,
-    coap_session_get_psk_key, coap_session_get_state, coap_session_get_type, coap_session_init_token,
-    coap_session_max_pdu_size, coap_session_new_token, coap_session_reference, coap_session_release,
-    coap_session_send_ping, coap_session_set_ack_random_factor, coap_session_set_ack_timeout,
-    coap_session_set_app_data, coap_session_set_max_retransmit, coap_session_set_mtu, coap_session_set_type_client,
-    coap_session_state_t, coap_session_t, coap_session_type_t, COAP_DTLS_SPSK_SETUP_VERSION,
+    coap_bin_const_t, coap_dtls_cpsk_info_t, coap_dtls_cpsk_t, coap_new_client_session, coap_new_client_session_psk2,
+    coap_proto_t, coap_session_get_app_data, coap_session_get_type, coap_session_release, coap_session_set_app_data,
+    coap_session_t, coap_session_type_t, COAP_DTLS_SPSK_SETUP_VERSION,
 };
 
-use super::{CoapRequestHandle, CoapSessionCommon, CoapSessionInner, CoapSessionInnerProvider};
-use crate::context::CoapContextInner;
-use crate::crypto::{CoapCryptoProviderResponse, CoapCryptoPskData};
+use crate::crypto::CoapCryptoProviderResponse;
 use crate::types::DropInnerExclusively;
 use crate::{
     context::CoapContext,
     crypto::{dtls_ih_callback, CoapClientCryptoProvider, CoapCryptoPskIdentity, CoapCryptoPskInfo},
-    error::{MessageConversionError, SessionCreationError, SessionGetAppDataError},
-    message::{CoapMessage, CoapMessageCommon},
-    protocol::CoapToken,
-    request::{CoapRequest, CoapResponse},
-    types::{CoapAddress, CoapAppDataRef, CoapMessageId, CoapProtocol, IfIndex, MaxRetransmit},
+    error::SessionCreationError,
+    types::{CoapAddress, CoapAppDataRef},
 };
+
+use super::{CoapSessionCommon, CoapSessionInner, CoapSessionInnerProvider};
 
 /// Representation of a client-side CoAP session.
 #[derive(Debug)]
@@ -246,18 +227,10 @@ impl CoapClientSession<'_> {
             None | Some(CoapCryptoProviderResponse::Unacceptable) => None,
         }
     }
-
-    pub(crate) fn provide_default_info(&mut self) -> Option<CoapCryptoPskInfo> {
-        self.inner
-            .borrow_mut()
-            .crypto_provider
-            .as_mut()
-            .map(|provider| provider.provide_default_info())
-    }
 }
 
 impl DropInnerExclusively for CoapClientSession<'_> {
-    fn drop_exclusively(mut self) {
+    fn drop_exclusively(self) {
         self.inner.drop_exclusively();
     }
 }

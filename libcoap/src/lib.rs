@@ -11,6 +11,7 @@
 pub mod context;
 pub mod crypto;
 pub mod error;
+pub mod event;
 pub mod message;
 pub mod protocol;
 pub mod request;

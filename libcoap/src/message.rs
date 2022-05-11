@@ -6,6 +6,8 @@
  */
 use std::{ffi::c_void, mem::MaybeUninit, slice::Iter};
 
+use num_traits::FromPrimitive;
+
 use libcoap_sys::{
     coap_add_data, coap_add_data_large_request, coap_add_optlist_pdu, coap_add_token, coap_delete_optlist,
     coap_delete_pdu, coap_get_data, coap_insert_optlist, coap_new_optlist, coap_opt_length, coap_opt_t, coap_opt_value,
@@ -13,7 +15,6 @@ use libcoap_sys::{
     coap_pdu_get_mid, coap_pdu_get_token, coap_pdu_get_type, coap_pdu_init, coap_pdu_set_code, coap_pdu_set_type,
     coap_pdu_t, coap_session_t,
 };
-use num_traits::FromPrimitive;
 
 use crate::{
     error::{MessageConversionError, OptionValueError},

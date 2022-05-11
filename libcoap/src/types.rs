@@ -5,12 +5,7 @@
  * See the README as well as the LICENSE file for more information.
  */
 //! Types required for conversion between libcoap C library abstractions and Rust types.
-use std::borrow::{Borrow, BorrowMut};
-use std::ops::Deref;
 
-use std::mem::ManuallyDrop;
-use std::ops::DerefMut;
-use std::ptr::{addr_of, addr_of_mut};
 use std::{
     cell::{Ref, RefCell, RefMut},
     convert::Infallible,
@@ -25,7 +20,14 @@ use std::{
     vec::Drain,
 };
 
+use std::ops::Deref;
+use std::ops::DerefMut;
+
 use libc::{in6_addr, in_addr, sa_family_t, sockaddr_in, sockaddr_in6, socklen_t, AF_INET, AF_INET6};
+use num_derive::FromPrimitive;
+use num_traits::FromPrimitive;
+use url::{Host, Url};
+
 use libcoap_sys::{
     coap_address_t, coap_mid_t, coap_proto_t,
     coap_proto_t::{COAP_PROTO_DTLS, COAP_PROTO_NONE, COAP_PROTO_TCP, COAP_PROTO_TLS, COAP_PROTO_UDP},
@@ -36,9 +38,6 @@ use libcoap_sys::{
     },
     COAP_URI_SCHEME_SECURE_MASK,
 };
-use num_derive::FromPrimitive;
-use num_traits::FromPrimitive;
-use url::{Host, Url};
 
 use crate::error::UriParsingError;
 
@@ -378,7 +377,7 @@ impl TryFrom<Url> for CoapUri {
 /// references, this wrapper type is used, which provides basically the same functionality as an
 /// `Rc<RefCell<D>>`, but with additional helper functions to aid in creating and using the raw
 /// pointers stored in the libcoap C structs.
-pub struct CoapAppDataRef<D>(Rc<RefCell<D>>);
+pub(crate) struct CoapAppDataRef<D>(Rc<RefCell<D>>);
 
 impl<D> CoapAppDataRef<D> {
     /// Creates a new instance of CoapStrongAppDataRef, containing the provided value.
@@ -467,6 +466,8 @@ impl<D> CoapAppDataRef<D> {
     ///
     /// To safely use this function, the following invariants must be kept:
     /// - ptr is a valid pointer to a `Rc<RefCell<D>>`
+    // Kept for consistency
+    #[allow(unused)]
     pub unsafe fn raw_ptr_to_rc(ptr: *mut c_void) -> Rc<RefCell<D>> {
         Rc::from_raw(ptr as *const RefCell<D>)
     }
@@ -478,6 +479,8 @@ impl<D> CoapAppDataRef<D> {
     /// referring to a clone of the `Rc<RefCell<D>>` contained in this type.
     ///
     /// Note that this increases the reference count of the Rc by one.
+    // Kept for consistency
+    #[allow(unused)]
     pub fn create_raw_rc(&self) -> *mut c_void {
         Rc::into_raw(Rc::clone(&self.0)) as *mut c_void
     }
@@ -512,6 +515,14 @@ impl<D> CoapAppDataRef<D> {
     }
 }
 
+impl<D: PartialEq> PartialEq for CoapAppDataRef<D> {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::eq(&self.0, &other.0)
+    }
+}
+
+impl<D: Eq + PartialEq> Eq for CoapAppDataRef<D> {}
+
 impl<D> Clone for CoapAppDataRef<D> {
     fn clone(&self) -> Self {
         CoapAppDataRef(self.0.clone())
@@ -542,12 +553,25 @@ impl From<coap_proto_t> for CoapProtocol {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct FfiPassthroughRefContainer<T: Debug>(Rc<RefCell<T>>, Rc<RefCell<Option<*mut T>>>);
+#[derive(Debug)]
+pub(crate) struct FfiPassthroughRefContainer<T: Debug>(Rc<RefCell<T>>, Rc<RefCell<Option<*mut T>>>);
 
-pub struct FfiPassthroughWeakContainer<T: Debug>(Weak<RefCell<T>>, Weak<RefCell<Option<*mut T>>>);
+#[derive(Debug)]
+pub(crate) struct FfiPassthroughWeakContainer<T: Debug>(Weak<RefCell<T>>, Weak<RefCell<Option<*mut T>>>);
 
-pub enum FfiPassthroughRefMut<'a, T> {
+impl<T: Debug> Clone for FfiPassthroughRefContainer<T> {
+    fn clone(&self) -> Self {
+        FfiPassthroughRefContainer(Rc::clone(&self.0), Rc::clone(&self.1))
+    }
+}
+
+impl<T: Debug> Clone for FfiPassthroughWeakContainer<T> {
+    fn clone(&self) -> Self {
+        FfiPassthroughWeakContainer(Weak::clone(&self.0), Weak::clone(&self.1))
+    }
+}
+
+pub(crate) enum FfiPassthroughRefMut<'a, T> {
     Owned(RefMut<'a, T>),
     Borrowed(&'a mut T, Rc<RefCell<Option<*mut T>>>),
 }
@@ -579,12 +603,15 @@ impl<T> Drop for FfiPassthroughRefMut<'_, T> {
             if lend_container.is_some() {
                 panic!("somehow, multiple references are stored in the same FfiPassthroughRefContainer");
             }
-            lend_container.insert(*refer);
+            assert!(
+                lend_container.replace(*refer).is_none(),
+                "somehow, multiple references are stored in the same FfiPassthroughRefContainer"
+            );
         }
     }
 }
 
-pub enum FfiPassthroughRef<'a, T> {
+pub(crate) enum FfiPassthroughRef<'a, T> {
     Owned(Ref<'a, T>),
     Borrowed(&'a mut T, Rc<RefCell<Option<*mut T>>>),
 }
@@ -607,7 +634,10 @@ impl<T> Drop for FfiPassthroughRef<'_, T> {
             if lend_container.is_some() {
                 panic!("somehow, multiple references are stored in the same FfiPassthroughRefContainer");
             }
-            lend_container.insert(*refer);
+            assert!(
+                lend_container.replace(*refer).is_none(),
+                "somehow, multiple references are stored in the same FfiPassthroughRefContainer"
+            );
         }
     }
 }
@@ -675,6 +705,40 @@ impl<T: Debug> FfiPassthroughRefContainer<T> {
         }
     }
 
+    // Kept for consistency
+    #[allow(unused)]
+    pub fn create_raw_ref(&self) -> *mut FfiPassthroughRefContainer<T> {
+        Box::into_raw(Box::new(FfiPassthroughRefContainer::<T>::clone(self)))
+    }
+
+    pub fn create_raw_weak(&self) -> *mut FfiPassthroughWeakContainer<T> {
+        Box::into_raw(Box::new(self.downgrade()))
+    }
+
+    // Kept for consistency
+    #[allow(unused)]
+    pub unsafe fn clone_raw_ref(ptr: *mut FfiPassthroughRefContainer<T>) -> FfiPassthroughRefContainer<T> {
+        let ref_box: Box<FfiPassthroughRefContainer<T>> = Box::from_raw(ptr);
+        let ret_val = FfiPassthroughRefContainer::<T>::clone(ref_box.as_ref());
+        Box::into_raw(ref_box);
+        ret_val
+    }
+
+    pub unsafe fn clone_raw_weak(ptr: *mut FfiPassthroughWeakContainer<T>) -> FfiPassthroughRefContainer<T> {
+        let ref_box: Box<FfiPassthroughWeakContainer<T>> = Box::from_raw(ptr);
+        let ret_val = ref_box
+            .upgrade()
+            .expect("unable to restore FfiPassthroughRefContainer as the underlying value was already dropped.");
+        Box::into_raw(ref_box);
+        ret_val
+    }
+
+    // Kept for consistency
+    #[allow(unused)]
+    pub unsafe fn from_raw_box(ptr: *mut FfiPassthroughRefContainer<T>) -> Box<FfiPassthroughRefContainer<T>> {
+        Box::from_raw(ptr)
+    }
+
     /// Stores a mutable reference to an instance of T for later retrieval by code running on the
     /// other side of the FFI barrier.
     pub fn lend_ref_mut<'a>(&self, refer: &'a mut T) -> FfiPassthroughRefLender<'a, T> {
@@ -697,6 +761,10 @@ impl<T: Debug> FfiPassthroughWeakContainer<T> {
             .upgrade()
             .zip(self.1.upgrade())
             .map(|(v0, v1)| FfiPassthroughRefContainer(v0, v1))
+    }
+
+    pub unsafe fn from_raw_box(ptr: *mut FfiPassthroughWeakContainer<T>) -> Box<FfiPassthroughWeakContainer<T>> {
+        Box::from_raw(ptr)
     }
 }
 

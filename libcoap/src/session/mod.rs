@@ -5,11 +5,11 @@
  * See the README as well as the LICENSE file for more information.
  */
 
-use std::borrow::{Borrow, BorrowMut};
+use std::borrow::{BorrowMut};
 use std::cell::{Ref, RefMut};
 use std::{
     any::Any,
-    collections::{vec_deque::Drain, HashMap, VecDeque},
+    collections::{HashMap, VecDeque},
     marker::PhantomData,
     net::{SocketAddr, ToSocketAddrs},
     rc::Rc,
@@ -18,36 +18,32 @@ use std::{
 use rand::Rng;
 
 use libcoap_sys::{
-    coap_bin_const_t, coap_context_t, coap_dtls_cpsk_info_t, coap_dtls_cpsk_t, coap_fixed_point_t, coap_mid_t,
-    coap_new_client_session, coap_new_client_session_psk2, coap_new_message_id, coap_pdu_get_token, coap_pdu_t,
-    coap_proto_t, coap_response_t, coap_send, coap_session_get_ack_random_factor, coap_session_get_ack_timeout,
+    coap_context_t, coap_fixed_point_t, coap_mid_t, coap_new_message_id, coap_pdu_get_token, coap_pdu_t, coap_response_t, coap_send, coap_session_get_ack_random_factor, coap_session_get_ack_timeout,
     coap_session_get_addr_local, coap_session_get_addr_remote, coap_session_get_app_data, coap_session_get_ifindex,
     coap_session_get_max_retransmit, coap_session_get_proto, coap_session_get_psk_hint, coap_session_get_psk_identity,
     coap_session_get_psk_key, coap_session_get_state, coap_session_get_type, coap_session_init_token,
-    coap_session_max_pdu_size, coap_session_new_token, coap_session_reference, coap_session_release,
-    coap_session_send_ping, coap_session_set_ack_random_factor, coap_session_set_ack_timeout,
-    coap_session_set_app_data, coap_session_set_max_retransmit, coap_session_set_mtu, coap_session_set_type_client,
-    coap_session_state_t, coap_session_t, coap_session_type_t, COAP_DTLS_SPSK_SETUP_VERSION,
+    coap_session_max_pdu_size, coap_session_new_token,
+    coap_session_send_ping, coap_session_set_ack_random_factor, coap_session_set_ack_timeout, coap_session_set_max_retransmit, coap_session_set_mtu,
+    coap_session_state_t, coap_session_t, coap_session_type_t,
 };
 
-use crate::context::CoapContextInner;
-use crate::crypto::{CoapCryptoProviderResponse, CoapCryptoPskData};
-use crate::types::DropInnerExclusively;
+
+use crate::crypto::{CoapCryptoPskData};
+
 use crate::{
-    context::CoapContext,
-    crypto::{dtls_ih_callback, CoapClientCryptoProvider, CoapCryptoPskIdentity, CoapCryptoPskInfo},
-    error::{MessageConversionError, SessionCreationError, SessionGetAppDataError},
+    crypto::{CoapCryptoPskIdentity},
+    error::{MessageConversionError, SessionGetAppDataError},
     message::{CoapMessage, CoapMessageCommon},
     protocol::CoapToken,
     request::{CoapRequest, CoapResponse},
-    types::{CoapAddress, CoapAppDataRef, CoapMessageId, CoapProtocol, IfIndex, MaxRetransmit},
+    types::{CoapAddress, CoapMessageId, CoapProtocol, IfIndex, MaxRetransmit},
 };
 
 pub use self::client::CoapClientSession;
-pub(crate) use self::client::*;
+
 pub(self) use self::sealed::{CoapSessionCommonInternal, CoapSessionInnerProvider};
 pub use self::server::CoapServerSession;
-pub(crate) use self::server::*;
+
 
 mod client;
 mod server;
@@ -467,7 +463,7 @@ pub(crate) unsafe extern "C" fn session_response_handler(
     _id: coap_mid_t,
 ) -> coap_response_t {
     let mut session = CoapSession::from_raw(session);
-    let mut client = session.borrow_mut();
+    let client = session.borrow_mut();
     // First check if the token is actually one we are currently waiting for.
     let raw_token = coap_pdu_get_token(received);
     let token: CoapToken = CoapToken::from(std::slice::from_raw_parts(raw_token.s, raw_token.length));

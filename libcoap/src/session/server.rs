@@ -5,47 +5,19 @@
  * See the README as well as the LICENSE file for more information.
  */
 
-use std::borrow::{Borrow, BorrowMut};
 use std::cell::{Ref, RefMut};
-use std::{
-    any::Any,
-    collections::{vec_deque::Drain, HashMap, VecDeque},
-    marker::PhantomData,
-    net::{SocketAddr, ToSocketAddrs},
-    rc::Rc,
-};
-
-use rand::Rng;
 
 use libcoap_sys::{
-    coap_bin_const_t, coap_context_t, coap_dtls_cpsk_info_t, coap_dtls_cpsk_t, coap_fixed_point_t, coap_mid_t,
-    coap_new_client_session, coap_new_client_session_psk2, coap_new_message_id, coap_pdu_get_token, coap_pdu_t,
-    coap_proto_t, coap_response_t, coap_send, coap_session_get_ack_random_factor, coap_session_get_ack_timeout,
-    coap_session_get_addr_local, coap_session_get_addr_remote, coap_session_get_app_data, coap_session_get_ifindex,
-    coap_session_get_max_retransmit, coap_session_get_proto, coap_session_get_psk_hint, coap_session_get_psk_identity,
-    coap_session_get_psk_key, coap_session_get_state, coap_session_get_type, coap_session_init_token,
-    coap_session_max_pdu_size, coap_session_new_token, coap_session_reference, coap_session_release,
-    coap_session_send_ping, coap_session_set_ack_random_factor, coap_session_set_ack_timeout,
-    coap_session_set_app_data, coap_session_set_max_retransmit, coap_session_set_mtu, coap_session_set_type_client,
-    coap_session_state_t, coap_session_t, coap_session_type_t, COAP_DTLS_SPSK_SETUP_VERSION,
+    coap_session_get_app_data, coap_session_get_type, coap_session_set_app_data, coap_session_t, coap_session_type_t,
 };
 
-use super::{CoapRequestHandle, CoapSessionCommon, CoapSessionInner, CoapSessionInnerProvider};
-use crate::context::CoapContextInner;
-use crate::crypto::{CoapCryptoProviderResponse, CoapCryptoPskData};
+use crate::types::CoapAppDataRef;
 use crate::types::DropInnerExclusively;
-use crate::{
-    context::CoapContext,
-    crypto::{dtls_ih_callback, CoapClientCryptoProvider, CoapCryptoPskIdentity, CoapCryptoPskInfo},
-    error::{MessageConversionError, SessionCreationError, SessionGetAppDataError},
-    message::{CoapMessage, CoapMessageCommon},
-    protocol::CoapToken,
-    request::{CoapRequest, CoapResponse},
-    types::{CoapAddress, CoapAppDataRef, CoapMessageId, CoapProtocol, IfIndex, MaxRetransmit},
-};
+
+use super::{CoapSessionCommon, CoapSessionInner, CoapSessionInnerProvider};
 
 impl DropInnerExclusively for CoapServerSession<'_> {
-    fn drop_exclusively(mut self) {
+    fn drop_exclusively(self) {
         self.inner.drop_exclusively();
     }
 }
@@ -63,13 +35,12 @@ impl Drop for CoapServerSessionInner<'_> {
 /// Representation of a server-side CoAP session.
 #[derive(Debug, Clone)]
 pub struct CoapServerSession<'a> {
-    pub(super) inner: CoapAppDataRef<CoapServerSessionInner<'a>>,
+    inner: CoapAppDataRef<CoapServerSessionInner<'a>>,
 }
 
 #[derive(Debug)]
 pub struct CoapServerSessionInner<'a> {
     inner: CoapSessionInner<'a>,
-    crypto_current_data: Option<CoapCryptoPskInfo>,
 }
 
 impl CoapServerSession<'_> {
@@ -101,22 +72,8 @@ impl CoapServerSession<'_> {
             coap_session_type_t::COAP_SESSION_TYPE_CLIENT => {
                 panic!("attempted to create server session from raw client session")
             },
-            coap_session_type_t::COAP_SESSION_TYPE_SERVER => {
-                let psk_identity = coap_session_get_psk_identity(raw_session).as_ref();
-                let psk_key = coap_session_get_psk_key(raw_session).as_ref();
-                let crypto_info = psk_identity.zip(psk_key).map(|(identity, key)| CoapCryptoPskInfo {
-                    identity: Box::from(std::slice::from_raw_parts(identity.s, identity.length)),
-                    key: Box::from(std::slice::from_raw_parts(key.s, key.length)),
-                });
-                CoapServerSessionInner {
-                    inner,
-                    crypto_current_data: crypto_info,
-                }
-            },
-            coap_session_type_t::COAP_SESSION_TYPE_HELLO => CoapServerSessionInner {
-                inner,
-                crypto_current_data: None,
-            },
+            coap_session_type_t::COAP_SESSION_TYPE_SERVER => CoapServerSessionInner { inner },
+            coap_session_type_t::COAP_SESSION_TYPE_HELLO => CoapServerSessionInner { inner },
             _ => unreachable!("unknown session type"),
         };
         let session_ref = CoapAppDataRef::new(session_inner);

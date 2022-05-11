@@ -11,6 +11,9 @@ use std::{
     fmt::{Display, Formatter},
 };
 
+use num_derive::FromPrimitive;
+use num_traits::FromPrimitive;
+
 use libcoap_sys::{
     coap_option_num_t, coap_pdu_code_t, coap_pdu_type_t,
     coap_pdu_type_t::{COAP_MESSAGE_ACK, COAP_MESSAGE_CON, COAP_MESSAGE_NON, COAP_MESSAGE_RST},
@@ -30,8 +33,6 @@ use libcoap_sys::{
     COAP_OPTION_OBSERVE, COAP_OPTION_PROXY_SCHEME, COAP_OPTION_PROXY_URI, COAP_OPTION_SIZE1, COAP_OPTION_SIZE2,
     COAP_OPTION_URI_HOST, COAP_OPTION_URI_PATH, COAP_OPTION_URI_PORT, COAP_OPTION_URI_QUERY,
 };
-use num_derive::FromPrimitive;
-use num_traits::FromPrimitive;
 
 use crate::error::{MessageCodeError, UnknownOptionError};
 
@@ -519,10 +520,14 @@ pub(crate) fn encode_var_len_u32(val: u32) -> Box<[u8]> {
     ret_val.into_boxed_slice()
 }
 
+// Kept for consistency
+#[allow(unused)]
 pub(crate) fn decode_var_len_u64(val: &[u8]) -> u64 {
     u64::from_be_bytes(convert_to_fixed_size_slice(8, val)[..8].try_into().unwrap())
 }
 
+// Kept for consistency
+#[allow(unused)]
 pub(crate) fn encode_var_len_u64(val: u64) -> Box<[u8]> {
     // I really hope that rust accounts for endianness here.
     let bytes_to_discard = val.leading_zeros() / 8;
@@ -543,6 +548,8 @@ pub(crate) fn encode_var_len_u16(val: u16) -> Box<[u8]> {
     ret_val.into_boxed_slice()
 }
 
+// Kept for consistency
+#[allow(unused)]
 pub(crate) fn decode_var_len_u8(val: &[u8]) -> u16 {
     u16::from_be_bytes(convert_to_fixed_size_slice(1, val)[..1].try_into().unwrap())
 }
