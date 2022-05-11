@@ -4,6 +4,7 @@
  * Copyright (c) 2022 The NAMIB Project Developers, all rights reserved.
  * See the README as well as the LICENSE file for more information.
  */
+use libc::c_int;
 use std::{
     any::Any,
     cell::RefCell,
@@ -18,7 +19,9 @@ use std::{
 use libcoap_sys::{
     coap_delete_resource, coap_new_str_const, coap_pdu_t, coap_pdu_type_t::COAP_MESSAGE_RST,
     coap_register_request_handler, coap_resource_get_uri_path, coap_resource_get_userdata, coap_resource_init,
+    coap_resource_notify_observers, coap_resource_set_get_observable, coap_resource_set_mode,
     coap_resource_set_userdata, coap_resource_t, coap_send_rst, coap_session_t, coap_string_t,
+    COAP_RESOURCE_FLAGS_NOTIFY_CON, COAP_RESOURCE_FLAGS_NOTIFY_NON, COAP_RESOURCE_FLAGS_RELEASE_URI,
 };
 
 use crate::message::CoapMessageCommon;
@@ -236,10 +239,19 @@ impl<D: Any + ?Sized + Debug> CoapResource<D> {
     ///
     /// Handlers that are associated with this resource have to be able to take a reference to the
     /// provided `user_data` value as their first value.
-    pub fn new<C: Into<Rc<D>>>(uri_path: &str, user_data: C) -> CoapResource<D> {
+    ///
+    /// The `notify_con` parameter specifies whether observe notifications originating from this
+    /// resource are sent as confirmable or non-confirmable.
+    pub fn new<C: Into<Rc<D>>>(uri_path: &str, user_data: C, notify_con: bool) -> CoapResource<D> {
         let inner = unsafe {
             let uri_path = coap_new_str_const(uri_path.as_ptr(), uri_path.len());
-            let raw_resource = coap_resource_init(uri_path, 0);
+            let raw_resource = coap_resource_init(
+                uri_path,
+                (COAP_RESOURCE_FLAGS_RELEASE_URI
+                    | (notify_con
+                        .then(|| COAP_RESOURCE_FLAGS_NOTIFY_CON)
+                        .unwrap_or(COAP_RESOURCE_FLAGS_NOTIFY_NON))) as i32,
+            );
             let inner = CoapAppDataRef::new(CoapResourceInner {
                 raw_resource,
                 user_data: user_data.into(),
@@ -249,6 +261,21 @@ impl<D: Any + ?Sized + Debug> CoapResource<D> {
             inner
         };
         Self::from(inner)
+    }
+
+    pub fn notify_observers(&self) -> bool {
+        // SAFETY: Resource is valid as long as CoapResourceInner exists, query is currently unused.
+        unsafe { coap_resource_notify_observers(self.inner.borrow_mut().raw_resource, std::ptr::null_mut()) != 0 }
+    }
+
+    pub fn set_get_observable(&self, observable: bool) {
+        // SAFETY: Resource is valid as long as CoapResourceInner exists, query is currently unused.
+        unsafe { coap_resource_set_get_observable(self.inner.borrow_mut().raw_resource, observable as c_int) }
+    }
+
+    pub fn set_observe_notify_confirmable(&self, confirmable: bool) {
+        // SAFETY: Resource is valid as long as CoapResourceInner exists, query is currently unused.
+        unsafe { coap_resource_set_mode(self.inner.borrow_mut().raw_resource, confirmable as c_int) }
     }
 
     /// Returns the user data associated with this resource.

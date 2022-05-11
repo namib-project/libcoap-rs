@@ -4,6 +4,7 @@
  * Copyright (c) 2022 The NAMIB Project Developers, all rights reserved.
  * See the README as well as the LICENSE file for more information.
  */
+use libc::c_uint;
 use std::rc::Weak;
 use std::{
     any::Any,
@@ -24,17 +25,21 @@ use std::{
 };
 
 use libcoap_sys::{
-    coap_add_resource, coap_bin_const_t, coap_can_exit, coap_context_set_block_mode, coap_context_set_psk2,
-    coap_context_t, coap_dtls_cpsk_info_t, coap_dtls_cpsk_t, coap_dtls_spsk_info_t, coap_dtls_spsk_t,
-    coap_free_context, coap_get_app_data, coap_io_process, coap_new_client_session, coap_new_client_session_psk2,
-    coap_new_context,
+    coap_add_resource, coap_bin_const_t, coap_can_exit, coap_context_get_csm_max_message_size,
+    coap_context_get_csm_timeout, coap_context_get_max_handshake_sessions, coap_context_get_max_idle_sessions,
+    coap_context_get_session_timeout, coap_context_set_block_mode, coap_context_set_csm_max_message_size,
+    coap_context_set_csm_timeout, coap_context_set_keepalive, coap_context_set_max_handshake_sessions,
+    coap_context_set_max_idle_sessions, coap_context_set_psk2, coap_context_set_session_timeout, coap_context_t,
+    coap_dtls_cpsk_info_t, coap_dtls_cpsk_t, coap_dtls_spsk_info_t, coap_dtls_spsk_t, coap_event_t, coap_free_context,
+    coap_get_app_data, coap_io_process, coap_new_client_session, coap_new_client_session_psk2, coap_new_context,
     coap_proto_t::{COAP_PROTO_DTLS, COAP_PROTO_UDP},
     coap_register_response_handler, coap_session_get_app_data, coap_session_release, coap_set_app_data,
-    COAP_BLOCK_SINGLE_BODY, COAP_BLOCK_USE_LIBCOAP, COAP_DTLS_SPSK_SETUP_VERSION, COAP_IO_WAIT,
+    coap_set_event_handler, COAP_BLOCK_SINGLE_BODY, COAP_BLOCK_USE_LIBCOAP, COAP_DTLS_SPSK_SETUP_VERSION, COAP_IO_WAIT,
 };
 
-use crate::session::CoapClientSession;
-use crate::types::{DropInnerExclusively, FfiPassthroughRefContainer, FfiPassthroughWeakContainer};
+use crate::event::{event_handler_callback, CoapEventHandler};
+use crate::session::{CoapClientSession, CoapServerSession, CoapSession};
+use crate::types::{DropInnerExclusively, FfiPassthroughRef, FfiPassthroughRefContainer, FfiPassthroughWeakContainer};
 use crate::{
     crypto::{
         dtls_ih_callback, dtls_server_id_callback, dtls_server_sni_callback, CoapClientCryptoProvider,
@@ -60,6 +65,8 @@ pub struct CoapContextInner<'a> {
     /// Note that these are not necessarily all sessions there are. Most notably, server sessions are
     /// automatically created and managed by the underlying C library and are not stored here.
     client_sessions: Vec<CoapClientSession<'a>>,
+    server_sessions: Vec<CoapServerSession<'a>>,
+    event_handler: Option<Box<dyn CoapEventHandler>>,
     /// The provider for cryptography information for server-side sessions.
     crypto_provider: Option<Box<dyn CoapServerCryptoProvider>>,
     crypto_default_info: Option<CoapCryptoPskInfo>,
@@ -97,6 +104,8 @@ impl<'a> CoapContext<'a> {
             endpoints: Vec::new(),
             resources: Vec::new(),
             client_sessions: Vec::new(),
+            server_sessions: Vec::new(),
+            event_handler: None,
             crypto_provider: None,
             crypto_default_info: None,
             crypto_sni_info_container: Vec::new(),
@@ -115,10 +124,8 @@ impl<'a> CoapContext<'a> {
         });
 
         unsafe {
-            coap_set_app_data(
-                raw_context,
-                Box::into_raw(Box::new(RefCell::new(inner.downgrade()))) as *mut c_void,
-            );
+            coap_set_app_data(raw_context, inner.create_raw_weak() as *mut c_void);
+            coap_set_event_handler(raw_context, Some(event_handler_callback));
         }
 
         Ok(CoapContext { inner })
@@ -128,30 +135,65 @@ impl<'a> CoapContext<'a> {
         self.inner.borrow_mut().client_sessions.push(session);
     }
 
-    /// Performs currently outstanding IO operations, waiting for a maximum duration of `timeout`.
-    ///
-    /// This is the function where most of the IO operations made using this library are actually
-    /// executed. It is recommended to call this function in a loop for as long as the CoAP context
-    /// is used.
-    pub fn do_io(&mut self, timeout: Option<Duration>) -> Result<Duration, IoProcessError> {
-        let mut inner_ref = self.inner.borrow_mut();
-        let timeout = if let Some(timeout) = timeout {
-            let mut temp_timeout = u32::try_from(timeout.as_millis()).unwrap_or(u32::MAX);
-            if timeout.subsec_micros() > 0 || timeout.subsec_nanos() > 0 {
-                temp_timeout = temp_timeout.saturating_add(1);
+    pub(crate) unsafe fn from_raw(raw_context: *mut coap_context_t) -> CoapContext<'a> {
+        assert!(!raw_context.is_null());
+        let inner = FfiPassthroughRefContainer::clone_raw_weak(
+            coap_get_app_data(raw_context) as *mut FfiPassthroughWeakContainer<CoapContextInner>
+        );
+
+        CoapContext { inner }
+    }
+
+    pub(crate) fn handle_event(&self, mut session: CoapSession<'a>, event: coap_event_t) {
+        let inner_ref = &mut *self.inner.borrow_mut();
+        // Call event handler for event.
+        if let Some(handler) = &mut inner_ref.event_handler {
+            match event {
+                coap_event_t::COAP_EVENT_DTLS_CLOSED => handler.handle_dtls_closed(&mut session),
+                coap_event_t::COAP_EVENT_DTLS_CONNECTED => handler.handle_dtls_connected(&mut session),
+                coap_event_t::COAP_EVENT_DTLS_RENEGOTIATE => handler.handle_dtls_renegotiate(&mut session),
+                coap_event_t::COAP_EVENT_DTLS_ERROR => handler.handle_dtls_error(&mut session),
+                coap_event_t::COAP_EVENT_TCP_CONNECTED => handler.handle_tcp_connected(&mut session),
+                coap_event_t::COAP_EVENT_TCP_CLOSED => handler.handle_tcp_closed(&mut session),
+                coap_event_t::COAP_EVENT_TCP_FAILED => handler.handle_tcp_failed(&mut session),
+                coap_event_t::COAP_EVENT_SESSION_CONNECTED => handler.handle_session_connected(&mut session),
+                coap_event_t::COAP_EVENT_SESSION_CLOSED => handler.handle_session_closed(&mut session),
+                coap_event_t::COAP_EVENT_SESSION_FAILED => handler.handle_session_failed(&mut session),
+                coap_event_t::COAP_EVENT_PARTIAL_BLOCK => handler.handle_partial_block(&mut session),
+                coap_event_t::COAP_EVENT_SERVER_SESSION_NEW => {
+                    if let CoapSession::Server(server_session) = &mut session {
+                        handler.handle_server_session_new(server_session)
+                    } else {
+                        panic!("server-side session event fired for non-server-side session");
+                    }
+                },
+                coap_event_t::COAP_EVENT_SERVER_SESSION_DEL => {
+                    if let CoapSession::Server(server_session) = &mut session {
+                        handler.handle_server_session_del(server_session)
+                    } else {
+                        panic!("server-side session event fired for non-server-side session");
+                    }
+                },
+                _ => {
+                    // TODO probably a log message is justified here.
+                },
             }
-            temp_timeout
-        } else {
-            COAP_IO_WAIT
-        };
-        let raw_ctx_ptr = inner_ref.raw_context;
-        let lend_handle = self.inner.lend_ref_mut(&mut inner_ref);
-        let spent_time = unsafe { coap_io_process(raw_ctx_ptr, timeout) };
-        lend_handle.unlend();
-        if spent_time < 0 {
-            return Err(IoProcessError::Unknown);
         }
-        Ok(Duration::from_millis(spent_time.unsigned_abs() as u64))
+        // For server-side sessions: Ensure that server-side session wrappers are either kept in memory or dropped when needed.
+        if let CoapSession::Server(serv_sess) = session {
+            match event {
+                coap_event_t::COAP_EVENT_SERVER_SESSION_NEW => inner_ref.server_sessions.push(serv_sess),
+                coap_event_t::COAP_EVENT_SERVER_SESSION_DEL => {
+                    std::mem::drop(inner_ref.server_sessions.remove(
+                        inner_ref.server_sessions.iter().position(|v| v.eq(&serv_sess)).expect(
+                            "attempted to remove session wrapper from context that was never associated with it",
+                        ),
+                    ));
+                    serv_sess.drop_exclusively();
+                },
+                _ => {},
+            }
+        }
     }
 }
 
@@ -254,13 +296,141 @@ impl CoapContext<'_> {
         }
     }
 
+    /// Performs currently outstanding IO operations, waiting for a maximum duration of `timeout`.
+    ///
+    /// This is the function where most of the IO operations made using this library are actually
+    /// executed. It is recommended to call this function in a loop for as long as the CoAP context
+    /// is used.
+    pub fn do_io(&mut self, timeout: Option<Duration>) -> Result<Duration, IoProcessError> {
+        let mut inner_ref = self.inner.borrow_mut();
+        // Round up the duration if it is not a clean number of seconds.
+        let timeout = if let Some(timeout) = timeout {
+            let mut temp_timeout = u32::try_from(timeout.as_millis()).unwrap_or(u32::MAX);
+            if timeout.subsec_micros() > 0 || timeout.subsec_nanos() > 0 {
+                temp_timeout = temp_timeout.saturating_add(1);
+            }
+            temp_timeout
+        } else {
+            // If no timeout is set, wait indefinitely.
+            COAP_IO_WAIT
+        };
+        let raw_ctx_ptr = inner_ref.raw_context;
+        // Lend the current mutable reference to potential callers of CoapContext functions on the
+        // other side of the FFI barrier.
+        let lend_handle = self.inner.lend_ref_mut(&mut inner_ref);
+        // SAFETY: Properly initialized CoapContext always has a valid raw_context that is not
+        // deleted until the CoapContextInner is dropped.
+        let spent_time = unsafe { coap_io_process(raw_ctx_ptr, timeout) };
+        // Demand the returnal of the lent handle, ensuring that the mutable reference is no longer
+        // used anywhere.
+        lend_handle.unlend();
+        // Check for errors.
+        if spent_time < 0 {
+            return Err(IoProcessError::Unknown);
+        }
+        // Return with duration of call.
+        Ok(Duration::from_millis(spent_time.unsigned_abs() as u64))
+    }
+
+    pub fn session_timeout(&self) -> Duration {
+        // SAFETY: Properly initialized CoapContext always has a valid raw_context that is not
+        // deleted until the CoapContextInner is dropped.
+        let timeout = unsafe { coap_context_get_session_timeout(self.inner.borrow().raw_context) };
+        Duration::from_secs(timeout as u64)
+    }
+
+    pub fn set_session_timeout(&self, timeout: Duration) {
+        // SAFETY: Properly initialized CoapContext always has a valid raw_context that is not
+        // deleted until the CoapContextInner is dropped.
+        unsafe {
+            coap_context_set_session_timeout(
+                self.inner.borrow_mut().raw_context,
+                timeout
+                    .as_secs()
+                    .try_into()
+                    .expect("provided session timeout is too large for libcoap (> u32::MAX)"),
+            )
+        }
+    }
+
+    pub fn max_handshake_sessions(&self) -> c_uint {
+        // SAFETY: Properly initialized CoapContext always has a valid raw_context that is not
+        // deleted until the CoapContextInner is dropped.
+        unsafe { coap_context_get_max_handshake_sessions(self.inner.borrow().raw_context) }
+    }
+
+    pub fn set_max_handshake_sessions(&self, max_handshake_sessions: c_uint) {
+        // SAFETY: Properly initialized CoapContext always has a valid raw_context that is not
+        // deleted until the CoapContextInner is dropped.
+        unsafe { coap_context_set_max_handshake_sessions(self.inner.borrow().raw_context, max_handshake_sessions) };
+    }
+
+    pub fn max_idle_sessions(&self) -> c_uint {
+        // SAFETY: Properly initialized CoapContext always has a valid raw_context that is not
+        // deleted until the CoapContextInner is dropped.
+        unsafe { coap_context_get_max_idle_sessions(self.inner.borrow().raw_context) }
+    }
+
+    pub fn set_max_idle_sessions(&self, max_idle_sessions: c_uint) {
+        // SAFETY: Properly initialized CoapContext always has a valid raw_context that is not
+        // deleted until the CoapContextInner is dropped.
+        unsafe { coap_context_set_max_idle_sessions(self.inner.borrow().raw_context, max_idle_sessions) };
+    }
+
+    pub fn csm_max_message_size(&self) -> u32 {
+        // SAFETY: Properly initialized CoapContext always has a valid raw_context that is not
+        // deleted until the CoapContextInner is dropped.
+        unsafe { coap_context_get_csm_max_message_size(self.inner.borrow().raw_context) }
+    }
+
+    pub fn set_csm_max_message_size(&self, csm_max_message_size: u32) {
+        // SAFETY: Properly initialized CoapContext always has a valid raw_context that is not
+        // deleted until the CoapContextInner is dropped.
+        unsafe { coap_context_set_csm_max_message_size(self.inner.borrow().raw_context, csm_max_message_size) };
+    }
+
+    pub fn csm_timeout(&self) -> Duration {
+        // SAFETY: Properly initialized CoapContext always has a valid raw_context that is not
+        // deleted until the CoapContextInner is dropped.
+        let timeout = unsafe { coap_context_get_csm_timeout(self.inner.borrow().raw_context) };
+        Duration::from_secs(timeout as u64)
+    }
+
+    pub fn set_csm_timeout(&self, csm_timeout: Duration) {
+        // SAFETY: Properly initialized CoapContext always has a valid raw_context that is not
+        // deleted until the CoapContextInner is dropped.
+        unsafe {
+            coap_context_set_csm_timeout(
+                self.inner.borrow().raw_context,
+                csm_timeout
+                    .as_secs()
+                    .try_into()
+                    .expect("provided session timeout is too large for libcoap (> u32::MAX)"),
+            )
+        };
+    }
+
+    pub fn set_keepalive(&self, seconds: c_uint) {
+        // SAFETY: Properly initialized CoapContext always has a valid raw_context that is not
+        // deleted until the CoapContextInner is dropped.
+        unsafe { coap_context_set_keepalive(self.inner.borrow().raw_context, seconds) };
+    }
+
+    pub(crate) fn provide_default_info(&self) -> Option<CoapCryptoPskInfo> {
+        self.inner
+            .borrow_mut()
+            .crypto_provider
+            .as_mut()
+            .map(|provider| provider.provide_default_info())
+    }
+
     /// Provide a raw key for a given identity using the CoapContext's set server crypto provider.
     ///
     /// # Safety
     /// Returned pointer should only be used if the context is borrowed.
     /// Calling this function may override previous returned values of this function.
     pub(crate) unsafe fn provide_raw_key_for_identity(
-        &mut self,
+        &self,
         identity: &CoapCryptoPskIdentity,
     ) -> Option<*const coap_bin_const_t> {
         let inner_ref = &mut *self.inner.borrow_mut();
@@ -291,7 +461,7 @@ impl CoapContext<'_> {
     /// # Safety
     /// Returned pointer should only be used if the context is borrowed.
     /// Calling this function may override previous returned values of this function.
-    pub unsafe fn provide_raw_hint_for_sni(&mut self, sni: &str) -> Option<*const coap_dtls_spsk_info_t> {
+    pub(crate) unsafe fn provide_raw_hint_for_sni(&self, sni: &str) -> Option<*const coap_dtls_spsk_info_t> {
         let inner_ref = &mut *self.inner.borrow_mut();
         match inner_ref.crypto_provider.as_mut().map(|v| v.provide_hint_for_sni(sni)) {
             Some(CoapCryptoProviderResponse::UseNew(new_info)) => {
@@ -319,14 +489,6 @@ impl CoapContext<'_> {
         }
     }
 
-    pub fn provide_default_info(&mut self) -> Option<CoapCryptoPskInfo> {
-        self.inner
-            .borrow_mut()
-            .crypto_provider
-            .as_mut()
-            .map(|provider| provider.provide_default_info())
-    }
-
     /// Returns a reference to the raw context contained in this struct.
     ///
     /// # Safety
@@ -340,7 +502,7 @@ impl CoapContext<'_> {
     /// - Calling `coap_free_context()` on this context (for obvious reasons, this will probably
     ///   cause a segfault if you don't immediately [std::mem::forget()] the CoapContext and never
     ///   use anything related to the context again, but why would you do that?)  
-    pub unsafe fn as_raw_context(&self) -> &coap_context_t {
+    pub(crate) unsafe fn as_raw_context(&self) -> &coap_context_t {
         // SAFETY: raw_context is checked to be a valid pointer on struct instantiation, cannot be
         // freed by anything outside of here (assuming the contract of this function is kept), and
         // the default (elided) lifetimes are correct (the pointer is valid as long as the endpoint
@@ -361,7 +523,7 @@ impl CoapContext<'_> {
     /// - Calling `coap_free_context()` on this context (for obvious reasons, this will probably
     ///   cause a segfault if you don't immediately [std::mem::forget()] the CoapContext and never
     ///   use anything related to the context again, but why would you do that?)  
-    pub unsafe fn as_mut_raw_context(&mut self) -> &mut coap_context_t {
+    pub(crate) unsafe fn as_mut_raw_context(&mut self) -> &mut coap_context_t {
         // SAFETY: raw_context is checked to be a valid pointer on struct instantiation, cannot be
         // freed by anything outside of here (assuming the contract of this function is kept), and
         // the default (elided) lifetimes are correct (the pointer is valid as long as the endpoint
@@ -374,15 +536,20 @@ impl CoapContext<'_> {
 
 impl Drop for CoapContextInner<'_> {
     fn drop(&mut self) {
-        // Clear endpoints because coap_free_context() would free their underlying raw structs.
-        self.endpoints.clear();
+        // Clean up sessions while the remainder of the context is still available.
         for session in std::mem::take(&mut self.client_sessions).into_iter() {
             session.drop_exclusively();
         }
+        for session in std::mem::take(&mut self.server_sessions).into_iter() {
+            session.drop_exclusively();
+        }
+        // Clear endpoints because coap_free_context() would free their underlying raw structs.
+        self.endpoints.clear();
+        // Extract reference to CoapContextInner from raw context and drop it.
         // SAFETY: Value is set upon construction of the inner context and never deleted.
         unsafe {
-            std::mem::drop(Box::from_raw(
-                coap_get_app_data(self.raw_context) as *mut RefCell<FfiPassthroughWeakContainer<CoapContextInner>>
+            std::mem::drop(FfiPassthroughWeakContainer::<CoapContextInner>::from_raw_box(
+                coap_get_app_data(self.raw_context) as *mut FfiPassthroughWeakContainer<CoapContextInner>,
             ))
         }
         // Attempt to regain sole ownership over all resources.

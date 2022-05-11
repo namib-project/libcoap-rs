@@ -1,3 +1,4 @@
+use std::thread::sleep;
 use std::{
     net::{SocketAddr, UdpSocket},
     rc::Rc,
@@ -20,7 +21,7 @@ fn run_basic_test_server(server_address: SocketAddr) {
     let mut context = CoapContext::new().unwrap();
     context.add_endpoint_udp(server_address).unwrap();
     let request_completed = Rc::new(AtomicBool::new(false));
-    let resource = CoapResource::new("test1", request_completed.clone());
+    let resource = CoapResource::new("test1", request_completed.clone(), false);
     resource.set_method_handler(
         CoapRequestCode::Get,
         Some(CoapRequestHandler::new(
