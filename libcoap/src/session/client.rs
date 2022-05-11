@@ -281,3 +281,15 @@ impl<'a> CoapSessionInnerProvider<'a> for CoapClientSession<'a> {
         RefMut::map(self.inner.borrow_mut(), |v| &mut v.inner)
     }
 }
+
+impl<'a, T: CoapSessionCommon<'a>> PartialEq<T> for CoapClientSession<'_> {
+    fn eq(&self, other: &T) -> bool {
+        // SAFETY: Pointers are only compared, never accessed.
+        self.if_index() == other.if_index()
+            && unsafe { self.raw_session() == other.raw_session() }
+            && self.addr_local() == other.addr_local()
+            && self.addr_remote() == other.addr_remote()
+    }
+}
+
+impl Eq for CoapClientSession<'_> {}

@@ -45,7 +45,7 @@ use crate::{
 
 pub use self::client::CoapClientSession;
 pub(crate) use self::client::*;
-pub(self) use self::sealed::CoapSessionInnerProvider;
+pub(self) use self::sealed::{CoapSessionCommonInternal, CoapSessionInnerProvider};
 pub use self::server::CoapServerSession;
 pub(crate) use self::server::*;
 
@@ -83,12 +83,29 @@ mod sealed {
 
         fn inner_mut<'b>(&'b mut self) -> RefMut<'b, CoapSessionInner<'a>>;
     }
+
+    pub trait CoapSessionCommonInternal<'a>: CoapSessionInnerProvider<'a> {
+        fn add_response(&mut self, pdu: CoapResponse) {
+            let token = pdu.token();
+            if let Some(token) = token {
+                if self.inner_ref().received_responses.contains_key(token) {
+                    self.inner_mut()
+                        .received_responses
+                        .get_mut(token)
+                        .unwrap()
+                        .push_back(pdu);
+                }
+            }
+        }
+    }
+
+    impl<'a, T: CoapSessionInnerProvider<'a>> CoapSessionCommonInternal<'a> for T {}
 }
 
-impl<'a, T: CoapSessionInnerProvider<'a>> CoapSessionCommon<'a> for T {}
+impl<'a, T: CoapSessionCommonInternal<'a>> CoapSessionCommon<'a> for T {}
 
 /// Trait for functions that are common between client and server sessions.
-pub trait CoapSessionCommon<'a>: CoapSessionInnerProvider<'a> {
+pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     /// Returns the application specific data stored alongside this session.
     fn app_data<T: Any>(&self) -> Result<Option<Rc<T>>, SessionGetAppDataError> {
         self.inner_ref()
@@ -325,19 +342,6 @@ pub trait CoapSessionCommon<'a>: CoapSessionInnerProvider<'a> {
         self.inner_mut().received_responses.remove(&handle.token);
     }
 
-    fn add_response(&mut self, pdu: CoapResponse) {
-        let token = pdu.token();
-        if let Some(token) = token {
-            if self.inner_ref().received_responses.contains_key(token) {
-                self.inner_mut()
-                    .received_responses
-                    .get_mut(token)
-                    .unwrap()
-                    .push_back(pdu);
-            }
-        }
-    }
-
     /// Returns a mutable reference to the underlying raw session.
     ///
     /// # Safety
@@ -419,6 +423,17 @@ impl<'a> From<CoapServerSession<'a>> for CoapSession<'a> {
         CoapSession::Server(session)
     }
 }
+
+impl PartialEq for CoapSession<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        match self {
+            CoapSession::Client(cli_sess) => cli_sess.eq(other),
+            CoapSession::Server(srv_sess) => srv_sess.eq(other),
+        }
+    }
+}
+
+impl Eq for CoapSession<'_> {}
 
 #[derive(Debug)]
 pub struct CoapSessionInner<'a> {
