@@ -72,6 +72,8 @@ pub trait CoapClientCryptoProvider: Debug {
         hint: &CoapCryptoPskIdentity,
     ) -> CoapCryptoProviderResponse<Box<CoapCryptoPskData>>;
 
+    /// Provide the initial cryptographic information for client-side sessions associated with this
+    /// provider.
     fn provide_default_info(&mut self) -> CoapCryptoPskInfo;
 }
 
@@ -100,7 +102,8 @@ pub trait CoapServerCryptoProvider: Debug {
         CoapCryptoProviderResponse::UseCurrent
     }
 
-    /// Provide the default PSK identity hint and key data that should be used for new sessions.
+    /// Provide the default PSK identity hint and key data that should be used for new server-side
+    /// sessions.
     ///
     /// Return a CoapCryptoProviderResponse corresponding to the cryptographic information that
     /// should be used.

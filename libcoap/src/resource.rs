@@ -23,7 +23,7 @@ use libcoap_sys::{
     COAP_RESOURCE_FLAGS_NOTIFY_CON, COAP_RESOURCE_FLAGS_NOTIFY_NON, COAP_RESOURCE_FLAGS_RELEASE_URI,
 };
 
-use crate::mem::{CoapAppDataRef, DropInnerExclusively};
+use crate::mem::{CoapFfiRcCell, DropInnerExclusively};
 use crate::message::CoapMessageCommon;
 use crate::protocol::CoapMessageCode;
 use crate::protocol::CoapMessageType;
@@ -84,7 +84,7 @@ pub unsafe fn prepare_resource_handler_data<'a, D: Any + ?Sized + Debug>(
     _raw_query: *const coap_string_t,
     raw_response_pdu: *mut coap_pdu_t,
 ) -> Result<(CoapResource<D>, CoapServerSession<'a>, CoapRequest, CoapResponse), MessageConversionError> {
-    let resource_tmp = CoapAppDataRef::clone_raw_weak(coap_resource_get_userdata(raw_resource));
+    let resource_tmp = CoapFfiRcCell::clone_raw_weak(coap_resource_get_userdata(raw_resource));
     let resource = CoapResource::from(resource_tmp);
     let session = CoapServerSession::from_raw(raw_session);
     let request = CoapMessage::from_raw_pdu(raw_incoming_pdu).and_then(CoapRequest::from_message);
@@ -133,7 +133,7 @@ pub trait UntypedCoapResource: Any + Debug {
 /// Representation of a CoapResource that can be requested from a server.
 #[derive(Debug)]
 pub struct CoapResource<D: Any + ?Sized + Debug> {
-    inner: CoapAppDataRef<CoapResourceInner<D>>,
+    inner: CoapFfiRcCell<CoapResourceInner<D>>,
 }
 
 /// Container for resource handlers for various CoAP methods.
@@ -245,7 +245,7 @@ impl<D: Any + ?Sized + Debug> CoapResource<D> {
                         .then(|| COAP_RESOURCE_FLAGS_NOTIFY_CON)
                         .unwrap_or(COAP_RESOURCE_FLAGS_NOTIFY_NON))) as i32,
             );
-            let inner = CoapAppDataRef::new(CoapResourceInner {
+            let inner = CoapFfiRcCell::new(CoapResourceInner {
                 raw_resource,
                 user_data: user_data.into(),
                 handlers: CoapResourceHandlers::default(),
@@ -287,7 +287,7 @@ impl<D: Any + ?Sized + Debug> CoapResource<D> {
     /// The supplied pointer must point to a valid [coap_resource_t](libcoap_sys::coap_resource_t)
     /// instance that has a `Rc<RefCell<CoapResourceInner<D>>>` as its user data.
     pub unsafe fn restore_from_raw(raw_resource: *mut coap_resource_t) -> CoapResource<D> {
-        let resource_tmp = CoapAppDataRef::clone_raw_weak(coap_resource_get_userdata(raw_resource));
+        let resource_tmp = CoapFfiRcCell::clone_raw_weak(coap_resource_get_userdata(raw_resource));
         let resource = CoapResource::from(resource_tmp);
         resource
     }
@@ -371,8 +371,8 @@ impl<D: Any + ?Sized + Debug> UntypedCoapResource for CoapResource<D> {
     }
 }
 
-impl<D: Any + ?Sized + Debug> From<CoapAppDataRef<CoapResourceInner<D>>> for CoapResource<D> {
-    fn from(raw_cell: CoapAppDataRef<CoapResourceInner<D>>) -> Self {
+impl<D: Any + ?Sized + Debug> From<CoapFfiRcCell<CoapResourceInner<D>>> for CoapResource<D> {
+    fn from(raw_cell: CoapFfiRcCell<CoapResourceInner<D>>) -> Self {
         CoapResource { inner: raw_cell }
     }
 }
@@ -381,7 +381,7 @@ impl<D: Any + ?Sized + Debug> Drop for CoapResourceInner<D> {
     fn drop(&mut self) {
         // SAFETY: We set the user data on creation of the inner resource, so it cannot be invalid.
         std::mem::drop(unsafe {
-            CoapAppDataRef::<CoapResourceInner<D>>::raw_ptr_to_weak(coap_resource_get_userdata(self.raw_resource))
+            CoapFfiRcCell::<CoapResourceInner<D>>::raw_ptr_to_weak(coap_resource_get_userdata(self.raw_resource))
         });
         // SAFETY: First argument is ignored, second argument is guaranteed to exist while the inner
         // resource exists.

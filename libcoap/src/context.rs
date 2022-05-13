@@ -21,7 +21,7 @@ use libcoap_sys::{
 };
 
 use crate::event::{event_handler_callback, CoapEventHandler};
-use crate::mem::{DropInnerExclusively, FfiPassthroughRefContainer, FfiPassthroughWeakContainer};
+use crate::mem::{CoapLendableFfiRcCell, CoapLendableFfiWeakCell, DropInnerExclusively};
 use crate::session::{CoapClientSession, CoapServerSession, CoapSession};
 use crate::{
     crypto::{
@@ -66,7 +66,7 @@ pub struct CoapContextInner<'a> {
 /// The equivalent to the [coap_context_t] type in libcoap.
 #[derive(Debug)]
 pub struct CoapContext<'a> {
-    inner: FfiPassthroughRefContainer<CoapContextInner<'a>>,
+    inner: CoapLendableFfiRcCell<CoapContextInner<'a>>,
 }
 
 impl<'a> CoapContext<'a> {
@@ -81,7 +81,7 @@ impl<'a> CoapContext<'a> {
             coap_context_set_block_mode(raw_context, (COAP_BLOCK_USE_LIBCOAP | COAP_BLOCK_SINGLE_BODY) as u8);
             coap_register_response_handler(raw_context, Some(session_response_handler));
         }
-        let inner = FfiPassthroughRefContainer::new(CoapContextInner {
+        let inner = CoapLendableFfiRcCell::new(CoapContextInner {
             raw_context,
             endpoints: Vec::new(),
             resources: Vec::new(),
@@ -106,7 +106,7 @@ impl<'a> CoapContext<'a> {
         });
 
         unsafe {
-            coap_set_app_data(raw_context, inner.create_raw_weak() as *mut c_void);
+            coap_set_app_data(raw_context, inner.create_raw_weak_box() as *mut c_void);
             coap_set_event_handler(raw_context, Some(event_handler_callback));
         }
 
@@ -119,8 +119,8 @@ impl<'a> CoapContext<'a> {
 
     pub(crate) unsafe fn from_raw(raw_context: *mut coap_context_t) -> CoapContext<'a> {
         assert!(!raw_context.is_null());
-        let inner = FfiPassthroughRefContainer::clone_raw_weak(
-            coap_get_app_data(raw_context) as *mut FfiPassthroughWeakContainer<CoapContextInner>
+        let inner = CoapLendableFfiRcCell::clone_raw_weak_box(
+            coap_get_app_data(raw_context) as *mut CoapLendableFfiWeakCell<CoapContextInner>
         );
 
         CoapContext { inner }
@@ -314,6 +314,8 @@ impl CoapContext<'_> {
         Ok(Duration::from_millis(spent_time.unsigned_abs() as u64))
     }
 
+    /// Return the duration that idle server-side sessions are kept alive if they are not referenced
+    /// or used anywhere else.
     pub fn session_timeout(&self) -> Duration {
         // SAFETY: Properly initialized CoapContext always has a valid raw_context that is not
         // deleted until the CoapContextInner is dropped.
@@ -321,6 +323,12 @@ impl CoapContext<'_> {
         Duration::from_secs(timeout as u64)
     }
 
+    /// Set the duration that idle server-side sessions are kept alive if they are not referenced or
+    /// used anywhere else.
+    ///
+    /// # Panics
+    /// Panics if the provided duration is too large to be provided to libcoap (larger than a
+    /// [libc::c_uint]).
     pub fn set_session_timeout(&self, timeout: Duration) {
         // SAFETY: Properly initialized CoapContext always has a valid raw_context that is not
         // deleted until the CoapContextInner is dropped.
@@ -335,42 +343,68 @@ impl CoapContext<'_> {
         }
     }
 
+    /// Returns the maximum number of server-side sessions that can concurrently be in a handshake
+    /// state.
+    ///
+    /// If this number is exceeded, no new handshakes will be accepted.
     pub fn max_handshake_sessions(&self) -> c_uint {
         // SAFETY: Properly initialized CoapContext always has a valid raw_context that is not
         // deleted until the CoapContextInner is dropped.
         unsafe { coap_context_get_max_handshake_sessions(self.inner.borrow().raw_context) }
     }
 
+    /// Sets the maximum number of server-side sessions that can concurrently be in a handshake
+    /// state.
+    ///
+    /// If this number is exceeded, no new handshakes will be accepted.
     pub fn set_max_handshake_sessions(&self, max_handshake_sessions: c_uint) {
         // SAFETY: Properly initialized CoapContext always has a valid raw_context that is not
         // deleted until the CoapContextInner is dropped.
         unsafe { coap_context_set_max_handshake_sessions(self.inner.borrow().raw_context, max_handshake_sessions) };
     }
 
+    /// Returns the maximum number of idle server-side sessions for this context.
+    ///
+    /// If this number is exceeded, the oldest unreferenced session will be freed.
     pub fn max_idle_sessions(&self) -> c_uint {
         // SAFETY: Properly initialized CoapContext always has a valid raw_context that is not
         // deleted until the CoapContextInner is dropped.
         unsafe { coap_context_get_max_idle_sessions(self.inner.borrow().raw_context) }
     }
 
+    /// Sets the maximum number of idle server-side sessions for this context.
+    ///
+    /// If this number is exceeded, the oldest unreferenced session will be freed.
     pub fn set_max_idle_sessions(&self, max_idle_sessions: c_uint) {
         // SAFETY: Properly initialized CoapContext always has a valid raw_context that is not
         // deleted until the CoapContextInner is dropped.
         unsafe { coap_context_set_max_idle_sessions(self.inner.borrow().raw_context, max_idle_sessions) };
     }
 
+    /// Returns the maximum size for Capabilities and Settings Messages
+    ///
+    /// CSMs are used in CoAP over TCP as specified in
+    /// [RFC 8323, Section 5.3](https://datatracker.ietf.org/doc/html/rfc8323#section-5.3).
     pub fn csm_max_message_size(&self) -> u32 {
         // SAFETY: Properly initialized CoapContext always has a valid raw_context that is not
         // deleted until the CoapContextInner is dropped.
         unsafe { coap_context_get_csm_max_message_size(self.inner.borrow().raw_context) }
     }
 
+    /// Sets the maximum size for Capabilities and Settings Messages
+    ///
+    /// CSMs are used in CoAP over TCP as specified in
+    /// [RFC 8323, Section 5.3](https://datatracker.ietf.org/doc/html/rfc8323#section-5.3).
     pub fn set_csm_max_message_size(&self, csm_max_message_size: u32) {
         // SAFETY: Properly initialized CoapContext always has a valid raw_context that is not
         // deleted until the CoapContextInner is dropped.
         unsafe { coap_context_set_csm_max_message_size(self.inner.borrow().raw_context, csm_max_message_size) };
     }
 
+    /// Returns the timeout for Capabilities and Settings Messages
+    ///
+    /// CSMs are used in CoAP over TCP as specified in
+    /// [RFC 8323, Section 5.3](https://datatracker.ietf.org/doc/html/rfc8323#section-5.3).
     pub fn csm_timeout(&self) -> Duration {
         // SAFETY: Properly initialized CoapContext always has a valid raw_context that is not
         // deleted until the CoapContextInner is dropped.
@@ -378,6 +412,10 @@ impl CoapContext<'_> {
         Duration::from_secs(timeout as u64)
     }
 
+    /// Sets the timeout for Capabilities and Settings Messages
+    ///
+    /// CSMs are used in CoAP over TCP as specified in
+    /// [RFC 8323, Section 5.3](https://datatracker.ietf.org/doc/html/rfc8323#section-5.3).
     pub fn set_csm_timeout(&self, csm_timeout: Duration) {
         // SAFETY: Properly initialized CoapContext always has a valid raw_context that is not
         // deleted until the CoapContextInner is dropped.
@@ -392,10 +430,27 @@ impl CoapContext<'_> {
         };
     }
 
-    pub fn set_keepalive(&self, seconds: c_uint) {
+    /// Sets the number of seconds to wait before sending a CoAP keepalive message for idle
+    /// sessions.
+    ///
+    /// If the provided value is None, CoAP-level keepalive messages will be disabled.
+    ///
+    /// # Panics
+    /// Panics if the provided duration is too large to be provided to libcoap (larger than a
+    /// [libc::c_uint]).
+    pub fn set_keepalive(&self, timeout: Option<Duration>) {
         // SAFETY: Properly initialized CoapContext always has a valid raw_context that is not
         // deleted until the CoapContextInner is dropped.
-        unsafe { coap_context_set_keepalive(self.inner.borrow().raw_context, seconds) };
+        unsafe {
+            coap_context_set_keepalive(
+                self.inner.borrow().raw_context,
+                timeout.map_or(0, |v| {
+                    v.as_secs()
+                        .try_into()
+                        .expect("provided keepalive time is too large for libcoap (> c_uint)")
+                }),
+            )
+        };
     }
 
     /// Provide a raw key for a given identity using the CoapContext's set server crypto provider.
@@ -524,8 +579,8 @@ impl Drop for CoapContextInner<'_> {
         // Extract reference to CoapContextInner from raw context and drop it.
         // SAFETY: Value is set upon construction of the inner context and never deleted.
         unsafe {
-            std::mem::drop(FfiPassthroughWeakContainer::<CoapContextInner>::from_raw_box(
-                coap_get_app_data(self.raw_context) as *mut FfiPassthroughWeakContainer<CoapContextInner>,
+            std::mem::drop(CoapLendableFfiWeakCell::<CoapContextInner>::from_raw_box(
+                coap_get_app_data(self.raw_context) as *mut CoapLendableFfiWeakCell<CoapContextInner>,
             ))
         }
         // Attempt to regain sole ownership over all resources.

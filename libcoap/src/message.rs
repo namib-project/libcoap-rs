@@ -16,12 +16,12 @@ use libcoap_sys::{
     coap_pdu_t, coap_session_t,
 };
 
+use crate::types::{decode_var_len_u16, decode_var_len_u32, encode_var_len_u16, encode_var_len_u32, encode_var_len_u8};
 use crate::{
     error::{MessageConversionError, OptionValueError},
     protocol::{
-        decode_var_len_u16, decode_var_len_u32, encode_var_len_u16, encode_var_len_u32, encode_var_len_u8, Block,
-        CoapMatch, CoapMessageCode, CoapMessageType, CoapOptionNum, CoapOptionType, ContentFormat, ETag, HopLimit,
-        MaxAge, NoResponse, Observe, ProxyScheme, ProxyUri, Size, UriHost, UriPath, UriPort, UriQuery,
+        Block, CoapMatch, CoapMessageCode, CoapMessageType, CoapOptionNum, CoapOptionType, ContentFormat, ETag,
+        HopLimit, MaxAge, NoResponse, Observe, ProxyScheme, ProxyUri, Size, UriHost, UriPath, UriPort, UriQuery,
     },
     request::{CoapRequest, CoapResponse},
     session::CoapSessionCommon,
@@ -340,7 +340,7 @@ impl CoapMessage {
     /// [coap_delete_pdu()].
     pub fn into_raw_pdu<'a, S: CoapSessionCommon<'a> + ?Sized>(
         mut self,
-        session: &mut S,
+        session: &S,
     ) -> Result<*mut coap_pdu_t, MessageConversionError> {
         let message = self.as_message_mut();
 
@@ -383,7 +383,7 @@ impl CoapMessage {
     pub unsafe fn apply_to_raw_pdu<'a, S: CoapSessionCommon<'a> + ?Sized>(
         mut self,
         raw_pdu: *mut coap_pdu_t,
-        session: &mut S,
+        session: &S,
     ) -> Result<*mut coap_pdu_t, MessageConversionError> {
         assert!(!raw_pdu.is_null(), "attempted to apply CoapMessage to null pointer");
         coap_pdu_set_type(raw_pdu, self.type_.to_raw_pdu_type());

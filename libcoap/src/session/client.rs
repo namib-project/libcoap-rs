@@ -15,7 +15,7 @@ use libcoap_sys::{
 };
 
 use crate::crypto::CoapCryptoProviderResponse;
-use crate::mem::{CoapAppDataRef, DropInnerExclusively};
+use crate::mem::{CoapFfiRcCell, DropInnerExclusively};
 use crate::{
     context::CoapContext,
     crypto::{dtls_ih_callback, CoapClientCryptoProvider, CoapCryptoPskIdentity, CoapCryptoPskInfo},
@@ -39,7 +39,7 @@ pub struct CoapClientSessionInner<'a> {
 
 #[derive(Debug, Clone)]
 pub struct CoapClientSession<'a> {
-    pub(super) inner: CoapAppDataRef<CoapClientSessionInner<'a>>,
+    inner: CoapFfiRcCell<CoapClientSessionInner<'a>>,
 }
 
 impl CoapClientSession<'_> {
@@ -121,7 +121,7 @@ impl CoapClientSession<'_> {
         crypto_current_data: Option<CoapCryptoPskInfo>,
         crypto_provider: Option<Box<dyn CoapClientCryptoProvider>>,
     ) -> CoapClientSession<'a> {
-        let inner_session = CoapAppDataRef::new(CoapClientSessionInner {
+        let inner_session = CoapFfiRcCell::new(CoapClientSessionInner {
             inner: CoapSessionInner {
                 raw_session,
                 app_data: None,
@@ -178,7 +178,7 @@ impl CoapClientSession<'_> {
             coap_session_type_t::COAP_SESSION_TYPE_CLIENT => {
                 let raw_app_data_ptr = coap_session_get_app_data(raw_session);
                 assert!(!raw_app_data_ptr.is_null(), "provided raw session has no app data");
-                let inner = CoapAppDataRef::clone_raw_rc(raw_app_data_ptr);
+                let inner = CoapFfiRcCell::clone_raw_rc(raw_app_data_ptr);
                 CoapClientSession { inner }
             },
             coap_session_type_t::COAP_SESSION_TYPE_SERVER | coap_session_type_t::COAP_SESSION_TYPE_HELLO => {
@@ -240,7 +240,7 @@ impl Drop for CoapClientSessionInner<'_> {
         unsafe {
             let app_data = coap_session_get_app_data(self.inner.raw_session);
             assert!(!app_data.is_null());
-            CoapAppDataRef::<CoapClientSessionInner>::raw_ptr_to_weak(app_data);
+            CoapFfiRcCell::<CoapClientSessionInner>::raw_ptr_to_weak(app_data);
             coap_session_release(self.inner.raw_session);
         }
     }
@@ -250,7 +250,7 @@ impl<'a> CoapSessionInnerProvider<'a> for CoapClientSession<'a> {
     fn inner_ref<'b>(&'b self) -> Ref<'b, CoapSessionInner<'a>> {
         Ref::map(self.inner.borrow(), |v| &v.inner)
     }
-    fn inner_mut<'b>(&'b mut self) -> RefMut<'b, CoapSessionInner<'a>> {
+    fn inner_mut<'b>(&'b self) -> RefMut<'b, CoapSessionInner<'a>> {
         RefMut::map(self.inner.borrow_mut(), |v| &mut v.inner)
     }
 }

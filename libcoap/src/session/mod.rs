@@ -5,7 +5,7 @@
  * See the README as well as the LICENSE file for more information.
  */
 
-use std::borrow::{BorrowMut};
+use std::borrow::BorrowMut;
 use std::cell::{Ref, RefMut};
 use std::{
     any::Any,
@@ -18,20 +18,20 @@ use std::{
 use rand::Rng;
 
 use libcoap_sys::{
-    coap_context_t, coap_fixed_point_t, coap_mid_t, coap_new_message_id, coap_pdu_get_token, coap_pdu_t, coap_response_t, coap_send, coap_session_get_ack_random_factor, coap_session_get_ack_timeout,
+    coap_context_t, coap_fixed_point_t, coap_mid_t, coap_new_message_id, coap_pdu_get_token, coap_pdu_t,
+    coap_response_t, coap_send, coap_session_get_ack_random_factor, coap_session_get_ack_timeout,
     coap_session_get_addr_local, coap_session_get_addr_remote, coap_session_get_app_data, coap_session_get_ifindex,
     coap_session_get_max_retransmit, coap_session_get_proto, coap_session_get_psk_hint, coap_session_get_psk_identity,
     coap_session_get_psk_key, coap_session_get_state, coap_session_get_type, coap_session_init_token,
-    coap_session_max_pdu_size, coap_session_new_token,
-    coap_session_send_ping, coap_session_set_ack_random_factor, coap_session_set_ack_timeout, coap_session_set_max_retransmit, coap_session_set_mtu,
-    coap_session_state_t, coap_session_t, coap_session_type_t,
+    coap_session_max_pdu_size, coap_session_new_token, coap_session_send_ping, coap_session_set_ack_random_factor,
+    coap_session_set_ack_timeout, coap_session_set_max_retransmit, coap_session_set_mtu, coap_session_state_t,
+    coap_session_t, coap_session_type_t,
 };
 
-
-use crate::crypto::{CoapCryptoPskData};
+use crate::crypto::CoapCryptoPskData;
 
 use crate::{
-    crypto::{CoapCryptoPskIdentity},
+    crypto::CoapCryptoPskIdentity,
     error::{MessageConversionError, SessionGetAppDataError},
     message::{CoapMessage, CoapMessageCommon},
     protocol::CoapToken,
@@ -43,7 +43,6 @@ pub use self::client::CoapClientSession;
 
 pub(self) use self::sealed::{CoapSessionCommonInternal, CoapSessionInnerProvider};
 pub use self::server::CoapServerSession;
-
 
 mod client;
 mod server;
@@ -74,14 +73,22 @@ impl From<coap_session_state_t> for CoapSessionState {
 mod sealed {
     use super::*;
 
+    /// Internal Trait for types that can provide a Ref(Mut) to CoapSessionInner instances.
+    /// Implemented by the different session types ([CoapClientSession] and [CoapServerSession])
     pub trait CoapSessionInnerProvider<'a> {
+        /// Provide a Ref to the instance of [CoapSessionInner] contained in this type.
         fn inner_ref<'b>(&'b self) -> Ref<'b, CoapSessionInner<'a>>;
 
-        fn inner_mut<'b>(&'b mut self) -> RefMut<'b, CoapSessionInner<'a>>;
+        /// Provide a RefMut to the instance of [CoapSessionInner] contained in this type.
+        fn inner_mut<'b>(&'b self) -> RefMut<'b, CoapSessionInner<'a>>;
     }
 
+    /// Functions common between all sessions that should not be public.
+    ///
+    /// This trait does not have any mandatory functions and will be automatically implemented for
+    /// all types that implement CoapSesssionInnerProvider.
     pub trait CoapSessionCommonInternal<'a>: CoapSessionInnerProvider<'a> {
-        fn add_response(&mut self, pdu: CoapResponse) {
+        fn add_response(&self, pdu: CoapResponse) {
             let token = pdu.token();
             if let Some(token) = token {
                 if self.inner_ref().received_responses.contains_key(token) {
@@ -98,8 +105,6 @@ mod sealed {
     impl<'a, T: CoapSessionInnerProvider<'a>> CoapSessionCommonInternal<'a> for T {}
 }
 
-impl<'a, T: CoapSessionCommonInternal<'a>> CoapSessionCommon<'a> for T {}
-
 /// Trait for functions that are common between client and server sessions.
 pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     /// Returns the application specific data stored alongside this session.
@@ -112,14 +117,14 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     }
 
     /// Sets the application-specific data stored alongside this session.
-    fn set_app_data<T: 'static + Any>(&mut self, value: Option<T>) {
+    fn set_app_data<T: 'static + Any>(&self, value: Option<T>) {
         let mut inner = self.inner_mut();
         let new_box: Option<Rc<dyn Any>> = value.map(|v| Rc::new(v) as Rc<dyn Any>);
         inner.app_data = new_box;
     }
 
     /// Clears the application-specific data stored alongside this session.
-    fn clear_app_data(&mut self) {
+    fn clear_app_data(&self) {
         let mut inner = self.inner_mut();
         inner.app_data = None;
         let raw_inner_ptr = unsafe { coap_session_get_app_data(inner.raw_session) };
@@ -138,7 +143,7 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     }
 
     /// Sets the Ack-Random-Factor used by libcoap.
-    fn set_ack_random_factor(&mut self, integer_part: u16, fractional_part: u16) {
+    fn set_ack_random_factor(&self, integer_part: u16, fractional_part: u16) {
         unsafe {
             coap_session_set_ack_random_factor(
                 self.inner_mut().raw_session,
@@ -160,7 +165,7 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     }
 
     /// Sets the value of the Acknowledgement Timeout for this session.
-    fn set_ack_timeout(&mut self, integer_part: u16, fractional_part: u16) {
+    fn set_ack_timeout(&self, integer_part: u16, fractional_part: u16) {
         unsafe {
             coap_session_set_ack_timeout(
                 self.inner_ref().raw_session,
@@ -254,7 +259,7 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     /// Note that this function does not do anything if you are not setting the token manually using
     /// [new_token()](CoapSessionCommon::new_token), because the wrapper will use a random number
     /// generator to set the tokens instead.
-    fn init_token(&mut self, token: &[u8; 8]) {
+    fn init_token(&self, token: &[u8; 8]) {
         unsafe { coap_session_init_token(self.inner_mut().raw_session, token.len(), token.as_ptr()) }
     }
 
@@ -264,12 +269,12 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     }
 
     /// Sets the maximum size of a PDU for this session.
-    fn set_mtu(&mut self, mtu: u32) {
+    fn set_mtu(&self, mtu: u32) {
         unsafe { coap_session_set_mtu(self.inner_mut().raw_session, mtu) }
     }
 
     /// Returns the next message ID that should be used for this session.
-    fn next_message_id(&mut self) -> CoapMessageId {
+    fn next_message_id(&self) -> CoapMessageId {
         unsafe { coap_new_message_id(self.inner_mut().raw_session) as CoapMessageId }
     }
 
@@ -288,7 +293,7 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     /// Send the given message-like object to the peer.
     ///
     /// Returns a MessageConversionError if the supplied object cannot be converted to a message.
-    fn send<P: Into<CoapMessage>>(&mut self, pdu: P) -> Result<CoapMessageId, MessageConversionError> {
+    fn send<P: Into<CoapMessage>>(&self, pdu: P) -> Result<CoapMessageId, MessageConversionError> {
         let raw_pdu = pdu.into().into_raw_pdu(self)?;
         let mid = unsafe { coap_send(self.inner_mut().raw_session, raw_pdu) };
         Ok(mid)
@@ -299,7 +304,7 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     ///
     /// Returns a MessageConversionError if the given Request could not be converted into a raw
     /// message.
-    fn send_request(&mut self, mut req: CoapRequest) -> Result<CoapRequestHandle, MessageConversionError> {
+    fn send_request(&self, mut req: CoapRequest) -> Result<CoapRequestHandle, MessageConversionError> {
         if req.token().is_none() {
             let mut token_tmp: Vec<u8> = vec![0; 8];
             rand::thread_rng().fill(&mut token_tmp[0..8]);
@@ -318,7 +323,7 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     /// Polls whether the request for the given handle already has pending responses.
     ///
     /// Returns an iterator over all responses associated with the request.
-    fn poll_handle(&mut self, handle: &CoapRequestHandle) -> std::collections::vec_deque::IntoIter<CoapResponse> {
+    fn poll_handle(&self, handle: &CoapRequestHandle) -> std::collections::vec_deque::IntoIter<CoapResponse> {
         self.inner_mut()
             .received_responses
             .insert(handle.token.clone(), VecDeque::new())
@@ -334,7 +339,7 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     ///
     /// Any future responses to the request associated with this handle will be responded to with an
     /// RST message.
-    fn remove_handle(&mut self, handle: CoapRequestHandle) {
+    fn remove_handle(&self, handle: CoapRequestHandle) {
         self.inner_mut().received_responses.remove(&handle.token);
     }
 
@@ -343,7 +348,7 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     /// # Safety
     /// Do not do anything that would interfere with the functionality of this wrapper.
     /// Most importantly, *do not* free the session yourself.
-    unsafe fn raw_session_mut(&mut self) -> *mut coap_session_t {
+    unsafe fn raw_session_mut(&self) -> *mut coap_session_t {
         self.inner_mut().raw_session
     }
 
@@ -357,7 +362,14 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     }
 }
 
+impl<'a, T: CoapSessionCommonInternal<'a>> CoapSessionCommon<'a> for T {}
+
 #[derive(Debug)]
+/// The representation of a CoAP session.
+///
+/// This enum only provides functionality that is common between clients and servers (by
+/// implementing [CoapSessionCommon]). If you require functionality specific to client- or
+/// server-side sessions, match this enum on the required session type.
 pub enum CoapSession<'a> {
     Client(CoapClientSession<'a>),
     Server(CoapServerSession<'a>),
@@ -371,7 +383,7 @@ impl<'a> CoapSessionInnerProvider<'a> for CoapSession<'a> {
         }
     }
 
-    fn inner_mut<'b>(&'b mut self) -> RefMut<'b, CoapSessionInner<'a>> {
+    fn inner_mut<'b>(&'b self) -> RefMut<'b, CoapSessionInner<'a>> {
         match self {
             CoapSession::Client(sess) => sess.inner_mut(),
             CoapSession::Server(sess) => sess.inner_mut(),
