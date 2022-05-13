@@ -159,7 +159,7 @@ impl CoapResponse {
     /// See [RFC 7252, Section 5.10.7](https://datatracker.ietf.org/doc/html/rfc7252#section-5.10.7)
     /// for more information.
     pub fn set_location<U: Into<CoapUri>>(&mut self, uri: Option<U>) -> Result<(), OptionValueError> {
-        let uri = uri.map(|v| v.into());
+        let uri = uri.map(Into::into);
         if let Some(uri) = uri {
             self.location = Some(CoapResponseLocation::new_response_location(uri)?)
         }
@@ -339,8 +339,8 @@ impl CoapResponse {
 }
 
 impl CoapMessageCommon for CoapResponse {
-    fn set_code(&mut self, code: CoapMessageCode) {
-        match code {
+    fn set_code<C: Into<CoapMessageCode>>(&mut self, code: C) {
+        match code.into() {
             CoapMessageCode::Response(req) => self.pdu.set_code(CoapMessageCode::Response(req)),
             CoapMessageCode::Request(_) | CoapMessageCode::Empty => {
                 panic!("attempted to set message code of response to value that is not a response code")

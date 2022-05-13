@@ -4,7 +4,7 @@
  * Copyright (c) 2022 The NAMIB Project Developers, all rights reserved.
  * See the README as well as the LICENSE file for more information.
  */
-
+//! Event handling-related code
 use std::fmt::Debug;
 
 use libcoap_sys::{coap_event_t, coap_session_get_context, coap_session_t};

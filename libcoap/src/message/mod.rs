@@ -4,6 +4,14 @@
  * Copyright (c) 2022 The NAMIB Project Developers, all rights reserved.
  * See the README as well as the LICENSE file for more information.
  */
+//! Types related to message handling, parsing and creation.
+//!
+//! The base unit that is transmitted between a CoAP client and a CoAP server is called a CoAP
+//! message (in libcoap also referred to as a "pdu"). This module contains both the basic
+//! representation for messages in libcoap-rs ([CoapMessage]) as well as builders that simplify the
+//! process of creating requests and responses and setting the appropiate options ([CoapRequest]
+//! and [CoapResponse]).
+
 use std::{ffi::c_void, mem::MaybeUninit, slice::Iter};
 
 use num_traits::FromPrimitive;
@@ -70,7 +78,7 @@ impl CoapOption {
     /// # Safety
     /// `opt` must be a valid pointer to a well formed coap_opt_t value as returned by
     /// [coap_option_next()].
-    pub unsafe fn from_raw_opt(
+    pub(crate) unsafe fn from_raw_opt(
         number: coap_option_num_t,
         opt: *const coap_opt_t,
     ) -> Result<CoapOption, OptionValueError> {
@@ -189,7 +197,7 @@ impl CoapOption {
 
     /// Converts this option into a raw coap_optlist_t instance, suitable for addition to a raw
     /// coap_pdu_t.
-    pub fn into_optlist_entry(self) -> Result<*mut coap_optlist_t, OptionValueError> {
+    pub(crate) fn into_optlist_entry(self) -> Result<*mut coap_optlist_t, OptionValueError> {
         let num = self.number();
         let value = self.into_value_bytes()?;
         Ok(unsafe { coap_new_optlist(num, value.len(), value.as_ptr()) })
@@ -231,8 +239,8 @@ pub trait CoapMessageCommon {
     }
 
     /// Sets the message code of this message.
-    fn set_code(&mut self, code: CoapMessageCode) {
-        self.as_message_mut().code = code;
+    fn set_code<C: Into<CoapMessageCode>>(&mut self, code: C) {
+        self.as_message_mut().code = code.into();
     }
 
     /// Returns the CoAP message ID for this message.
@@ -384,7 +392,7 @@ impl CoapMessage {
     ///
     /// # Safety
     /// raw_pdu must point to a valid mutable instance of coap_pdu_t.
-    pub unsafe fn apply_to_raw_pdu<'a, S: CoapSessionCommon<'a> + ?Sized>(
+    pub(crate) unsafe fn apply_to_raw_pdu<'a, S: CoapSessionCommon<'a> + ?Sized>(
         mut self,
         raw_pdu: *mut coap_pdu_t,
         session: &S,

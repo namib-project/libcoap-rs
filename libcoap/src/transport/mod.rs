@@ -8,15 +8,16 @@ use std::os::raw::c_uint;
 
 use libcoap_sys::{coap_endpoint_set_default_mtu, coap_endpoint_t};
 
-use crate::transport::{dtls::CoapDtlsEndpoint, udp::CoapUdpEndpoint};
+pub use dtls::CoapDtlsEndpoint;
+pub use udp::CoapUdpEndpoint;
 
 #[cfg(feature = "dtls")]
-pub mod dtls;
+mod dtls;
 #[cfg(feature = "tcp")]
-pub mod tcp;
+mod tcp;
 #[cfg(all(feature = "dtls", feature = "tcp"))]
-pub mod tls;
-pub mod udp;
+mod tls;
+mod udp;
 
 pub type EndpointMtu = c_uint;
 

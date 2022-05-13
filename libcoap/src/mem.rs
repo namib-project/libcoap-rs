@@ -4,6 +4,7 @@
  * Copyright (c) 2022 The NAMIB Project Developers, all rights reserved.
  * See the README as well as the LICENSE file for more information.
  */
+//! Code related to memory handling, especially for passing objects through FFI
 
 use std::cell::{Ref, RefCell, RefMut};
 use std::ffi::c_void;
@@ -134,6 +135,8 @@ impl<D> CoapFfiRcCell<D> {
     /// - ptr is a valid pointer to a `Rc<RefCell<D>>`
     /// - as soon as the returned `Rc<RefCell<D>>` is dropped, the provided pointer is treated as
     ///   invalid.
+    // Kept for consistency
+    #[allow(unused)]
     pub unsafe fn raw_ptr_to_rc(ptr: *mut c_void) -> Rc<RefCell<D>> {
         Rc::from_raw(ptr as *const RefCell<D>)
     }

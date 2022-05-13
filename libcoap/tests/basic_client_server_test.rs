@@ -9,12 +9,11 @@ use libcoap::message::request::CoapRequest;
 use libcoap::message::response::CoapResponse;
 use libcoap::session::CoapClientSession;
 use libcoap::{
-    context::CoapContext,
     message::CoapMessageCommon,
     protocol::{CoapMessageCode, CoapMessageType, CoapRequestCode, CoapResponseCode},
-    resource::{CoapRequestHandler, CoapResource},
     session::CoapSessionCommon,
     types::{CoapUri, CoapUriHost},
+    CoapContext, CoapRequestHandler, CoapResource,
 };
 
 fn run_basic_test_server(server_address: SocketAddr) {
@@ -27,7 +26,7 @@ fn run_basic_test_server(server_address: SocketAddr) {
         Some(CoapRequestHandler::new(
             |completed: &mut Rc<AtomicBool>, sess, _req, mut rsp: CoapResponse| {
                 let data = Vec::<u8>::from("Hello World!".as_bytes());
-                rsp.set_data(Some(data.into_boxed_slice()));
+                rsp.set_data(Some(data));
                 rsp.set_code(CoapMessageCode::Response(CoapResponseCode::Content));
                 sess.send(rsp).unwrap();
                 completed.store(true, Ordering::Relaxed);
@@ -68,7 +67,7 @@ pub fn test_basic_client_server() {
     });
 
     let mut context = CoapContext::new().unwrap();
-    let mut session = CoapClientSession::connect_udp(&mut context, server_address).unwrap();
+    let session = CoapClientSession::connect_udp(&mut context, server_address).unwrap();
 
     let uri = CoapUri::new(
         None,

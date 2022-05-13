@@ -12,8 +12,8 @@ use crate::{
     error::{MessageConversionError, MessageTypeError, OptionValueError},
     message::{CoapMessage, CoapMessageCommon, CoapOption},
     protocol::{
-        CoapMatch, CoapMessageCode, CoapMessageType, CoapOptionType, CoapRequestCode, CoapResponseCode, ContentFormat,
-        ETag, HopLimit, MaxAge, NoResponse, Observe,
+        CoapMatch, CoapMessageCode, CoapMessageType, CoapOptionType, CoapRequestCode, ContentFormat, ETag, HopLimit,
+        NoResponse, Observe,
     },
     types::{CoapUri, CoapUriHost, CoapUriScheme},
 };
@@ -29,9 +29,6 @@ impl CoapRequestUri {
     /// Creates a new request URI from the given CoapUri, returning an OptionValueError if the URI
     /// contains invalid values for request URIs.
     pub fn new_request_uri(uri: CoapUri) -> Result<CoapRequestUri, OptionValueError> {
-        if uri.scheme().is_some() {
-            return Err(OptionValueError::IllegalValue);
-        }
         if uri
             .path_iter()
             .unwrap_or(vec![].iter())
@@ -310,7 +307,7 @@ impl CoapRequest {
     ///
     /// This method overrides any previously set proxy URI.
     pub fn set_uri<U: Into<CoapUri>>(&mut self, uri: Option<U>) -> Result<(), OptionValueError> {
-        let uri = uri.map(|v| v.into());
+        let uri = uri.map(Into::into);
         if let Some(uri) = uri {
             self.uri = Some(CoapRequestUri::new_request_uri(uri)?)
         }
@@ -327,7 +324,7 @@ impl CoapRequest {
     ///
     /// This method overrides any previously set request URI.
     pub fn set_proxy_uri<U: Into<CoapUri>>(&mut self, uri: Option<U>) -> Result<(), OptionValueError> {
-        let uri = uri.map(|v| v.into());
+        let uri = uri.map(Into::into);
         if let Some(uri) = uri {
             self.uri = Some(CoapRequestUri::new_proxy_uri(uri)?)
         }
@@ -583,8 +580,8 @@ impl CoapMessageCommon for CoapRequest {
     ///
     /// # Panics
     /// Panics if the provided message code is not a request code.
-    fn set_code(&mut self, code: CoapMessageCode) {
-        match code {
+    fn set_code<C: Into<CoapMessageCode>>(&mut self, code: C) {
+        match code.into() {
             CoapMessageCode::Request(req) => self.pdu.set_code(CoapMessageCode::Request(req)),
             CoapMessageCode::Response(_) | CoapMessageCode::Empty => {
                 panic!("attempted to set message code of request to value that is not a request code")

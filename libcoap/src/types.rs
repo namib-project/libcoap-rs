@@ -7,21 +7,15 @@
 //! Types required for conversion between libcoap C library abstractions and Rust types.
 
 use std::{
-    cell::{Ref, RefCell, RefMut},
     convert::Infallible,
-    ffi::c_void,
-    fmt::{Debug, Formatter},
+    fmt::Debug,
     mem::MaybeUninit,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
     os::raw::{c_int, c_uint},
-    rc::{Rc, Weak},
     slice::Iter,
     str::FromStr,
     vec::Drain,
 };
-
-use std::ops::Deref;
-use std::ops::DerefMut;
 
 use libc::{in6_addr, in_addr, sa_family_t, sockaddr_in, sockaddr_in6, socklen_t, AF_INET, AF_INET6};
 use num_derive::FromPrimitive;

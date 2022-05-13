@@ -4,6 +4,7 @@
  * Copyright (c) 2022 The NAMIB Project Developers, all rights reserved.
  * See the README as well as the LICENSE file for more information.
  */
+//! Resource and resource handler descriptions
 
 use std::{
     any::Any,
@@ -189,6 +190,8 @@ impl<D: Any + ?Sized + Debug> CoapResourceHandlers<D> {
         }
     }
 
+    // Kept for consistency
+    #[allow(unused)]
     #[inline]
     fn handler_ref(&self, code: CoapRequestCode) -> &Option<CoapRequestHandler<D>> {
         match code {

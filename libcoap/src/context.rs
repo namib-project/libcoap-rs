@@ -4,6 +4,7 @@
  * Copyright (c) 2022 The NAMIB Project Developers, all rights reserved.
  * See the README as well as the LICENSE file for more information.
  */
+//! Module containing context-internal types and traits
 
 use std::{any::Any, ffi::c_void, fmt::Debug, marker::PhantomData, net::SocketAddr, ops::Sub, time::Duration};
 
@@ -31,7 +32,7 @@ use crate::{
     error::{ContextCreationError, EndpointCreationError, IoProcessError},
     resource::{CoapResource, UntypedCoapResource},
     session::session_response_handler,
-    transport::{dtls::CoapDtlsEndpoint, udp::CoapUdpEndpoint, CoapEndpoint},
+    transport::{CoapDtlsEndpoint, CoapEndpoint, CoapUdpEndpoint},
 };
 
 #[derive(Debug)]
