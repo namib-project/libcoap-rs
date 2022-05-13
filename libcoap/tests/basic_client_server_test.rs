@@ -5,12 +5,13 @@ use std::{
     time::Duration,
 };
 
+use libcoap::message::request::CoapRequest;
+use libcoap::message::response::CoapResponse;
 use libcoap::session::CoapClientSession;
 use libcoap::{
     context::CoapContext,
     message::CoapMessageCommon,
     protocol::{CoapMessageCode, CoapMessageType, CoapRequestCode, CoapResponseCode},
-    request::{CoapRequest, CoapResponse},
     resource::{CoapRequestHandler, CoapResource},
     session::CoapSessionCommon,
     types::{CoapUri, CoapUriHost},

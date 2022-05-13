@@ -15,6 +15,8 @@ use libcoap_sys::{
     coap_pdu_get_mid, coap_pdu_get_token, coap_pdu_get_type, coap_pdu_init, coap_pdu_set_code, coap_pdu_set_type,
     coap_pdu_t, coap_session_t,
 };
+pub use request::CoapRequest;
+pub use response::CoapResponse;
 
 use crate::types::{decode_var_len_u16, decode_var_len_u32, encode_var_len_u16, encode_var_len_u32, encode_var_len_u8};
 use crate::{
@@ -23,10 +25,12 @@ use crate::{
         Block, CoapMatch, CoapMessageCode, CoapMessageType, CoapOptionNum, CoapOptionType, ContentFormat, ETag,
         HopLimit, MaxAge, NoResponse, Observe, ProxyScheme, ProxyUri, Size, UriHost, UriPath, UriPort, UriQuery,
     },
-    request::{CoapRequest, CoapResponse},
     session::CoapSessionCommon,
     types::CoapMessageId,
 };
+
+pub mod request;
+pub mod response;
 
 /// Representation of a CoAP option including its value.
 ///

@@ -30,12 +30,13 @@ use libcoap_sys::{
 
 use crate::crypto::CoapCryptoPskData;
 
+use crate::message::request::CoapRequest;
+use crate::message::response::CoapResponse;
 use crate::{
     crypto::CoapCryptoPskIdentity,
     error::{MessageConversionError, SessionGetAppDataError},
     message::{CoapMessage, CoapMessageCommon},
     protocol::CoapToken,
-    request::{CoapRequest, CoapResponse},
     types::{CoapAddress, CoapMessageId, CoapProtocol, IfIndex, MaxRetransmit},
 };
 
@@ -44,8 +45,8 @@ pub use self::client::CoapClientSession;
 pub(self) use self::sealed::{CoapSessionCommonInternal, CoapSessionInnerProvider};
 pub use self::server::CoapServerSession;
 
-mod client;
-mod server;
+pub mod client;
+pub mod server;
 
 /// Representation of the states that a session can be in.
 #[repr(u32)]

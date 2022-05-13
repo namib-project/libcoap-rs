@@ -24,16 +24,14 @@ use libcoap_sys::{
 };
 
 use crate::mem::{CoapFfiRcCell, DropInnerExclusively};
+use crate::message::request::CoapRequest;
+use crate::message::response::CoapResponse;
 use crate::message::CoapMessageCommon;
 use crate::protocol::CoapMessageCode;
 use crate::protocol::CoapMessageType;
 use crate::session::CoapSessionCommon;
 use crate::{
-    error::MessageConversionError,
-    message::CoapMessage,
-    protocol::CoapRequestCode,
-    request::{CoapRequest, CoapResponse},
-    session::CoapServerSession,
+    error::MessageConversionError, message::CoapMessage, protocol::CoapRequestCode, session::CoapServerSession,
 };
 
 // Trait aliases are experimental

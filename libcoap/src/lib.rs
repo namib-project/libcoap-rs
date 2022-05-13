@@ -15,7 +15,6 @@ pub mod event;
 mod mem;
 pub mod message;
 pub mod protocol;
-pub mod request;
 pub mod resource;
 pub mod session;
 #[cfg(feature = "server")]
