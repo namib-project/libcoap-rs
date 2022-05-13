@@ -21,8 +21,8 @@ use libcoap_sys::{
 };
 
 use crate::event::{event_handler_callback, CoapEventHandler};
+use crate::mem::{DropInnerExclusively, FfiPassthroughRefContainer, FfiPassthroughWeakContainer};
 use crate::session::{CoapClientSession, CoapServerSession, CoapSession};
-use crate::types::{DropInnerExclusively, FfiPassthroughRefContainer, FfiPassthroughWeakContainer};
 use crate::{
     crypto::{
         dtls_server_id_callback, dtls_server_sni_callback, CoapCryptoProviderResponse, CoapCryptoPskIdentity,

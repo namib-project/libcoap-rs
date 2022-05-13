@@ -11,8 +11,8 @@ use libcoap_sys::{
     coap_session_get_app_data, coap_session_get_type, coap_session_set_app_data, coap_session_t, coap_session_type_t,
 };
 
-use crate::types::CoapAppDataRef;
-use crate::types::DropInnerExclusively;
+use crate::mem::CoapAppDataRef;
+use crate::mem::DropInnerExclusively;
 
 use super::{CoapSessionCommon, CoapSessionInner, CoapSessionInnerProvider};
 

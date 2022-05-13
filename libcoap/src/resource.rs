@@ -23,18 +23,17 @@ use libcoap_sys::{
     COAP_RESOURCE_FLAGS_NOTIFY_CON, COAP_RESOURCE_FLAGS_NOTIFY_NON, COAP_RESOURCE_FLAGS_RELEASE_URI,
 };
 
+use crate::mem::{CoapAppDataRef, DropInnerExclusively};
 use crate::message::CoapMessageCommon;
 use crate::protocol::CoapMessageCode;
 use crate::protocol::CoapMessageType;
 use crate::session::CoapSessionCommon;
-use crate::types::DropInnerExclusively;
 use crate::{
     error::MessageConversionError,
     message::CoapMessage,
     protocol::CoapRequestCode,
     request::{CoapRequest, CoapResponse},
     session::CoapServerSession,
-    types::CoapAppDataRef,
 };
 
 // Trait aliases are experimental

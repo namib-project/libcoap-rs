@@ -15,12 +15,12 @@ use libcoap_sys::{
 };
 
 use crate::crypto::CoapCryptoProviderResponse;
-use crate::types::DropInnerExclusively;
+use crate::mem::{CoapAppDataRef, DropInnerExclusively};
 use crate::{
     context::CoapContext,
     crypto::{dtls_ih_callback, CoapClientCryptoProvider, CoapCryptoPskIdentity, CoapCryptoPskInfo},
     error::SessionCreationError,
-    types::{CoapAddress, CoapAppDataRef},
+    types::CoapAddress,
 };
 
 use super::{CoapSessionCommon, CoapSessionInner, CoapSessionInnerProvider};
