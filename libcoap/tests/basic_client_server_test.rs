@@ -1,4 +1,3 @@
-
 use std::{
     net::{SocketAddr, UdpSocket},
     rc::Rc,
@@ -25,7 +24,7 @@ fn run_basic_test_server(server_address: SocketAddr) {
     resource.set_method_handler(
         CoapRequestCode::Get,
         Some(CoapRequestHandler::new(
-            |completed: &Rc<AtomicBool>, _res, sess, _req, mut rsp: CoapResponse| {
+            |completed: &mut Rc<AtomicBool>, sess, _req, mut rsp: CoapResponse| {
                 let data = Vec::<u8>::from("Hello World!".as_bytes());
                 rsp.set_data(Some(data.into_boxed_slice()));
                 rsp.set_code(CoapMessageCode::Response(CoapResponseCode::Content));
