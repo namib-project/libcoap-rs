@@ -4,7 +4,7 @@
  * Copyright (c) 2022 The NAMIB Project Developers, all rights reserved.
  * See the README as well as the LICENSE file for more information.
  */
-//! Module containing context-internal types and traits
+//! Module containing context-internal types and traits.
 
 use std::{any::Any, ffi::c_void, fmt::Debug, marker::PhantomData, net::SocketAddr, ops::Sub, time::Duration};
 
@@ -36,7 +36,7 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct CoapContextInner<'a> {
+struct CoapContextInner<'a> {
     /// Reference to the raw context this context wraps around.
     raw_context: *mut coap_context_t,
     /// A list of endpoints that this context is currently associated with.
@@ -48,21 +48,29 @@ pub struct CoapContextInner<'a> {
     /// Note that these are not necessarily all sessions there are. Most notably, server sessions are
     /// automatically created and managed by the underlying C library and are not stored here.
     client_sessions: Vec<CoapClientSession<'a>>,
+    /// A list of server-side sessions that are currently active.
     server_sessions: Vec<CoapServerSession<'a>>,
+    /// The event handler responsible for library-user side handling of events.
     event_handler: Option<Box<dyn CoapEventHandler>>,
     /// The provider for cryptography information for server-side sessions.
     crypto_provider: Option<Box<dyn CoapServerCryptoProvider>>,
+    /// Last default cryptography info provided to libcoap.
     crypto_default_info: Option<CoapCryptoPskInfo>,
+    /// Container for SNI information so that the libcoap C library can keep referring to the memory
+    /// locations.
     crypto_sni_info_container: Vec<CoapCryptoPskInfo>,
+    /// Last provided cryptography information for server-side sessions (temporary storage as
+    /// libcoap makes defensive copies).
     crypto_current_data: Option<CoapCryptoPskInfo>,
-    // coap_dtls_spsk_info_t created upon calling dtls_server_sni_callback() as the SNI validation callback.
-    // The caller of the validate_sni_call_back will make a defensive copy, so this one only has
-    // to be valid for a very short time and can always be overridden by dtls_server_sni_callback().
+    /// Structure referring to the last provided cryptography information for server-side sessions.
+    /// coap_dtls_spsk_info_t created upon calling dtls_server_sni_callback() as the SNI validation callback.
+    /// The caller of the validate_sni_call_back will make a defensive copy, so this one only has
+    /// to be valid for a very short time and can always be overridden by dtls_server_sni_callback().
     crypto_last_info_ref: coap_dtls_spsk_info_t,
     _context_lifetime_marker: PhantomData<&'a coap_context_t>,
 }
 
-/// A CoAP Context – container for general state and configuration information relating to CoAP
+/// A CoAP Context — container for general state and configuration information relating to CoAP
 ///
 /// The equivalent to the [coap_context_t] type in libcoap.
 #[derive(Debug)]
@@ -71,8 +79,14 @@ pub struct CoapContext<'a> {
 }
 
 impl<'a> CoapContext<'a> {
-    /// Creates a new context
+    /// Creates a new context.
+    ///
+    /// # Errors
+    /// Returns an error if the underlying libcoap library was unable to create a new context
+    /// (probably an allocation error?).
     pub fn new() -> Result<CoapContext<'a>, ContextCreationError> {
+        // SAFETY: Providing null here is fine, the context will just not be bound to an endpoint
+        // yet.
         let raw_context = unsafe { coap_new_context(std::ptr::null()) };
         if raw_context.is_null() {
             return Err(ContextCreationError::Unknown);
@@ -106,6 +120,9 @@ impl<'a> CoapContext<'a> {
             _context_lifetime_marker: Default::default(),
         });
 
+        // SAFETY: We checked that the raw context is not null, the provided function is valid and
+        // the app data pointer provided must be valid as we just created it using
+        // `create_raw_weak_box()`.
         unsafe {
             coap_set_app_data(raw_context, inner.create_raw_weak_box() as *mut c_void);
             coap_set_event_handler(raw_context, Some(event_handler_callback));
@@ -114,10 +131,19 @@ impl<'a> CoapContext<'a> {
         Ok(CoapContext { inner })
     }
 
+    /// Attaches a new client-side session to this context.
+    ///
+    /// # Safety
+    /// The provided session's raw counterpart must belong to this context's underlying raw context.
     pub(crate) unsafe fn attach_client_session(&mut self, session: CoapClientSession<'a>) {
         self.inner.borrow_mut().client_sessions.push(session);
     }
 
+    /// Restores a CoapContext from its raw counterpart.
+    ///
+    /// # Safety
+    /// Provided pointer must point to as valid instance of a raw context whose application data
+    /// points to a `*mut CoapLenadableFfiWeakCell<CoapContextInner>`.
     pub(crate) unsafe fn from_raw(raw_context: *mut coap_context_t) -> CoapContext<'a> {
         assert!(!raw_context.is_null());
         let inner = CoapLendableFfiRcCell::clone_raw_weak_box(
@@ -127,6 +153,7 @@ impl<'a> CoapContext<'a> {
         CoapContext { inner }
     }
 
+    /// Handle an incoming event provided by libcoap.
     pub(crate) fn handle_event(&self, mut session: CoapSession<'a>, event: coap_event_t) {
         let inner_ref = &mut *self.inner.borrow_mut();
         // Call event handler for event.
@@ -188,6 +215,7 @@ impl CoapContext<'_> {
     pub fn shutdown(mut self, exit_wait_timeout: Option<Duration>) -> Result<(), IoProcessError> {
         let mut remaining_time = exit_wait_timeout;
         // Send remaining packets until we can cleanly shutdown.
+        // SAFETY: Provided context is always valid as an invariant of this struct.
         while unsafe { coap_can_exit(self.inner.borrow_mut().raw_context) } == 0 {
             let spent_time = self.do_io(remaining_time)?;
             remaining_time = remaining_time.map(|v| v.sub(spent_time));
@@ -216,6 +244,8 @@ impl CoapContext<'_> {
     /// Note that in order to actually connect to DTLS clients, you need to set a crypto provider
     /// using [set_server_crypto_provider()](CoapContext::set_server_crypto_provider())
     pub fn add_endpoint_dtls(&mut self, addr: SocketAddr) -> Result<(), EndpointCreationError> {
+        // SAFETY: Provided context (i.e., this instance) will not outlive the endpoint, as we will
+        // drop it alongside this context and never hand out copies of it.
         let endpoint = unsafe { CoapDtlsEndpoint::new(self, addr)? }.into();
         let mut inner_ref = self.inner.borrow_mut();
         inner_ref.endpoints.push(endpoint);
@@ -233,8 +263,7 @@ impl CoapContext<'_> {
         let mut inner_ref = self.inner.borrow_mut();
         inner_ref.resources.push(Box::new(res));
         // SAFETY: raw context is valid, raw resource is also guaranteed to be valid as long as
-        // contract of CoapResource is upheld (most importantly,
-        // UntypedCoapResource::drop_inner_exclusive() must not have been called).
+        // contract of CoapResource is upheld.
         unsafe {
             coap_add_resource(
                 inner_ref.raw_context,
@@ -304,7 +333,7 @@ impl CoapContext<'_> {
         // SAFETY: Properly initialized CoapContext always has a valid raw_context that is not
         // deleted until the CoapContextInner is dropped.
         let spent_time = unsafe { coap_io_process(raw_ctx_ptr, timeout) };
-        // Demand the returnal of the lent handle, ensuring that the mutable reference is no longer
+        // Demand the return of the lent handle, ensuring that the mutable reference is no longer
         // used anywhere.
         lend_handle.unlend();
         // Check for errors.
@@ -417,6 +446,9 @@ impl CoapContext<'_> {
     ///
     /// CSMs are used in CoAP over TCP as specified in
     /// [RFC 8323, Section 5.3](https://datatracker.ietf.org/doc/html/rfc8323#section-5.3).
+    ///
+    /// # Panics
+    /// Panics if the provided timeout is too large for libcoap (> [u32::MAX]).
     pub fn set_csm_timeout(&self, csm_timeout: Duration) {
         // SAFETY: Properly initialized CoapContext always has a valid raw_context that is not
         // deleted until the CoapContextInner is dropped.

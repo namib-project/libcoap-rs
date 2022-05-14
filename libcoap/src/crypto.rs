@@ -52,8 +52,9 @@ pub type CoapCryptoPskData = [u8];
 /// which are represented by this enum.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CoapCryptoProviderResponse<T: Debug> {
-    /// The current key (as indicated by a previous callback such as [provide_default_info()]) is
-    /// sufficient and should be used for this session.
+    /// The current key (as indicated by a previous callback such as
+    /// [CoapClientCryptoProvider::provide_default_info()]) is sufficient and should be used for this
+    /// session.
     UseCurrent,
     /// A new set of cryptographic credentials should be used for this session.
     UseNew(T),

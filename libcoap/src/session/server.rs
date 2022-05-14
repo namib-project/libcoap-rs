@@ -25,16 +25,6 @@ impl DropInnerExclusively for CoapServerSession<'_> {
     }
 }
 
-impl Drop for CoapServerSessionInner<'_> {
-    fn drop(&mut self) {
-        unsafe {
-            let app_data = coap_session_get_app_data(self.inner.raw_session);
-            assert!(!app_data.is_null());
-            std::mem::drop(CoapFfiRcCell::<CoapServerSessionInner>::raw_ptr_to_weak(app_data));
-        }
-    }
-}
-
 /// Representation of a server-side CoAP session.
 #[derive(Debug, Clone)]
 pub struct CoapServerSession<'a> {
@@ -61,7 +51,9 @@ impl CoapServerSession<'_> {
     /// session.
     ///
     /// # Safety
-    /// The provided pointer must be valid.
+    /// The provided pointer must be valid for the entire (here arbitrarily chosen) lifetime of the
+    /// CoapServerSession<'a>, most notably the program will abort if the [CoapContext] is dropped
+    /// before this session is.
     /// The existing value in the `app_data` field of the raw session will be overridden.
     /// Make sure that this is actually okay to do so — most importantly, no other [CoapSession] may
     /// already be stored there.
@@ -71,12 +63,7 @@ impl CoapServerSession<'_> {
     pub(crate) unsafe fn initialize_raw<'a>(raw_session: *mut coap_session_t) -> CoapServerSession<'a> {
         assert!(!raw_session.is_null(), "provided raw session was null");
         let raw_session_type = coap_session_get_type(raw_session);
-        let inner = CoapSessionInner {
-            raw_session,
-            app_data: None,
-            received_responses: Default::default(),
-            _context_lifetime_marker: Default::default(),
-        };
+        let inner = CoapSessionInner::new(raw_session);
         let session_inner = match raw_session_type {
             coap_session_type_t::COAP_SESSION_TYPE_NONE => panic!("provided session has no type"),
             coap_session_type_t::COAP_SESSION_TYPE_CLIENT => {
@@ -94,7 +81,7 @@ impl CoapServerSession<'_> {
         CoapServerSession { inner: session_ref }
     }
 
-    /// Restores a CoapServerSession from its raw counterpart.
+    /// Restores a [CoapServerSession] from its raw counterpart.
     ///
     /// Make sure that this struct cannot outlive the [CoapContext] its session originates from, as
     /// the lifetime cannot be inferred by the compiler and dropping the context will panic/abort if
@@ -108,7 +95,7 @@ impl CoapServerSession<'_> {
     /// is not a server-side session.
     ///
     /// # Safety
-    /// The provided pointer must be valid for the entired lifetime of this struct.
+    /// The provided pointer must be valid for the entire lifetime of this struct.
     pub(crate) unsafe fn from_raw<'a>(raw_session: *mut coap_session_t) -> CoapServerSession<'a> {
         assert!(!raw_session.is_null(), "provided raw session was null");
         let raw_session_type = coap_session_get_type(raw_session);
@@ -162,3 +149,13 @@ impl<'a, T: CoapSessionCommon<'a>> PartialEq<T> for CoapServerSession<'_> {
 }
 
 impl Eq for CoapServerSession<'_> {}
+
+impl Drop for CoapServerSessionInner<'_> {
+    fn drop(&mut self) {
+        unsafe {
+            let app_data = coap_session_get_app_data(self.inner.raw_session);
+            assert!(!app_data.is_null());
+            std::mem::drop(CoapFfiRcCell::<CoapServerSessionInner>::raw_ptr_to_weak(app_data));
+        }
+    }
+}

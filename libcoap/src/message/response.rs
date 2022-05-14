@@ -4,13 +4,21 @@ use crate::protocol::{
     CoapMessageCode, CoapMessageType, CoapOptionType, CoapResponseCode, ContentFormat, ETag, MaxAge, Observe,
 };
 use crate::types::CoapUri;
+use std::fmt::Display;
+use std::fmt::Formatter;
 
 /// Internal representation of a CoAP URI that can be used as a response location.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct CoapResponseLocation(CoapUri);
 
+impl Display for CoapResponseLocation {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("Response Location: {}", self.0.to_string()))
+    }
+}
+
 impl CoapResponseLocation {
-    /// Creates a new response location from the given CoapUri, returning an OptionValueError if
+    /// Creates a new response location from the given [CoapUri], returning an [OptionValueError] if
     /// the URI contains invalid values for response locations.
     pub fn new_response_location(uri: CoapUri) -> Result<CoapResponseLocation, OptionValueError> {
         if uri.scheme().is_some() || uri.host().is_some() || uri.port().is_some() {
@@ -19,7 +27,7 @@ impl CoapResponseLocation {
         Ok(CoapResponseLocation(uri))
     }
 
-    /// Converts this response location into a `Vec<CoapOption>` that can be added to a message.
+    /// Converts this response location into a [`Vec<CoapOption>`] that can be added to a message.
     pub fn into_options(self) -> Vec<CoapOption> {
         let mut options = Vec::new();
         let mut uri = self.0;
@@ -339,6 +347,10 @@ impl CoapResponse {
 }
 
 impl CoapMessageCommon for CoapResponse {
+    /// Sets the message code of this response.
+    ///
+    /// # Panics
+    /// Panics if the provided message code is not a response code.
     fn set_code<C: Into<CoapMessageCode>>(&mut self, code: C) {
         match code.into() {
             CoapMessageCode::Response(req) => self.pdu.set_code(CoapMessageCode::Response(req)),

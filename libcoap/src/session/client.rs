@@ -25,9 +25,8 @@ use crate::{
 
 use super::{CoapSessionCommon, CoapSessionInner, CoapSessionInnerProvider};
 
-/// Representation of a client-side CoAP session.
 #[derive(Debug)]
-pub struct CoapClientSessionInner<'a> {
+struct CoapClientSessionInner<'a> {
     inner: CoapSessionInner<'a>,
     crypto_provider: Option<Box<dyn CoapClientCryptoProvider>>,
     crypto_current_data: Option<CoapCryptoPskInfo>,
@@ -37,6 +36,7 @@ pub struct CoapClientSessionInner<'a> {
     crypto_last_info_ref: coap_dtls_cpsk_info_t,
 }
 
+/// Representation of a client-side CoAP session.
 #[derive(Debug, Clone)]
 pub struct CoapClientSession<'a> {
     inner: CoapFfiRcCell<CoapClientSessionInner<'a>>,
@@ -47,6 +47,10 @@ impl CoapClientSession<'_> {
     ///
     /// To supply cryptographic information (like PSK hints or key data), you have to provide a
     /// struct implementing [CoapClientCryptoProvider].
+    ///
+    /// # Errors
+    /// Will return a [SessionCreationError] if libcoap was unable to create a session (most likely
+    /// because it was not possible to bind to a port).
     pub fn connect_dtls<'a, 'b, P: 'static + CoapClientCryptoProvider>(
         ctx: &'b mut CoapContext<'a>,
         addr: SocketAddr,
@@ -87,15 +91,16 @@ impl CoapClientSession<'_> {
             return Err(SessionCreationError::Unknown);
         }
 
-        Ok(CoapClientSession::new(
-            ctx,
-            raw_session,
-            Some(id),
-            Some(Box::new(crypto_provider)),
-        ))
+        // SAFETY: raw_session was just checked, crypto_current_data is data provided to
+        // coap_new_client_session_psk2().
+        Ok(unsafe { CoapClientSession::new(ctx, raw_session, Some(id), Some(Box::new(crypto_provider))) })
     }
 
     /// Create a new unencrypted session with the given peer over UDP.
+    ///
+    /// # Errors
+    /// Will return a [SessionCreationError] if libcoap was unable to create a session (most likely
+    /// because it was not possible to bind to a port).
     pub fn connect_udp<'a>(
         ctx: &mut CoapContext<'a>,
         addr: SocketAddr,
@@ -112,22 +117,28 @@ impl CoapClientSession<'_> {
         if session.is_null() {
             return Err(SessionCreationError::Unknown);
         }
-        Ok(CoapClientSession::new(ctx, session as *mut coap_session_t, None, None))
+        // SAFETY: Session was just checked for validity, no crypto info was provided to
+        // coap_new_client_session().
+        Ok(unsafe { CoapClientSession::new(ctx, session as *mut coap_session_t, None, None) })
     }
 
-    fn new<'a>(
+    /// Initializes a new CoapClientSession from its raw counterpart with the provided initial
+    /// information.
+    ///
+    /// # Safety
+    /// The provided pointer for `raw_session` must be valid and point to the newly constructed raw
+    /// session.
+    ///
+    /// The provided value for `crypto_current_data` must be the one whose memory pointers were used
+    /// when calling `coap_new_client_session_*` (if any was provided).
+    unsafe fn new<'a>(
         ctx: &mut CoapContext<'a>,
         raw_session: *mut coap_session_t,
         crypto_current_data: Option<CoapCryptoPskInfo>,
         crypto_provider: Option<Box<dyn CoapClientCryptoProvider>>,
     ) -> CoapClientSession<'a> {
         let inner_session = CoapFfiRcCell::new(CoapClientSessionInner {
-            inner: CoapSessionInner {
-                raw_session,
-                app_data: None,
-                received_responses: Default::default(),
-                _context_lifetime_marker: Default::default(),
-            },
+            inner: CoapSessionInner::new(raw_session),
             crypto_provider,
             crypto_current_data,
             crypto_last_info_ref: coap_dtls_cpsk_info_t {
@@ -145,17 +156,16 @@ impl CoapClientSession<'_> {
         let client_session = CoapClientSession {
             inner: inner_session.clone(),
         };
-        // TODO Safety
-        unsafe {
-            coap_session_set_app_data(raw_session, inner_session.create_raw_weak());
-            // TODO the client sessions are now only deleted if the context goes out of scope, i guess we need to work with weak references or pointers to the raw client sessions here.
-            ctx.attach_client_session(client_session.clone());
-        }
+        // SAFETY: raw session is valid, inner session pointer must be valid as it was just created
+        // from one of Rusts smart pointers.
+        coap_session_set_app_data(raw_session, inner_session.create_raw_weak());
+        // TODO the client sessions are now only deleted if the context goes out of scope, i guess we need to work with weak references or pointers to the raw client sessions here.
+        ctx.attach_client_session(client_session.clone());
 
         client_session
     }
 
-    /// Restores a CoapClientSession from its raw counterpart.
+    /// Restores a [CoapClientSession] from its raw counterpart.
     ///
     /// Note that it is not possible to statically infer the lifetime of the created session from
     /// the raw pointer, i.e., the session will be created with an arbitrary lifetime.
@@ -166,7 +176,7 @@ impl CoapClientSession<'_> {
     ///
     /// # Panics
     /// Panics if the given pointer is a null pointer or the raw session is not a client-side
-    /// session.
+    /// session with app data.
     ///
     /// # Safety
     /// The provided pointer must be valid.

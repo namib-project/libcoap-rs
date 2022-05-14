@@ -1,3 +1,4 @@
+use std::fmt::{Display, Formatter};
 // SPDX-License-Identifier: BSD-2-Clause
 /*
  * request.rs - Types wrapping messages into requests and responses.
@@ -18,6 +19,9 @@ use crate::{
     types::{CoapUri, CoapUriHost, CoapUriScheme},
 };
 
+pub const MAX_URI_SEGMENT_LENGTH: usize = 255;
+pub const MAX_PROXY_URI_LENGTH: usize = 1034;
+
 /// Internal representation of a CoAP URI that can be used for requests
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 enum CoapRequestUri {
@@ -25,17 +29,26 @@ enum CoapRequestUri {
     Proxy(CoapUri),
 }
 
+impl Display for CoapRequestUri {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CoapRequestUri::Request(v) => f.write_fmt(format_args!("Request URI: {}", v.to_string())),
+            CoapRequestUri::Proxy(v) => f.write_fmt(format_args!("Proxy URI: {}", v.to_string())),
+        }
+    }
+}
+
 impl CoapRequestUri {
-    /// Creates a new request URI from the given CoapUri, returning an OptionValueError if the URI
+    /// Creates a new request URI from the given [CoapUri], returning an [OptionValueError] if the URI
     /// contains invalid values for request URIs.
     pub fn new_request_uri(uri: CoapUri) -> Result<CoapRequestUri, OptionValueError> {
         if uri
             .path_iter()
             .unwrap_or(vec![].iter())
             .chain(uri.query_iter().unwrap_or(vec![].iter()))
-            .any(|x| x.len() > 255)
+            .any(|x| x.len() > MAX_URI_SEGMENT_LENGTH)
         {
-            return Err(OptionValueError::TooShort);
+            return Err(OptionValueError::TooLong);
         }
         Ok(CoapRequestUri::Request(uri))
     }
@@ -46,7 +59,7 @@ impl CoapRequestUri {
         if uri.scheme().is_none() || uri.host().is_none() {
             return Err(OptionValueError::IllegalValue);
         }
-        if CoapRequestUri::generate_proxy_uri_string(&uri).len() > 1034 {
+        if CoapRequestUri::generate_proxy_uri_string(&uri).len() > MAX_PROXY_URI_LENGTH {
             return Err(OptionValueError::TooLong);
         }
         Ok(CoapRequestUri::Proxy(uri))
@@ -77,7 +90,7 @@ impl CoapRequestUri {
         proxy_uri_string
     }
 
-    /// Converts this request URI into a `Vec<CoapOption>` that can be added to a message.
+    /// Converts this request URI into a [`Vec<CoapOption>`] that can be added to a message.
     pub fn into_options(self) -> Vec<CoapOption> {
         let mut options = Vec::new();
         match self {
@@ -121,7 +134,7 @@ impl TryFrom<CoapUri> for CoapRequestUri {
 
 /// Representation of a CoAP request message.
 ///
-/// This struct wraps around the more direct CoapMessage and allows easier definition of typical
+/// This struct wraps around the more direct [CoapMessage] and allows easier definition of typical
 /// options used in requests.
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct CoapRequest {

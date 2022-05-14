@@ -33,7 +33,7 @@ pub(crate) trait DropInnerExclusively {
 pub(crate) struct CoapFfiRcCell<D>(Rc<RefCell<D>>);
 
 impl<D> CoapFfiRcCell<D> {
-    /// Creates a new instance of CoapAppDataRef, containing the provided value.
+    /// Creates a new instance of CoapFfiRcCell, containing the provided value.
     pub fn new(value: D) -> CoapFfiRcCell<D> {
         CoapFfiRcCell(Rc::new(RefCell::new(value)))
     }
@@ -42,10 +42,10 @@ impl<D> CoapFfiRcCell<D> {
     /// into the appropriate reference type.
     ///
     /// This is done by first restoring the `Rc<RefCell<D>>` using [Rc::from_raw()], then
-    /// cloning and creating the [CoapAppDataRef] from it (maintaining the original reference using
+    /// cloning and creating the [CoapFfiRcCell] from it (maintaining the original reference using
     /// [Rc::into_raw()]).
     ///
-    /// Note that for the lifetime of this [CoapAppDataRef], the reference counter of the
+    /// Note that for the lifetime of this [CoapFfiRcCell], the reference counter of the
     /// underlying [Rc] is increased by one.
     ///
     /// # Safety
@@ -65,11 +65,11 @@ impl<D> CoapFfiRcCell<D> {
     /// into the appropriate reference type.
     ///
     /// This is done by first restoring the `Weak<RefCell<D>>` using [Weak::from_raw()],
-    /// upgrading it to a `Rc<RefCell<D>>` then cloning and creating the [CoapAppDataRef] from the
+    /// upgrading it to a `Rc<RefCell<D>>` then cloning and creating the [CoapFfiRcCell] from the
     /// upgraded reference (restoring the raw pointer again afterwards using [Rc::downgrade()] and
     /// [Weak::into_raw()]).
     ///
-    /// Note that for the lifetime of this [CoapAppDataRef], the reference counter of the underlying
+    /// Note that for the lifetime of this [CoapFfiRcCell], the reference counter of the underlying
     /// [Rc] is increased by one.
     ///
     /// # Panics
@@ -93,7 +93,7 @@ impl<D> CoapFfiRcCell<D> {
     ///
     /// This is done by restoring the `Weak<RefCell<D>>` using [Weak::from_raw()],
     ///
-    /// Note that unlike [CoapAppDataRef::clone_raw_weak()], this does not clone the weak reference
+    /// Note that unlike [CoapFfiRcCell::clone_raw_weak()], this does not clone the weak reference
     /// inside of the pointer and instead restores the `Weak` directly from the pointer.
     /// This means that dropping the `Weak` returned from this function invalidates the pointer
     /// provided to this function.
@@ -118,7 +118,7 @@ impl<D> CoapFfiRcCell<D> {
     ///
     /// This is done by restoring the `Rc<RefCell<D>>` using [Rc::from_raw()],
     ///
-    /// Note that unlike [CoapAppDataRef::clone_raw_rc()], this does not clone the weak reference
+    /// Note that unlike [CoapFfiRcCell::clone_raw_rc()], this does not clone the weak reference
     /// inside of the pointer and instead restores the `Rc` directly from the pointer.
     /// This means that dropping the `Rc` returned from this function invalidates the pointer
     /// provided to this function and that the provided pointer must point to a valid
@@ -200,7 +200,7 @@ impl<D> Clone for CoapFfiRcCell<D> {
 
 impl<D: Debug> Debug for CoapFfiRcCell<D> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("CoapAppDataRef").field("0", &self.0).finish()
+        f.debug_struct("CoapFfiRcCell").field("0", &self.0).finish()
     }
 }
 
@@ -221,7 +221,7 @@ impl<T: Debug> DropInnerExclusively for CoapFfiRcCell<T> {
 pub(crate) struct CoapLendableFfiRcCell<T: Debug>(Rc<RefCell<T>>, Rc<RefCell<Option<*mut T>>>);
 
 impl<T: Debug> CoapLendableFfiRcCell<T> {
-    /// Creates a new `CoapLendableFfiRcCell` from the given value.
+    /// Creates a new [`CoapLendableFfiRcCell`] from the given value.
     pub fn new(value: T) -> CoapLendableFfiRcCell<T> {
         CoapLendableFfiRcCell(Rc::new(RefCell::new(value)), Rc::new(RefCell::new(None)))
     }
@@ -242,7 +242,7 @@ impl<T: Debug> CoapLendableFfiRcCell<T> {
             // retrieve the pointer value stored in the container at any time (as the value in the
             // Option is always retrieved using _take()_.
             // The validity of the pointer is ensured because the only way a value can be stored
-            // here is by calling FfiPassthroughRefContainer::lend_ref_mut(), which converts a
+            // here is by calling CoapLendableFfiRcCell::lend_ref_mut(), which converts a
             // reference into an always valid pointer.
             CoapLendableFfiRefMut::Borrowed(unsafe { borrowed.as_mut() }.unwrap(), Rc::clone(&self.1))
         } else {
@@ -266,7 +266,7 @@ impl<T: Debug> CoapLendableFfiRcCell<T> {
             // retrieve the pointer value stored in the container at any time (as the value in the
             // Option is always retrieved using _take()_.
             // The validity of the pointer is ensured because the only way a value can be stored
-            // here is by calling FfiPassthroughRefContainer::lend_ref_mut(), which converts a
+            // here is by calling CoapLendableFfiRcCell::lend_ref_mut(), which converts a
             // reference into an always valid pointer.
             // TODO we may want to allow multiple immutable borrows at some point(?)
             CoapLendableFfiRef::Borrowed(unsafe { borrowed.as_mut() }.unwrap(), Rc::clone(&self.1))
@@ -327,7 +327,7 @@ impl<T: Debug> CoapLendableFfiRcCell<T> {
         let ref_box: Box<CoapLendableFfiWeakCell<T>> = Box::from_raw(ptr);
         let ret_val = ref_box
             .upgrade()
-            .expect("unable to restore FfiPassthroughRefContainer as the underlying value was already dropped");
+            .expect("unable to restore CoapLendableFfiRcCell as the underlying value was already dropped");
         Box::into_raw(ref_box);
         ret_val
     }
@@ -358,7 +358,7 @@ impl<T: Debug> CoapLendableFfiRcCell<T> {
         assert_eq!(
             RefCell::as_ptr(&self.0),
             refer as *mut T,
-            "attempted to lend different object over FfiPassthroughRefContainer"
+            "attempted to lend different object over CoapLendableFfiRcCell"
         );
         CoapLendableFfiRefLender::new(refer, &self.1)
     }
@@ -415,7 +415,7 @@ impl<T: Debug> CoapLendableFfiWeakCell<T> {
 ///
 /// When this value is dropped, it will check whether the lent reference is currently used
 /// elsewhere and panic/abort if this is the case, as this would violate the Rust aliasing rules.
-pub struct CoapLendableFfiRefLender<'a, T> {
+pub(crate) struct CoapLendableFfiRefLender<'a, T> {
     lent_ref: &'a mut T,
     lent_ptr_ctr: Weak<RefCell<Option<*mut T>>>,
 }
@@ -443,7 +443,7 @@ impl<T> Drop for CoapLendableFfiRefLender<'_, T> {
                 lent_ptr_ctr
                     .take()
                     .expect("unable to retrieve lent reference, implying that it may be in use somewhere"),
-                "somehow, multiple references are stored in the same FfiPassthroughRefContainer"
+                "somehow, multiple references are stored in the same CoapLendableFfiRcCell"
             )
         }
     }
@@ -471,12 +471,13 @@ impl<T> Drop for CoapLendableFfiRef<'_, T> {
     fn drop(&mut self) {
         if let CoapLendableFfiRef::Borrowed(refer, lend_container) = self {
             let mut lend_container = RefCell::borrow_mut(lend_container);
-            if lend_container.is_some() {
-                panic!("somehow, multiple references are stored in the same FfiPassthroughRefContainer");
-            }
+            assert!(
+                lend_container.is_none(),
+                "somehow, multiple references are stored in the same CoapLendableFfiRcCell"
+            );
             assert!(
                 lend_container.replace(*refer).is_none(),
-                "somehow, multiple references are stored in the same FfiPassthroughRefContainer"
+                "somehow, multiple references are stored in the same CoapLendableFfiRcCell"
             );
         }
     }
@@ -513,12 +514,13 @@ impl<T> Drop for CoapLendableFfiRefMut<'_, T> {
     fn drop(&mut self) {
         if let CoapLendableFfiRefMut::Borrowed(refer, lend_container) = self {
             let mut lend_container = RefCell::borrow_mut(lend_container);
-            if lend_container.is_some() {
-                panic!("somehow, multiple references are stored in the same FfiPassthroughRefContainer");
-            }
+            assert!(
+                lend_container.is_none(),
+                "somehow, multiple references are stored in the same CoapLendableFfiRcCell"
+            );
             assert!(
                 lend_container.replace(*refer).is_none(),
-                "somehow, multiple references are stored in the same FfiPassthroughRefContainer"
+                "somehow, multiple references are stored in the same CoapLendableFfiRcCell"
             );
         }
     }

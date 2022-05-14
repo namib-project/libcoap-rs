@@ -6,6 +6,7 @@
  */
 //! Types required for conversion between libcoap C library abstractions and Rust types.
 
+use std::fmt::{Display, Formatter};
 use std::{
     convert::Infallible,
     fmt::Debug,
@@ -35,15 +36,19 @@ use libcoap_sys::{
 
 use crate::error::UriParsingError;
 
+/// Interface index used internally by libcoap to refer to an endpoint.
 pub type IfIndex = c_int;
+/// Value for maximum retransmits.
 pub type MaxRetransmit = c_uint;
+/// Identifier for a CoAP message.
 pub type CoapMessageId = coap_mid_t;
 
 /// Internal wrapper for the raw coap_address_t type, mainly used for conversion between types.
-pub struct CoapAddress(coap_address_t);
+pub(crate) struct CoapAddress(coap_address_t);
 
 impl CoapAddress {
-    pub fn as_raw_address(&self) -> &coap_address_t {
+    /// Returns a reference to the underlying raw [coap_address_t].
+    pub(crate) fn as_raw_address(&self) -> &coap_address_t {
         &self.0
     }
 
@@ -57,12 +62,16 @@ impl CoapAddress {
     /// The underlying [coap_address_t] must always refer to a valid instance of sockaddr_in or
     /// sockaddr_in6, and [coap_address_t::size] must always be the correct size of the sockaddr
     /// in the [coap_address_t::addr] field.
-    pub unsafe fn as_mut_raw_address(&mut self) -> &mut coap_address_t {
+    // Kept for consistency
+    #[allow(dead_code)]
+    pub(crate) unsafe fn as_mut_raw_address(&mut self) -> &mut coap_address_t {
         &mut self.0
     }
 
     /// Converts this address into the corresponding raw [coap_address_t](libcoap_sys::coap_address_t)
-    pub fn into_raw_address(self) -> coap_address_t {
+    // Kept for consistency
+    #[allow(dead_code)]
+    pub(crate) fn into_raw_address(self) -> coap_address_t {
         self.0
     }
 }
@@ -151,13 +160,14 @@ impl From<SocketAddr> for CoapAddress {
         }
     }
 }
-
+#[doc(hidden)]
 impl From<coap_address_t> for CoapAddress {
     fn from(raw_addr: coap_address_t) -> Self {
         CoapAddress(raw_addr)
     }
 }
 
+#[doc(hidden)]
 impl From<&coap_address_t> for CoapAddress {
     fn from(raw_addr: &coap_address_t) -> Self {
         let mut new_addr = MaybeUninit::zeroed();
@@ -206,16 +216,22 @@ impl FromStr for CoapUriScheme {
     }
 }
 
-impl ToString for CoapUriScheme {
-    fn to_string(&self) -> String {
-        match self {
-            CoapUriScheme::Coap => "coap".to_string(),
-            CoapUriScheme::Coaps => "coaps".to_string(),
-            CoapUriScheme::CoapTcp => "coap+tcp".to_string(),
-            CoapUriScheme::CoapsTcp => "coaps+tcp".to_string(),
-            CoapUriScheme::Http => "http".to_string(),
-            CoapUriScheme::Https => "https".to_string(),
-        }
+impl Display for CoapUriScheme {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            CoapUriScheme::Coap => "coap",
+            CoapUriScheme::Coaps => "coaps",
+            CoapUriScheme::CoapTcp => "coap+tcp",
+            CoapUriScheme::CoapsTcp => "coaps+tcp",
+            CoapUriScheme::Http => "http",
+            CoapUriScheme::Https => "https",
+        })
+    }
+}
+
+impl From<coap_uri_scheme_t> for CoapUriScheme {
+    fn from(scheme: coap_uri_scheme_t) -> Self {
+        CoapUriScheme::from_raw_scheme(scheme)
     }
 }
 
@@ -244,22 +260,19 @@ impl FromStr for CoapUriHost {
     }
 }
 
-impl From<coap_uri_scheme_t> for CoapUriScheme {
-    fn from(scheme: coap_uri_scheme_t) -> Self {
-        CoapUriScheme::from_raw_scheme(scheme)
+impl Display for CoapUriHost {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(
+            match self {
+                CoapUriHost::IpLiteral(addr) => addr.to_string(),
+                CoapUriHost::Name(host) => host.clone(),
+            }
+            .as_str(),
+        )
     }
 }
 
-impl ToString for CoapUriHost {
-    fn to_string(&self) -> String {
-        match self {
-            CoapUriHost::IpLiteral(addr) => addr.to_string(),
-            CoapUriHost::Name(host) => host.clone(),
-        }
-    }
-}
-
-/// Representation of an URI for CoAP requests or responses.
+/// Representation of a URI for CoAP requests or responses.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CoapUri {
     scheme: Option<CoapUriScheme>,
@@ -270,6 +283,7 @@ pub struct CoapUri {
 }
 
 impl CoapUri {
+    /// Creates a new CoapUri from the given components.
     pub fn new(
         scheme: Option<CoapUriScheme>,
         host: Option<CoapUriHost>,
@@ -286,6 +300,10 @@ impl CoapUri {
         }
     }
 
+    /// Attempts to convert a [Url] into a [CoapUri].
+    ///
+    /// # Errors
+    /// May fail if the provided Url has an invalid scheme.
     pub fn try_from_url(url: Url) -> Result<CoapUri, UriParsingError> {
         let path: Vec<String> = url
             .path()
@@ -306,30 +324,37 @@ impl CoapUri {
         })
     }
 
+    /// Returns the scheme part of this URI.
     pub fn scheme(&self) -> Option<&CoapUriScheme> {
         self.scheme.as_ref()
     }
 
+    /// Returns the host part of this URI.
     pub fn host(&self) -> Option<&CoapUriHost> {
         self.host.as_ref()
     }
 
+    /// Returns the port of this URI (if provided).
     pub fn port(&self) -> Option<u16> {
         self.port
     }
 
-    pub fn drain_path_iter(&mut self) -> Option<Drain<String>> {
+    /// Drains the parts of the URI path of this CoapUri into an iterator.
+    pub(crate) fn drain_path_iter(&mut self) -> Option<Drain<String>> {
         self.path.as_mut().map(|p| p.drain(..))
     }
 
+    /// Returns an iterator over the path components of this URI.
     pub fn path_iter(&self) -> Option<Iter<'_, String>> {
         self.path.as_ref().map(|p| p.iter())
     }
 
+    /// Drains the parts of the URI query of this CoapUri into an iterator.
     pub fn drain_query_iter(&mut self) -> Option<Drain<String>> {
         self.query.as_mut().map(|p| p.drain(..))
     }
 
+    /// Returns an iterator over the query components of this URI.
     pub fn query_iter(&self) -> Option<Iter<String>> {
         self.query.as_ref().map(|p| p.iter())
     }
@@ -340,6 +365,23 @@ impl TryFrom<Url> for CoapUri {
 
     fn try_from(value: Url) -> Result<Self, Self::Error> {
         CoapUri::try_from_url(value)
+    }
+}
+
+impl Display for CoapUri {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!(
+            "{}{}{}{}{}",
+            self.scheme.map_or_else(String::new, |v| format!("{}://", v)),
+            self.host.as_ref().map_or_else(String::new, |v| v.to_string()),
+            self.port.map_or_else(String::new, |v| format!(":{}", v)),
+            self.path
+                .as_ref()
+                .map_or_else(String::new, |v| format!("/{}", v.join("/"))),
+            self.query
+                .as_ref()
+                .map_or_else(String::new, |v| format!("?{}", v.join("&"))),
+        ))
     }
 }
 
@@ -355,9 +397,22 @@ pub enum CoapProtocol {
     Tls = COAP_PROTO_TLS as u32,
 }
 
+#[doc(hidden)]
 impl From<coap_proto_t> for CoapProtocol {
     fn from(raw_proto: coap_proto_t) -> Self {
         <CoapProtocol as FromPrimitive>::from_u32(raw_proto as u32).expect("unknown protocol")
+    }
+}
+
+impl Display for CoapProtocol {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            CoapProtocol::None => "none",
+            CoapProtocol::Udp => "udp",
+            CoapProtocol::Dtls => "dtls",
+            CoapProtocol::Tcp => "tcp",
+            CoapProtocol::Tls => "tls",
+        })
     }
 }
 
@@ -374,7 +429,11 @@ fn convert_to_fixed_size_slice(n: usize, val: &[u8]) -> Box<[u8]> {
 
 // TODO the following functions should probably return a result and use generics.
 pub(crate) fn decode_var_len_u32(val: &[u8]) -> u32 {
-    u32::from_be_bytes(convert_to_fixed_size_slice(4, val)[..4].try_into().unwrap())
+    u32::from_be_bytes(
+        convert_to_fixed_size_slice(4, val)[..4]
+            .try_into()
+            .expect("could not convert from variable sized value to fixed size number as the lengths don't match"),
+    )
 }
 
 pub(crate) fn encode_var_len_u32(val: u32) -> Box<[u8]> {
@@ -388,7 +447,11 @@ pub(crate) fn encode_var_len_u32(val: u32) -> Box<[u8]> {
 // Kept for consistency
 #[allow(unused)]
 pub(crate) fn decode_var_len_u64(val: &[u8]) -> u64 {
-    u64::from_be_bytes(convert_to_fixed_size_slice(8, val)[..8].try_into().unwrap())
+    u64::from_be_bytes(
+        convert_to_fixed_size_slice(8, val)[..8]
+            .try_into()
+            .expect("could not convert from variable sized value to fixed size number as the lengths don't match"),
+    )
 }
 
 // Kept for consistency
@@ -402,7 +465,11 @@ pub(crate) fn encode_var_len_u64(val: u64) -> Box<[u8]> {
 }
 
 pub(crate) fn decode_var_len_u16(val: &[u8]) -> u16 {
-    u16::from_be_bytes(convert_to_fixed_size_slice(2, val)[..2].try_into().unwrap())
+    u16::from_be_bytes(
+        convert_to_fixed_size_slice(2, val)[..2]
+            .try_into()
+            .expect("could not convert from variable sized value to fixed size number as the lengths don't match"),
+    )
 }
 
 pub(crate) fn encode_var_len_u16(val: u16) -> Box<[u8]> {
@@ -416,7 +483,11 @@ pub(crate) fn encode_var_len_u16(val: u16) -> Box<[u8]> {
 // Kept for consistency
 #[allow(unused)]
 pub(crate) fn decode_var_len_u8(val: &[u8]) -> u16 {
-    u16::from_be_bytes(convert_to_fixed_size_slice(1, val)[..1].try_into().unwrap())
+    u16::from_be_bytes(
+        convert_to_fixed_size_slice(1, val)[..1]
+            .try_into()
+            .expect("could not convert from variable sized value to fixed size number as the lengths don't match"),
+    )
 }
 
 pub(crate) fn encode_var_len_u8(val: u8) -> Box<[u8]> {

@@ -20,7 +20,7 @@ use rand::Rng;
 use libcoap_sys::{
     coap_context_t, coap_fixed_point_t, coap_mid_t, coap_new_message_id, coap_pdu_get_token, coap_pdu_t,
     coap_response_t, coap_send, coap_session_get_ack_random_factor, coap_session_get_ack_timeout,
-    coap_session_get_addr_local, coap_session_get_addr_remote, coap_session_get_app_data, coap_session_get_ifindex,
+    coap_session_get_addr_local, coap_session_get_addr_remote, coap_session_get_ifindex,
     coap_session_get_max_retransmit, coap_session_get_proto, coap_session_get_psk_hint, coap_session_get_psk_identity,
     coap_session_get_psk_key, coap_session_get_state, coap_session_get_type, coap_session_init_token,
     coap_session_max_pdu_size, coap_session_new_token, coap_session_send_ping, coap_session_set_ack_random_factor,
@@ -87,7 +87,7 @@ mod sealed {
     /// Functions common between all sessions that should not be public.
     ///
     /// This trait does not have any mandatory functions and will be automatically implemented for
-    /// all types that implement CoapSesssionInnerProvider.
+    /// all types that implement [CoapSessionInnerProvider].
     pub trait CoapSessionCommonInternal<'a>: CoapSessionInnerProvider<'a> {
         fn add_response(&self, pdu: CoapResponse) {
             let token = pdu.token();
@@ -128,10 +128,6 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     fn clear_app_data(&self) {
         let mut inner = self.inner_mut();
         inner.app_data = None;
-        let raw_inner_ptr = unsafe { coap_session_get_app_data(inner.raw_session) };
-        if !raw_inner_ptr.is_null() {
-            std::mem::drop(unsafe { Rc::from_raw(raw_inner_ptr) });
-        }
     }
 
     /// Returns the Ack-Random-Factor used by libcoap.
@@ -139,12 +135,14 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     /// The returned value is a tuple consisting of an integer and a fractional part, where the
     /// fractional part is a value from 0-999 and represents the first three digits after the comma.
     fn ack_random_factor(&self) -> (u16, u16) {
+        // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         let random_factor = unsafe { coap_session_get_ack_random_factor(self.inner_ref().raw_session) };
         (random_factor.integer_part, random_factor.fractional_part)
     }
 
     /// Sets the Ack-Random-Factor used by libcoap.
     fn set_ack_random_factor(&self, integer_part: u16, fractional_part: u16) {
+        // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         unsafe {
             coap_session_set_ack_random_factor(
                 self.inner_mut().raw_session,
@@ -161,12 +159,14 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     /// The returned value is a tuple consisting of an integer and a fractional part, where the
     /// fractional part is a value from 0-999 and represents the first three digits after the comma.
     fn ack_timeout(&self) -> (u16, u16) {
+        // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         let random_factor = unsafe { coap_session_get_ack_timeout(self.inner_ref().raw_session) };
         (random_factor.integer_part, random_factor.fractional_part)
     }
 
     /// Sets the value of the Acknowledgement Timeout for this session.
     fn set_ack_timeout(&self, integer_part: u16, fractional_part: u16) {
+        // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         unsafe {
             coap_session_set_ack_timeout(
                 self.inner_ref().raw_session,
@@ -181,6 +181,8 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     /// Returns the local address for this session.
     fn addr_local(&self) -> SocketAddr {
         CoapAddress::from(unsafe {
+            // This is infallible as long as the raw session is valid (which it always should be
+            // as long as the invariants are kept).
             coap_session_get_addr_local(self.inner_ref().raw_session)
                 .as_ref()
                 .unwrap()
@@ -194,6 +196,8 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     /// Returns the remote address for this session.
     fn addr_remote(&self) -> SocketAddr {
         CoapAddress::from(unsafe {
+            // This is infallible as long as the raw session is valid (which it always should be
+            // as long as the invariants are kept).
             coap_session_get_addr_remote(self.inner_ref().raw_session)
                 .as_ref()
                 .unwrap()
@@ -206,25 +210,31 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
 
     /// Returns the interface index for this session.
     fn if_index(&self) -> IfIndex {
+        // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         unsafe { coap_session_get_ifindex(self.inner_ref().raw_session) }
     }
 
-    /// Sets the maximum number of retransmissions for this session.
+    /// Returns the maximum number of retransmissions for this session.
     fn max_retransmit(&self) -> MaxRetransmit {
+        // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         unsafe { coap_session_get_max_retransmit(self.inner_ref().raw_session) }
     }
 
+    /// Sets the maximum number of retransmissions for this session.
     fn set_max_retransmit(&mut self, value: MaxRetransmit) {
+        // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         unsafe { coap_session_set_max_retransmit(self.inner_ref().raw_session, value) }
     }
 
     /// Returns the underlying transport protocol used for this session.
     fn proto(&self) -> CoapProtocol {
+        // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         unsafe { coap_session_get_proto(self.inner_ref().raw_session) }.into()
     }
 
     /// Returns the current PSK hint for this session.
     fn psk_hint(&self) -> Option<Box<CoapCryptoPskIdentity>> {
+        // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         unsafe {
             coap_session_get_psk_hint(self.inner_ref().raw_session)
                 .as_ref()
@@ -234,6 +244,7 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
 
     /// Returns the current PSK identity for this session.
     fn psk_identity(&self) -> Option<Box<CoapCryptoPskIdentity>> {
+        // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         unsafe {
             coap_session_get_psk_identity(self.inner_ref().raw_session)
                 .as_ref()
@@ -243,6 +254,7 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
 
     /// Returns the current PSK key for this session.
     fn psk_key(&self) -> Option<Box<CoapCryptoPskData>> {
+        // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         unsafe {
             coap_session_get_psk_key(self.inner_ref().raw_session)
                 .as_ref()
@@ -252,6 +264,7 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
 
     /// Returns the current state of this session.
     fn state(&self) -> CoapSessionState {
+        // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         unsafe { coap_session_get_state(self.inner_ref().raw_session).into() }
     }
 
@@ -261,41 +274,50 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     /// [new_token()](CoapSessionCommon::new_token), because the wrapper will use a random number
     /// generator to set the tokens instead.
     fn init_token(&self, token: &[u8; 8]) {
+        // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         unsafe { coap_session_init_token(self.inner_mut().raw_session, token.len(), token.as_ptr()) }
     }
 
     /// Returns the maximum size of a PDU for this session.
     fn max_pdu_size(&self) -> usize {
+        // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         unsafe { coap_session_max_pdu_size(self.inner_ref().raw_session) }
     }
 
     /// Sets the maximum size of a PDU for this session.
     fn set_mtu(&self, mtu: u32) {
+        // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         unsafe { coap_session_set_mtu(self.inner_mut().raw_session, mtu) }
     }
 
     /// Returns the next message ID that should be used for this session.
     fn next_message_id(&self) -> CoapMessageId {
+        // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         unsafe { coap_new_message_id(self.inner_mut().raw_session) as CoapMessageId }
     }
 
     /// Returns the next token that should be used for requests.
     fn new_token(&mut self, token: &mut [u8; 8]) -> usize {
         let mut length = 8;
+        // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         unsafe { coap_session_new_token(self.inner_mut().raw_session, &mut length, token.as_mut_ptr()) }
         length
     }
 
     /// Send a ping message to the remote peer.
     fn send_ping(&mut self) -> CoapMessageId {
+        // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         unsafe { coap_session_send_ping(self.inner_mut().raw_session) }
     }
 
     /// Send the given message-like object to the peer.
     ///
-    /// Returns a MessageConversionError if the supplied object cannot be converted to a message.
+    /// # Errors
+    /// Returns a [MessageConversionError] if the supplied object cannot be converted to a message.
     fn send<P: Into<CoapMessage>>(&self, pdu: P) -> Result<CoapMessageId, MessageConversionError> {
         let raw_pdu = pdu.into().into_raw_pdu(self)?;
+        // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner,
+        // raw pdu should be valid as we got it from `into_raw_pdu()`.
         let mid = unsafe { coap_send(self.inner_mut().raw_session, raw_pdu) };
         Ok(mid)
     }
@@ -303,7 +325,8 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     /// Sends the given CoapRequest, returning a CoapRequestHandle that can be used to poll the
     /// request for completion.
     ///
-    /// Returns a MessageConversionError if the given Request could not be converted into a raw
+    /// # Errors
+    /// Returns a [MessageConversionError] if the given Request could not be converted into a raw
     /// message.
     fn send_request(&self, mut req: CoapRequest) -> Result<CoapRequestHandle, MessageConversionError> {
         if req.token().is_none() {
@@ -324,6 +347,10 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     /// Polls whether the request for the given handle already has pending responses.
     ///
     /// Returns an iterator over all responses associated with the request.
+    ///
+    /// # Panics
+    /// Panics if the provided handle does not refer to a valid token, i.e., because it belongs to
+    /// a different session.
     fn poll_handle(&self, handle: &CoapRequestHandle) -> std::collections::vec_deque::IntoIter<CoapResponse> {
         self.inner_mut()
             .received_responses
@@ -332,6 +359,7 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
             .into_iter()
     }
 
+    /// Returns whether this session waits for the provided token.
     fn is_waiting_for_token(&self, token: &CoapToken) -> bool {
         self.inner_ref().received_responses.contains_key(token)
     }
@@ -444,7 +472,12 @@ impl PartialEq for CoapSession<'_> {
 
 impl Eq for CoapSession<'_> {}
 
+/// Inner part of the representation of a CoapSession.
+///
+/// For internal use only, this is only public because of some limitations in Rusts type system
+/// (as we would leak a private type).
 #[derive(Debug)]
+#[doc(hidden)]
 pub struct CoapSessionInner<'a> {
     raw_session: *mut coap_session_t,
     app_data: Option<Rc<dyn Any>>,
@@ -452,6 +485,35 @@ pub struct CoapSessionInner<'a> {
     _context_lifetime_marker: PhantomData<&'a coap_context_t>,
 }
 
+impl CoapSessionInner<'_> {
+    /// Initializes a new session from its raw counterpart.
+    ///
+    /// Callers of this function should probably also insert themselves into the `app_data` pointer
+    /// of the raw session to allow later retrieval (as is done for `CoapClientSession` and
+    /// `CoapServerSession`.
+    ///
+    /// # Safety
+    /// Provided pointer must point to a valid raw_session.
+    ///
+    /// Note that the chosen lifetime for the inner session is arbitraty, so you should ensure that
+    /// the CoapSessionInner instance does not outlive the underlying session.
+    /// To do so, you probably want to increase the reference counter of the session by one and
+    /// never provide values of this session with a lifetime that exceeds the one of the
+    /// [CoapContext] this session is bound to.
+    pub(crate) unsafe fn new<'a>(raw_session: *mut coap_session_t) -> CoapSessionInner<'a> {
+        CoapSessionInner {
+            raw_session,
+            app_data: None,
+            received_responses: HashMap::new(),
+            _context_lifetime_marker: Default::default(),
+        }
+    }
+}
+
+/// A handle returned by CoAP sessions upon sending a request.
+///
+/// Can be used in calls to [CoapSessionCommon::poll_handle()] to check for responses to the sent
+/// request.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CoapRequestHandle {
     _mid: CoapMessageId,
@@ -459,7 +521,7 @@ pub struct CoapRequestHandle {
 }
 
 impl CoapRequestHandle {
-    pub fn new<T: Into<Box<[u8]>>>(mid: CoapMessageId, token: T) -> CoapRequestHandle {
+    fn new<T: Into<Box<[u8]>>>(mid: CoapMessageId, token: T) -> CoapRequestHandle {
         CoapRequestHandle {
             _mid: mid,
             token: token.into(),

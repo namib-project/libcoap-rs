@@ -14,7 +14,7 @@ use crate::session::{CoapServerSession, CoapSession};
 
 /// Trait for CoAP event handlers.
 ///
-/// Implementations of this trait can be provided to a CoapContext to handle various events relating
+/// Implementations of this trait can be provided to a [CoapContext] to handle various events relating
 /// to sessions.
 ///
 /// This is the equivalent to the [libcoap `coap_event_handler_t` type](https://libcoap.net/doc/reference/develop/group__events.html#ga5d57fba7df54eae6f8cb3a47a4cb3569).

@@ -9,7 +9,7 @@
 //! The base unit that is transmitted between a CoAP client and a CoAP server is called a CoAP
 //! message (in libcoap also referred to as a "pdu"). This module contains both the basic
 //! representation for messages in libcoap-rs ([CoapMessage]) as well as builders that simplify the
-//! process of creating requests and responses and setting the appropiate options ([CoapRequest]
+//! process of creating requests and responses and setting the appropriate options ([CoapRequest]
 //! and [CoapResponse]).
 
 use std::{ffi::c_void, mem::MaybeUninit, slice::Iter};
@@ -270,7 +270,7 @@ pub trait CoapMessageCommon {
 
     /// Sets the message token.
     ///
-    /// Note that [CoapClientSession::send_request()](crate::session::CoapClientSession::send_request()) will automatically set the token to a random
+    /// Note that [CoapSessionCommon::send_request()] will automatically set the token to a random
     /// value if you don't.
     fn set_token<D: Into<Box<[u8]>>>(&mut self, token: Option<D>) {
         self.as_message_mut().token = token.map(Into::into);
