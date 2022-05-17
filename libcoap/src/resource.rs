@@ -426,6 +426,9 @@ impl<D: Any + ?Sized + Debug> Drop for CoapResourceInner<D> {
 /// - The incoming [CoapRequest] received from the client.
 /// - A prepared [CoapResponse] instance that is already set to the correct token value to be
 ///   treated as a response to the request by the client.
+// We'll allow the complex type as trait aliases are experimental and we'll probably want to use
+// those instead of aliasing the entire type including wrappers.
+#[allow(clippy::type_complexity)]
 pub struct CoapRequestHandler<D: Any + ?Sized + Debug> {
     raw_handler: unsafe extern "C" fn(
         resource: *mut coap_resource_t,
@@ -473,6 +476,9 @@ impl<D: 'static + ?Sized + Debug> CoapRequestHandler<D> {
     /// The handler function must not modify the user data value inside of the provided raw resource
     /// in a way that would break normal handler functions. Also, neither the resource nor the
     /// session may be freed by calling `coap_delete_resource` or `coap_session_release`.
+    // We'll allow the complex type as trait aliases are experimental and we'll probably want to use
+    // those instead of aliasing the entire type including wrappers.
+    #[allow(clippy::type_complexity)]
     pub unsafe fn from_raw_handler(
         raw_handler: unsafe extern "C" fn(
             resource: *mut coap_resource_t,

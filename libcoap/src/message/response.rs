@@ -13,7 +13,7 @@ pub struct CoapResponseLocation(CoapUri);
 
 impl Display for CoapResponseLocation {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("Response Location: {}", self.0.to_string()))
+        f.write_fmt(format_args!("Response Location: {}", self.0))
     }
 }
 

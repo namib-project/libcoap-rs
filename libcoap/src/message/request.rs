@@ -32,8 +32,8 @@ enum CoapRequestUri {
 impl Display for CoapRequestUri {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            CoapRequestUri::Request(v) => f.write_fmt(format_args!("Request URI: {}", v.to_string())),
-            CoapRequestUri::Proxy(v) => f.write_fmt(format_args!("Proxy URI: {}", v.to_string())),
+            CoapRequestUri::Request(v) => f.write_fmt(format_args!("Request URI: {}", v)),
+            CoapRequestUri::Proxy(v) => f.write_fmt(format_args!("Proxy URI: {}", v)),
         }
     }
 }
@@ -41,6 +41,9 @@ impl Display for CoapRequestUri {
 impl CoapRequestUri {
     /// Creates a new request URI from the given [CoapUri], returning an [OptionValueError] if the URI
     /// contains invalid values for request URIs.
+    // Using unwrap_or_else here will give us an error because we want to use an iterator that
+    // outlives its Vec, so we have to use unwrap_or here.
+    #[allow(clippy::or_fun_call)]
     pub fn new_request_uri(uri: CoapUri) -> Result<CoapRequestUri, OptionValueError> {
         if uri
             .path_iter()

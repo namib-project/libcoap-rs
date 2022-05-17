@@ -130,9 +130,9 @@ lib:coverage:
     - job: fetch-deps
       artifacts: true
   script:
-    - cargo clippy --locked -p $PKG_NAME -- -D warnings
+    - cargo clippy --locked --no-deps -p $PKG_NAME -- -D warnings
   after_script:
-    - cargo clippy --locked -p $PKG_NAME --message-format=json | gitlab-clippy > target/$PKG_NAME-code-quality.json
+    - cargo clippy --locked --no-deps -p $PKG_NAME --message-format=json | gitlab-clippy > target/$PKG_NAME-code-quality.json
   artifacts:
     reports:
       codequality: target/$PKG_NAME-code-quality.json
