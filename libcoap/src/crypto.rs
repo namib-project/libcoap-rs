@@ -12,7 +12,9 @@ use std::{
     os::raw::c_char,
 };
 
-use libcoap_sys::{coap_bin_const_t, coap_dtls_cpsk_info_t, coap_dtls_spsk_info_t, coap_session_t, coap_str_const_t};
+use libcoap_sys::{
+    coap_bin_const_t, coap_context_t, coap_dtls_cpsk_info_t, coap_dtls_spsk_info_t, coap_session_t, coap_str_const_t,
+};
 
 use crate::{context::CoapContext, session::CoapClientSession};
 
@@ -133,7 +135,7 @@ pub(crate) unsafe extern "C" fn dtls_server_id_callback(
     _session: *mut coap_session_t,
     userdata: *mut c_void,
 ) -> *const coap_bin_const_t {
-    let context = (userdata as *mut CoapContext).as_mut().unwrap();
+    let context = CoapContext::from_raw(userdata as *mut coap_context_t);
     let provided_identity = std::slice::from_raw_parts((*identity).s, (*identity).length);
     context
         .provide_raw_key_for_identity(provided_identity)
@@ -146,7 +148,7 @@ pub(crate) unsafe extern "C" fn dtls_server_sni_callback(
     _session: *mut coap_session_t,
     userdata: *mut c_void,
 ) -> *const coap_dtls_spsk_info_t {
-    let context = (userdata as *mut CoapContext).as_mut().unwrap();
+    let context = CoapContext::from_raw(userdata as *mut coap_context_t);
     let sni_value = CStr::from_ptr(sni).to_str();
     if let Ok(sni_value) = sni_value {
         context
