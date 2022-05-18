@@ -5,6 +5,7 @@
  * See the README as well as the LICENSE file for more information.
  */
 
+use std::io::ErrorKind;
 use std::{
     default::Default,
     env,
@@ -99,6 +100,11 @@ fn main() {
             overwrite: true,
             ..Default::default()
         };
+        match std::fs::remove_dir_all(Path::new(&out_dir).join("libcoap")) {
+            Ok(_) => {},
+            Err(e) if e.kind() == ErrorKind::NotFound => {},
+            e => e.unwrap(),
+        }
         fs_extra::dir::copy(
             Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join("libcoap"),
             Path::new(&out_dir),
