@@ -10,17 +10,20 @@ version = "0.1.0"
 edition = "2021"
 license = "BSD-2-Clause"
 readme = "README.md"
-homepage = "https://github.com/namib-project/libcoap-rs"
 repository = "https://github.com/namib-project/libcoap-rs"
 authors = ["Hugo Hakim Damer <hdamer@uni-bremen.de>"]
 categories = ["api-bindings", "network-programming", "embedded"]
 keywords = ["coap", "libcoap"]
 
 [features]
-default = ["client", "server", "dtls", "tcp"]
+default = ["client", "server", "dtls", "tcp", "dtls_openssl"]
 client = []
 server = []
 dtls = ["libcoap-sys/dtls"]
+dtls_tinydtls = ["libcoap-sys/dtls_backend_tinydtls"]
+dtls_openssl = ["libcoap-sys/dtls_backend_openssl"]
+dtls_gnutls = ["libcoap-sys/dtls_backend_gnutls"]
+dtls_mbedtls = ["libcoap-sys/dtls_backend_mbedtls"]
 tcp = []
 nightly = []
 
@@ -32,6 +35,3 @@ num-traits = {version = "^0.2.14"}
 url = {version = "^2.2"}
 rand = {version = "^0.8.4"}
 thiserror = "^1.0"
-
-[dev-dependencies]
-libcoap-sys = {path = "../libcoap-sys", features = ["dtls_backend_tinydtls"]}

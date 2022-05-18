@@ -11,6 +11,9 @@ use std::{
     fmt::{Display, Formatter},
 };
 
+use num_derive::FromPrimitive;
+use num_traits::FromPrimitive;
+
 use libcoap_sys::{
     coap_option_num_t, coap_pdu_code_t, coap_pdu_type_t,
     coap_pdu_type_t::{COAP_MESSAGE_ACK, COAP_MESSAGE_CON, COAP_MESSAGE_NON, COAP_MESSAGE_RST},
@@ -30,8 +33,6 @@ use libcoap_sys::{
     COAP_OPTION_OBSERVE, COAP_OPTION_PROXY_SCHEME, COAP_OPTION_PROXY_URI, COAP_OPTION_SIZE1, COAP_OPTION_SIZE2,
     COAP_OPTION_URI_HOST, COAP_OPTION_URI_PATH, COAP_OPTION_URI_PORT, COAP_OPTION_URI_QUERY,
 };
-use num_derive::FromPrimitive;
-use num_traits::FromPrimitive;
 
 use crate::error::{MessageCodeError, UnknownOptionError};
 
@@ -493,60 +494,4 @@ impl From<coap_pdu_type_t> for CoapMessageType {
     fn from(raw_type: coap_pdu_type_t) -> Self {
         num_traits::FromPrimitive::from_u32(raw_type as u32).expect("unknown PDU type")
     }
-}
-
-fn convert_to_fixed_size_slice(n: usize, val: &[u8]) -> Box<[u8]> {
-    if val.len() > n {
-        panic!("supplied slice too short");
-    }
-    let mut buffer: Vec<u8> = vec![0; n];
-    let (_, target_buffer) = buffer.split_at_mut(n - val.len());
-    target_buffer.copy_from_slice(val);
-    buffer.truncate(n);
-    buffer.into_boxed_slice()
-}
-
-// TODO the following functions should probably return a result and use generics.
-pub(crate) fn decode_var_len_u32(val: &[u8]) -> u32 {
-    u32::from_be_bytes(convert_to_fixed_size_slice(4, val)[..4].try_into().unwrap())
-}
-
-pub(crate) fn encode_var_len_u32(val: u32) -> Box<[u8]> {
-    // I really hope that rust accounts for endianness here.
-    let bytes_to_discard = val.leading_zeros() / 8;
-    let mut ret_val = Vec::from(val.to_be_bytes());
-    ret_val.drain(..bytes_to_discard as usize);
-    ret_val.into_boxed_slice()
-}
-
-pub(crate) fn decode_var_len_u64(val: &[u8]) -> u64 {
-    u64::from_be_bytes(convert_to_fixed_size_slice(8, val)[..8].try_into().unwrap())
-}
-
-pub(crate) fn encode_var_len_u64(val: u64) -> Box<[u8]> {
-    // I really hope that rust accounts for endianness here.
-    let bytes_to_discard = val.leading_zeros() / 8;
-    let mut ret_val = Vec::from(val.to_be_bytes());
-    ret_val.drain(..bytes_to_discard as usize);
-    ret_val.into_boxed_slice()
-}
-
-pub(crate) fn decode_var_len_u16(val: &[u8]) -> u16 {
-    u16::from_be_bytes(convert_to_fixed_size_slice(2, val)[..2].try_into().unwrap())
-}
-
-pub(crate) fn encode_var_len_u16(val: u16) -> Box<[u8]> {
-    // I really hope that rust accounts for endianness here.
-    let bytes_to_discard = val.leading_zeros() / 8;
-    let mut ret_val = Vec::from(val.to_be_bytes());
-    ret_val.drain(..bytes_to_discard as usize);
-    ret_val.into_boxed_slice()
-}
-
-pub(crate) fn decode_var_len_u8(val: &[u8]) -> u16 {
-    u16::from_be_bytes(convert_to_fixed_size_slice(1, val)[..1].try_into().unwrap())
-}
-
-pub(crate) fn encode_var_len_u8(val: u8) -> Box<[u8]> {
-    Vec::from([val]).into_boxed_slice()
 }

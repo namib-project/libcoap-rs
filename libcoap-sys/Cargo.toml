@@ -6,12 +6,11 @@
 [package]
 name = "libcoap-sys"
 description = "Raw bindings to the libcoap CoAP library."
-version = "0.1.0+libcoap-4.3.0-44068b0"
+version = "0.1.0+libcoap-develop-50128de"
 edition = "2021"
 license = "BSD-2-Clause AND BSD-1-Clause"
 links = "coap-3"
 readme = "README.md"
-homepage = "https://github.com/namib-project/libcoap-rs"
 repository = "https://github.com/namib-project/libcoap-rs"
 authors = ["Hugo Hakim Damer <hdamer@uni-bremen.de>"]
 categories = ["external-ffi-bindings", "network-progrmaming", "embedded"]

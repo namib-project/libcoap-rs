@@ -5,21 +5,24 @@
  * See the README as well as the LICENSE file for more information.
  */
 //! Types required for conversion between libcoap C library abstractions and Rust types.
+
+use std::fmt::{Display, Formatter};
 use std::{
-    cell::{Ref, RefCell, RefMut},
     convert::Infallible,
-    ffi::c_void,
-    fmt::{Debug, Formatter},
+    fmt::Debug,
     mem::MaybeUninit,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
     os::raw::{c_int, c_uint},
-    rc::{Rc, Weak},
     slice::Iter,
     str::FromStr,
     vec::Drain,
 };
 
 use libc::{in6_addr, in_addr, sa_family_t, sockaddr_in, sockaddr_in6, socklen_t, AF_INET, AF_INET6};
+use num_derive::FromPrimitive;
+use num_traits::FromPrimitive;
+use url::{Host, Url};
+
 use libcoap_sys::{
     coap_address_t, coap_mid_t, coap_proto_t,
     coap_proto_t::{COAP_PROTO_DTLS, COAP_PROTO_NONE, COAP_PROTO_TCP, COAP_PROTO_TLS, COAP_PROTO_UDP},
@@ -30,21 +33,22 @@ use libcoap_sys::{
     },
     COAP_URI_SCHEME_SECURE_MASK,
 };
-use num_derive::FromPrimitive;
-use num_traits::FromPrimitive;
-use url::{Host, Url};
 
 use crate::error::UriParsingError;
 
+/// Interface index used internally by libcoap to refer to an endpoint.
 pub type IfIndex = c_int;
+/// Value for maximum retransmits.
 pub type MaxRetransmit = c_uint;
+/// Identifier for a CoAP message.
 pub type CoapMessageId = coap_mid_t;
 
 /// Internal wrapper for the raw coap_address_t type, mainly used for conversion between types.
-pub struct CoapAddress(coap_address_t);
+pub(crate) struct CoapAddress(coap_address_t);
 
 impl CoapAddress {
-    pub fn as_raw_address(&self) -> &coap_address_t {
+    /// Returns a reference to the underlying raw [coap_address_t].
+    pub(crate) fn as_raw_address(&self) -> &coap_address_t {
         &self.0
     }
 
@@ -58,12 +62,16 @@ impl CoapAddress {
     /// The underlying [coap_address_t] must always refer to a valid instance of sockaddr_in or
     /// sockaddr_in6, and [coap_address_t::size] must always be the correct size of the sockaddr
     /// in the [coap_address_t::addr] field.
-    pub unsafe fn as_mut_raw_address(&mut self) -> &mut coap_address_t {
+    // Kept for consistency
+    #[allow(dead_code)]
+    pub(crate) unsafe fn as_mut_raw_address(&mut self) -> &mut coap_address_t {
         &mut self.0
     }
 
     /// Converts this address into the corresponding raw [coap_address_t](libcoap_sys::coap_address_t)
-    pub fn into_raw_address(self) -> coap_address_t {
+    // Kept for consistency
+    #[allow(dead_code)]
+    pub(crate) fn into_raw_address(self) -> coap_address_t {
         self.0
     }
 }
@@ -85,7 +93,7 @@ impl ToSocketAddrs for CoapAddress {
                     u16::from_be(raw_addr.sin_port),
                 )
                 .into()
-            }
+            },
             AF_INET6 => {
                 // SAFETY: Validity of addr is an invariant, and we checked that the type of the
                 // underlying sockaddr is actually sockaddr_in6.
@@ -97,7 +105,7 @@ impl ToSocketAddrs for CoapAddress {
                     raw_addr.sin6_scope_id,
                 )
                 .into()
-            }
+            },
             // This should not happen as long as the invariants are kept.
             _ => panic!("sa_family_t of underlying coap_address_t is invalid!"),
         };
@@ -127,7 +135,7 @@ impl From<SocketAddr> for CoapAddress {
                     };
                     CoapAddress(coap_addr)
                 }
-            }
+            },
             SocketAddr::V6(addr) => {
                 // addr is a bindgen-type union wrapper, so we can't assign to it directly and have
                 // to use a pointer instead.
@@ -148,17 +156,18 @@ impl From<SocketAddr> for CoapAddress {
                     };
                     CoapAddress(coap_addr)
                 }
-            }
+            },
         }
     }
 }
-
+#[doc(hidden)]
 impl From<coap_address_t> for CoapAddress {
     fn from(raw_addr: coap_address_t) -> Self {
         CoapAddress(raw_addr)
     }
 }
 
+#[doc(hidden)]
 impl From<&coap_address_t> for CoapAddress {
     fn from(raw_addr: &coap_address_t) -> Self {
         let mut new_addr = MaybeUninit::zeroed();
@@ -207,16 +216,22 @@ impl FromStr for CoapUriScheme {
     }
 }
 
-impl ToString for CoapUriScheme {
-    fn to_string(&self) -> String {
-        match self {
-            CoapUriScheme::Coap => "coap".to_string(),
-            CoapUriScheme::Coaps => "coaps".to_string(),
-            CoapUriScheme::CoapTcp => "coap+tcp".to_string(),
-            CoapUriScheme::CoapsTcp => "coaps+tcp".to_string(),
-            CoapUriScheme::Http => "http".to_string(),
-            CoapUriScheme::Https => "https".to_string(),
-        }
+impl Display for CoapUriScheme {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            CoapUriScheme::Coap => "coap",
+            CoapUriScheme::Coaps => "coaps",
+            CoapUriScheme::CoapTcp => "coap+tcp",
+            CoapUriScheme::CoapsTcp => "coaps+tcp",
+            CoapUriScheme::Http => "http",
+            CoapUriScheme::Https => "https",
+        })
+    }
+}
+
+impl From<coap_uri_scheme_t> for CoapUriScheme {
+    fn from(scheme: coap_uri_scheme_t) -> Self {
+        CoapUriScheme::from_raw_scheme(scheme)
     }
 }
 
@@ -245,22 +260,19 @@ impl FromStr for CoapUriHost {
     }
 }
 
-impl From<coap_uri_scheme_t> for CoapUriScheme {
-    fn from(scheme: coap_uri_scheme_t) -> Self {
-        CoapUriScheme::from_raw_scheme(scheme)
+impl Display for CoapUriHost {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(
+            match self {
+                CoapUriHost::IpLiteral(addr) => addr.to_string(),
+                CoapUriHost::Name(host) => host.clone(),
+            }
+            .as_str(),
+        )
     }
 }
 
-impl ToString for CoapUriHost {
-    fn to_string(&self) -> String {
-        match self {
-            CoapUriHost::IpLiteral(addr) => addr.to_string(),
-            CoapUriHost::Name(host) => host.clone(),
-        }
-    }
-}
-
-/// Representation of an URI for CoAP requests or responses.
+/// Representation of a URI for CoAP requests or responses.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CoapUri {
     scheme: Option<CoapUriScheme>,
@@ -271,6 +283,7 @@ pub struct CoapUri {
 }
 
 impl CoapUri {
+    /// Creates a new CoapUri from the given components.
     pub fn new(
         scheme: Option<CoapUriScheme>,
         host: Option<CoapUriHost>,
@@ -287,6 +300,10 @@ impl CoapUri {
         }
     }
 
+    /// Attempts to convert a [Url] into a [CoapUri].
+    ///
+    /// # Errors
+    /// May fail if the provided Url has an invalid scheme.
     pub fn try_from_url(url: Url) -> Result<CoapUri, UriParsingError> {
         let path: Vec<String> = url
             .path()
@@ -307,30 +324,37 @@ impl CoapUri {
         })
     }
 
+    /// Returns the scheme part of this URI.
     pub fn scheme(&self) -> Option<&CoapUriScheme> {
         self.scheme.as_ref()
     }
 
+    /// Returns the host part of this URI.
     pub fn host(&self) -> Option<&CoapUriHost> {
         self.host.as_ref()
     }
 
+    /// Returns the port of this URI (if provided).
     pub fn port(&self) -> Option<u16> {
         self.port
     }
 
-    pub fn drain_path_iter(&mut self) -> Option<Drain<String>> {
+    /// Drains the parts of the URI path of this CoapUri into an iterator.
+    pub(crate) fn drain_path_iter(&mut self) -> Option<Drain<String>> {
         self.path.as_mut().map(|p| p.drain(..))
     }
 
+    /// Returns an iterator over the path components of this URI.
     pub fn path_iter(&self) -> Option<Iter<'_, String>> {
         self.path.as_ref().map(|p| p.iter())
     }
 
+    /// Drains the parts of the URI query of this CoapUri into an iterator.
     pub fn drain_query_iter(&mut self) -> Option<Drain<String>> {
         self.query.as_mut().map(|p| p.drain(..))
     }
 
+    /// Returns an iterator over the query components of this URI.
     pub fn query_iter(&self) -> Option<Iter<String>> {
         self.query.as_ref().map(|p| p.iter())
     }
@@ -344,177 +368,20 @@ impl TryFrom<Url> for CoapUri {
     }
 }
 
-/// A strong reference to an existing Coap Rust library struct, created from an app data/user data
-/// pointer inside of a C library struct.
-///
-/// This type is used to emulate Rust's aliasing rules through the FFI boundary.
-///
-/// # Purpose and Safety
-/// When [CoapContext::do_io()](crate::context::CoapContext::do_io()) is called, a mutable reference
-/// to the context is provided, which implies that inside of this call, we can assume to have exclusive
-/// access to the context (and therefore also all of its sessions, resources, endpoints, etc.).
-///
-/// At some point inside of the [CoapContext::do_io()](crate::context::CoapContext::do_io()) call,
-/// the callback functions are called from within the C library. Because these callbacks only get
-/// the raw pointers to the underlying C library structs, we have to use their app_data pointers to
-/// get to our actual Rust structs.
-///
-/// These pointers also have to be raw, which is why we use [Rc]/[Weak]s and
-/// [Rc::into_raw()]/[Weak::into_raw()] to create such raw pointers.
-/// However, after restoration, these smart pointers only provide immutable access to the underlying
-/// structs.
-///
-/// Because we know that the callbacks are only called from [CoapContext::do_io()](crate::context::CoapContext::do_io()),
-/// which treats the call to the raw libraries [coap_io_process()](libcoap_sys::coap_io_process())
-/// as if the context (and all of its related structures like sessions) were mutably borrowed to
-/// this function, we can therefore assume that creating a mutable reference to the Rust structs
-/// from the callback function does not violate Rust's aliasing rules. In order to get these
-/// references, this wrapper type is used, which provides basically the same functionality as an
-/// `Rc<RefCell<D>>`, but with additional helper functions to aid in creating and using the raw
-/// pointers stored in the libcoap C structs.
-pub struct CoapAppDataRef<D>(Rc<RefCell<D>>);
-
-impl<D> CoapAppDataRef<D> {
-    /// Creates a new instance of CoapStrongAppDataRef, containing the provided value.
-    pub fn new(value: D) -> CoapAppDataRef<D> {
-        CoapAppDataRef(Rc::new(RefCell::new(value)))
-    }
-
-    /// Converts from a raw user data/application data pointer inside of a libcoap C library struct
-    /// into the appropriate reference type.
-    ///
-    /// This is done by first restoring the `Rc<RefCell<D>>` using [Rc::from_raw()], then
-    /// cloning and creating the [CoapAppDataRef] from it (maintaining the original reference using
-    /// [Rc::into_raw()]).
-    ///
-    /// Note that for the lifetime of this [CoapAppDataRef], the reference counter of the
-    /// underlying [Rc] is increased by one.
-    ///
-    /// # Safety
-    /// For an explanation of the purpose of this struct and where it was originally intended to be
-    /// used, see the struct-level documentation.
-    ///
-    /// To safely use this function, the following invariants must be kept:
-    /// - ptr is a valid pointer to an Rc<RefCell<D>>
-    pub unsafe fn clone_raw_rc(ptr: *mut c_void) -> CoapAppDataRef<D> {
-        let orig_ref = Rc::from_raw(ptr as *const RefCell<D>);
-        let new_ref = Rc::clone(&orig_ref);
-        Rc::into_raw(orig_ref);
-        CoapAppDataRef(new_ref)
-    }
-
-    /// Converts from a raw user data/application data pointer inside of a libcoap C library struct
-    /// into the appropriate reference type.
-    ///
-    /// This is done by first restoring the `Weak<RefCell<D>>` using [Weak::from_raw()],
-    /// upgrading it to a `Rc<RefCell<D>>` then cloning and creating the [CoapAppDataRef] from the
-    /// upgraded reference (restoring the raw pointer again afterwards using [Rc::downgrade()] and
-    /// [Weak::into_raw()]).
-    ///
-    /// Note that for the lifetime of this [CoapAppDataRef], the reference counter of the underlying
-    /// [Rc] is increased by one.
-    ///
-    /// # Panics
-    /// Panics if the provided Weak reference is orphaned.
-    ///
-    /// # Safety
-    /// For an explanation of the purpose of this struct and where it was originally intended to be
-    /// used, see the struct-level documentation.
-    ///
-    /// To safely use this function, the following invariants must be kept:
-    /// - ptr is a valid pointer to a `Weak<RefCell<D>>`
-    pub unsafe fn clone_raw_weak(ptr: *mut c_void) -> CoapAppDataRef<D> {
-        let orig_ref = Weak::from_raw(ptr as *const RefCell<D>);
-        let new_ref = Weak::upgrade(&orig_ref).expect("attempted to upgrade a weak reference that was orphaned");
-        let _weakref = Weak::into_raw(orig_ref);
-        CoapAppDataRef(new_ref)
-    }
-
-    /// Converts from a raw user data/application data pointer inside of a libcoap C library struct
-    /// into the underlying `Weak<RefCell<D>>`.
-    ///
-    /// This is done by restoring the `Weak<RefCell<D>>` using [Weak::from_raw()],
-    ///
-    /// # Panics
-    /// Panics if the provided Weak reference is orphaned.
-    ///
-    /// # Safety
-    /// For an explanation of the purpose of this struct and where it was originally intended to be
-    /// used, see the struct-level documentation.
-    ///
-    /// To safely use this function, the following invariants must be kept:
-    /// - ptr is a valid pointer to a `Weak<UnsafeCell<D>>`
-    /// - as soon as the returned `Weak<RefCell<D>>` is dropped, the provided pointer is treated as
-    ///   invalid.
-    pub unsafe fn raw_ptr_to_weak(ptr: *mut c_void) -> Weak<RefCell<D>> {
-        Weak::from_raw(ptr as *const RefCell<D>)
-    }
-
-    /// Converts from a raw user data/application data pointer inside of a libcoap C library struct
-    /// into the underlying `Rc<RefCell<D>>`.
-    ///
-    /// This is done by restoring the `Rc<RefCell<D>>` using [Rc::from_raw()],
-    ///
-    /// # Safety
-    /// For an explanation of the purpose of this struct and where it was originally intended to be
-    /// used, see the struct-level documentation.
-    ///
-    /// To safely use this function, the following invariants must be kept:
-    /// - ptr is a valid pointer to a `Rc<RefCell<D>>`
-    pub unsafe fn raw_ptr_to_rc(ptr: *mut c_void) -> Rc<RefCell<D>> {
-        Rc::from_raw(ptr as *const RefCell<D>)
-    }
-
-    /// Creates a raw reference, suitable for storage inside of a libcoap C library user/application
-    /// data pointer.
-    ///
-    /// This function internally calls [Rc::clone()] and then [Rc::into_raw()] to create a pointer
-    /// referring to a clone of the `Rc<RefCell<D>>` contained in this type.
-    ///
-    /// Note that this increases the reference count of the Rc by one.
-    pub fn create_raw_rc(&self) -> *mut c_void {
-        Rc::into_raw(Rc::clone(&self.0)) as *mut c_void
-    }
-
-    /// Creates a raw reference, suitable for storage inside of a libcoap C library user/application
-    /// data pointer.
-    ///
-    /// This function internally calls [Rc::downgrade()] and then [Weak::into_raw()] to create a
-    /// pointer referring to a weak reference of the `Rc<RefCell<D>>` contained in this type.
-    ///
-    /// Note that this does not increase the reference count of the [Rc] by one. If you want to
-    /// ensure that the underlying D is never cleaned up for as long as this pointer exists, you
-    /// need to maintain this object for as least as long as the reference.
-    pub fn create_raw_weak(&self) -> *mut c_void {
-        Weak::into_raw(Rc::downgrade(&self.0)) as *mut c_void
-    }
-
-    /// Creates an immutable reference to the contained data type.
-    ///
-    /// # Panics
-    /// Panics if borrowing here would violate Rusts aliasing rules.
-    pub fn borrow(&self) -> Ref<D> {
-        RefCell::borrow(&self.0)
-    }
-
-    /// Creates a mutable reference to the contained data type.
-    ///
-    /// # Panics
-    /// Panics if borrowing mutably here would violate Rusts aliasing rules.
-    pub fn borrow_mut(&mut self) -> RefMut<D> {
-        RefCell::borrow_mut(&self.0)
-    }
-}
-
-impl<D> Clone for CoapAppDataRef<D> {
-    fn clone(&self) -> Self {
-        CoapAppDataRef(self.0.clone())
-    }
-}
-
-impl<D: Debug> Debug for CoapAppDataRef<D> {
+impl Display for CoapUri {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("CoapAppDataRef").field("0", &self.0).finish()
+        f.write_fmt(format_args!(
+            "{}{}{}{}{}",
+            self.scheme.map_or_else(String::new, |v| format!("{}://", v)),
+            self.host.as_ref().map_or_else(String::new, |v| v.to_string()),
+            self.port.map_or_else(String::new, |v| format!(":{}", v)),
+            self.path
+                .as_ref()
+                .map_or_else(String::new, |v| format!("/{}", v.join("/"))),
+            self.query
+                .as_ref()
+                .map_or_else(String::new, |v| format!("?{}", v.join("&"))),
+        ))
     }
 }
 
@@ -530,8 +397,99 @@ pub enum CoapProtocol {
     Tls = COAP_PROTO_TLS as u32,
 }
 
+#[doc(hidden)]
 impl From<coap_proto_t> for CoapProtocol {
     fn from(raw_proto: coap_proto_t) -> Self {
         <CoapProtocol as FromPrimitive>::from_u32(raw_proto as u32).expect("unknown protocol")
     }
+}
+
+impl Display for CoapProtocol {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            CoapProtocol::None => "none",
+            CoapProtocol::Udp => "udp",
+            CoapProtocol::Dtls => "dtls",
+            CoapProtocol::Tcp => "tcp",
+            CoapProtocol::Tls => "tls",
+        })
+    }
+}
+
+fn convert_to_fixed_size_slice(n: usize, val: &[u8]) -> Box<[u8]> {
+    if val.len() > n {
+        panic!("supplied slice too short");
+    }
+    let mut buffer: Vec<u8> = vec![0; n];
+    let (_, target_buffer) = buffer.split_at_mut(n - val.len());
+    target_buffer.copy_from_slice(val);
+    buffer.truncate(n);
+    buffer.into_boxed_slice()
+}
+
+// TODO the following functions should probably return a result and use generics.
+pub(crate) fn decode_var_len_u32(val: &[u8]) -> u32 {
+    u32::from_be_bytes(
+        convert_to_fixed_size_slice(4, val)[..4]
+            .try_into()
+            .expect("could not convert from variable sized value to fixed size number as the lengths don't match"),
+    )
+}
+
+pub(crate) fn encode_var_len_u32(val: u32) -> Box<[u8]> {
+    // I really hope that rust accounts for endianness here.
+    let bytes_to_discard = val.leading_zeros() / 8;
+    let mut ret_val = Vec::from(val.to_be_bytes());
+    ret_val.drain(..bytes_to_discard as usize);
+    ret_val.into_boxed_slice()
+}
+
+// Kept for consistency
+#[allow(unused)]
+pub(crate) fn decode_var_len_u64(val: &[u8]) -> u64 {
+    u64::from_be_bytes(
+        convert_to_fixed_size_slice(8, val)[..8]
+            .try_into()
+            .expect("could not convert from variable sized value to fixed size number as the lengths don't match"),
+    )
+}
+
+// Kept for consistency
+#[allow(unused)]
+pub(crate) fn encode_var_len_u64(val: u64) -> Box<[u8]> {
+    // I really hope that rust accounts for endianness here.
+    let bytes_to_discard = val.leading_zeros() / 8;
+    let mut ret_val = Vec::from(val.to_be_bytes());
+    ret_val.drain(..bytes_to_discard as usize);
+    ret_val.into_boxed_slice()
+}
+
+pub(crate) fn decode_var_len_u16(val: &[u8]) -> u16 {
+    u16::from_be_bytes(
+        convert_to_fixed_size_slice(2, val)[..2]
+            .try_into()
+            .expect("could not convert from variable sized value to fixed size number as the lengths don't match"),
+    )
+}
+
+pub(crate) fn encode_var_len_u16(val: u16) -> Box<[u8]> {
+    // I really hope that rust accounts for endianness here.
+    let bytes_to_discard = val.leading_zeros() / 8;
+    let mut ret_val = Vec::from(val.to_be_bytes());
+    ret_val.drain(..bytes_to_discard as usize);
+    ret_val.into_boxed_slice()
+}
+
+// Kept for consistency
+#[allow(unused)]
+pub(crate) fn decode_var_len_u8(val: &[u8]) -> u16 {
+    u16::from_be_bytes(
+        convert_to_fixed_size_slice(1, val)[..1]
+            .try_into()
+            .expect("could not convert from variable sized value to fixed size number as the lengths don't match"),
+    )
+}
+
+pub(crate) fn encode_var_len_u8(val: u8) -> Box<[u8]> {
+    Vec::from([val]).into_boxed_slice()
 }

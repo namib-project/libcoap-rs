@@ -4,6 +4,8 @@
  * Copyright (c) 2022 The NAMIB Project Developers, all rights reserved.
  * See the README as well as the LICENSE file for more information.
  */
+//! Cryptography provider interfaces and types
+
 use std::{
     ffi::{c_void, CStr},
     fmt::Debug,
@@ -50,8 +52,9 @@ pub type CoapCryptoPskData = [u8];
 /// which are represented by this enum.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CoapCryptoProviderResponse<T: Debug> {
-    /// The current key (as indicated by a previous callback such as [provide_default_info()]) is
-    /// sufficient and should be used for this session.
+    /// The current key (as indicated by a previous callback such as
+    /// [CoapClientCryptoProvider::provide_default_info()]) is sufficient and should be used for this
+    /// session.
     UseCurrent,
     /// A new set of cryptographic credentials should be used for this session.
     UseNew(T),
@@ -72,6 +75,8 @@ pub trait CoapClientCryptoProvider: Debug {
         hint: &CoapCryptoPskIdentity,
     ) -> CoapCryptoProviderResponse<Box<CoapCryptoPskData>>;
 
+    /// Provide the initial cryptographic information for client-side sessions associated with this
+    /// provider.
     fn provide_default_info(&mut self) -> CoapCryptoPskInfo;
 }
 
@@ -100,7 +105,8 @@ pub trait CoapServerCryptoProvider: Debug {
         CoapCryptoProviderResponse::UseCurrent
     }
 
-    /// Provide the default PSK identity hint and key data that should be used for new sessions.
+    /// Provide the default PSK identity hint and key data that should be used for new server-side
+    /// sessions.
     ///
     /// Return a CoapCryptoProviderResponse corresponding to the cryptographic information that
     /// should be used.
@@ -114,10 +120,9 @@ pub(crate) unsafe extern "C" fn dtls_ih_callback(
     session: *mut coap_session_t,
     _userdata: *mut c_void,
 ) -> *const coap_dtls_cpsk_info_t {
-    let mut session = CoapClientSession::restore_from_raw(session);
-    let mut client = session.borrow_mut();
+    let mut session = CoapClientSession::from_raw(session);
     let provided_identity = std::slice::from_raw_parts((*hint).s, (*hint).length);
-    client
+    session
         .provide_raw_key_for_hint(provided_identity)
         .map(|v| v as *const coap_dtls_cpsk_info_t)
         .unwrap_or(std::ptr::null())

@@ -5,27 +5,28 @@ use std::{
     time::Duration,
 };
 
+use libcoap::message::request::CoapRequest;
+use libcoap::message::response::CoapResponse;
+use libcoap::session::CoapClientSession;
 use libcoap::{
-    context::CoapContext,
     message::CoapMessageCommon,
     protocol::{CoapMessageCode, CoapMessageType, CoapRequestCode, CoapResponseCode},
-    request::{CoapRequest, CoapResponse},
-    resource::{CoapRequestHandler, CoapResource},
-    session::{CoapSessionCommon},
+    session::CoapSessionCommon,
     types::{CoapUri, CoapUriHost},
+    CoapContext, CoapRequestHandler, CoapResource,
 };
 
 fn run_basic_test_server(server_address: SocketAddr) {
     let mut context = CoapContext::new().unwrap();
     context.add_endpoint_udp(server_address).unwrap();
     let request_completed = Rc::new(AtomicBool::new(false));
-    let resource = CoapResource::new("test1", request_completed.clone());
+    let resource = CoapResource::new("test1", request_completed.clone(), false);
     resource.set_method_handler(
         CoapRequestCode::Get,
         Some(CoapRequestHandler::new(
-            |completed: &Rc<AtomicBool>, _res, sess, _req, mut rsp: CoapResponse| {
+            |completed: &mut Rc<AtomicBool>, sess, _req, mut rsp: CoapResponse| {
                 let data = Vec::<u8>::from("Hello World!".as_bytes());
-                rsp.set_data(Some(data.into_boxed_slice()));
+                rsp.set_data(Some(data));
                 rsp.set_code(CoapMessageCode::Response(CoapResponseCode::Content));
                 sess.send(rsp).unwrap();
                 completed.store(true, Ordering::Relaxed);
@@ -66,7 +67,7 @@ pub fn test_basic_client_server() {
     });
 
     let mut context = CoapContext::new().unwrap();
-    let mut session = context.connect_udp(server_address).unwrap();
+    let session = CoapClientSession::connect_udp(&mut context, server_address).unwrap();
 
     let uri = CoapUri::new(
         None,

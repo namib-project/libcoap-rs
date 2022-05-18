@@ -165,10 +165,10 @@ fn main() {
 
         // Enable debug symbols if enabled in Rust
         match std::env::var_os("DEBUG").unwrap().to_str().unwrap() {
-            "0" | "false" => {}
+            "0" | "false" => {},
             _ => {
                 build_config.with("debug", None);
-            }
+            },
         }
 
         // Enable dependency features based on selected cargo features.
@@ -195,7 +195,7 @@ fn main() {
                 dst.join("lib").join("pkgconfig").to_str().unwrap(),
                 std::env::var_os("PKG_CONFIG_PATH")
                     .map(|v| String::from(v.to_str().unwrap()))
-                    .unwrap_or("".to_string())
+                    .unwrap_or_else(String::new)
             ),
         );
     }

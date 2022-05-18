@@ -4,7 +4,17 @@
  * Copyright (c) 2022 The NAMIB Project Developers, all rights reserved.
  * See the README as well as the LICENSE file for more information.
  */
+//! Types related to message handling, parsing and creation.
+//!
+//! The base unit that is transmitted between a CoAP client and a CoAP server is called a CoAP
+//! message (in libcoap also referred to as a "pdu"). This module contains both the basic
+//! representation for messages in libcoap-rs ([CoapMessage]) as well as builders that simplify the
+//! process of creating requests and responses and setting the appropriate options ([CoapRequest]
+//! and [CoapResponse]).
+
 use std::{ffi::c_void, mem::MaybeUninit, slice::Iter};
+
+use num_traits::FromPrimitive;
 
 use libcoap_sys::{
     coap_add_data, coap_add_data_large_request, coap_add_optlist_pdu, coap_add_token, coap_delete_optlist,
@@ -13,19 +23,22 @@ use libcoap_sys::{
     coap_pdu_get_mid, coap_pdu_get_token, coap_pdu_get_type, coap_pdu_init, coap_pdu_set_code, coap_pdu_set_type,
     coap_pdu_t, coap_session_t,
 };
-use num_traits::FromPrimitive;
+pub use request::CoapRequest;
+pub use response::CoapResponse;
 
+use crate::types::{decode_var_len_u16, decode_var_len_u32, encode_var_len_u16, encode_var_len_u32, encode_var_len_u8};
 use crate::{
     error::{MessageConversionError, OptionValueError},
     protocol::{
-        decode_var_len_u16, decode_var_len_u32, encode_var_len_u16, encode_var_len_u32, encode_var_len_u8, Block,
-        CoapMatch, CoapMessageCode, CoapMessageType, CoapOptionNum, CoapOptionType, ContentFormat, ETag, HopLimit,
-        MaxAge, NoResponse, Observe, ProxyScheme, ProxyUri, Size, UriHost, UriPath, UriPort, UriQuery,
+        Block, CoapMatch, CoapMessageCode, CoapMessageType, CoapOptionNum, CoapOptionType, ContentFormat, ETag,
+        HopLimit, MaxAge, NoResponse, Observe, ProxyScheme, ProxyUri, Size, UriHost, UriPath, UriPort, UriQuery,
     },
-    request::{CoapRequest, CoapResponse},
     session::CoapSessionCommon,
     types::CoapMessageId,
 };
+
+pub mod request;
+pub mod response;
 
 /// Representation of a CoAP option including its value.
 ///
@@ -65,7 +78,7 @@ impl CoapOption {
     /// # Safety
     /// `opt` must be a valid pointer to a well formed coap_opt_t value as returned by
     /// [coap_option_next()].
-    pub unsafe fn from_raw_opt(
+    pub(crate) unsafe fn from_raw_opt(
         number: coap_option_num_t,
         opt: *const coap_opt_t,
     ) -> Result<CoapOption, OptionValueError> {
@@ -184,7 +197,7 @@ impl CoapOption {
 
     /// Converts this option into a raw coap_optlist_t instance, suitable for addition to a raw
     /// coap_pdu_t.
-    pub fn into_optlist_entry(self) -> Result<*mut coap_optlist_t, OptionValueError> {
+    pub(crate) fn into_optlist_entry(self) -> Result<*mut coap_optlist_t, OptionValueError> {
         let num = self.number();
         let value = self.into_value_bytes()?;
         Ok(unsafe { coap_new_optlist(num, value.len(), value.as_ptr()) })
@@ -226,8 +239,8 @@ pub trait CoapMessageCommon {
     }
 
     /// Sets the message code of this message.
-    fn set_code(&mut self, code: CoapMessageCode) {
-        self.as_message_mut().code = code;
+    fn set_code<C: Into<CoapMessageCode>>(&mut self, code: C) {
+        self.as_message_mut().code = code.into();
     }
 
     /// Returns the CoAP message ID for this message.
@@ -257,7 +270,7 @@ pub trait CoapMessageCommon {
 
     /// Sets the message token.
     ///
-    /// Note that [CoapClientSession::send_request()](crate::session::CoapClientSession::send_request()) will automatically set the token to a random
+    /// Note that [CoapSessionCommon::send_request()] will automatically set the token to a random
     /// value if you don't.
     fn set_token<D: Into<Box<[u8]>>>(&mut self, token: Option<D>) {
         self.as_message_mut().token = token.map(Into::into);
@@ -337,9 +350,9 @@ impl CoapMessage {
     ///
     /// The caller is responsible for freeing the returned PDU, either by calling [coap_send()](libcoap_sys::coap_send()) or
     /// [coap_delete_pdu()].
-    pub fn into_raw_pdu<S: CoapSessionCommon + ?Sized>(
+    pub fn into_raw_pdu<'a, S: CoapSessionCommon<'a> + ?Sized>(
         mut self,
-        session: &mut S,
+        session: &S,
     ) -> Result<*mut coap_pdu_t, MessageConversionError> {
         let message = self.as_message_mut();
 
@@ -379,10 +392,10 @@ impl CoapMessage {
     ///
     /// # Safety
     /// raw_pdu must point to a valid mutable instance of coap_pdu_t.
-    pub unsafe fn apply_to_raw_pdu<S: CoapSessionCommon + ?Sized>(
+    pub(crate) unsafe fn apply_to_raw_pdu<'a, S: CoapSessionCommon<'a> + ?Sized>(
         mut self,
         raw_pdu: *mut coap_pdu_t,
-        session: &mut S,
+        session: &S,
     ) -> Result<*mut coap_pdu_t, MessageConversionError> {
         assert!(!raw_pdu.is_null(), "attempted to apply CoapMessage to null pointer");
         coap_pdu_set_type(raw_pdu, self.type_.to_raw_pdu_type());
