@@ -39,6 +39,7 @@ fn main() {
     println!("cargo:rerun-if-changed=src/wrapper.h");
     let mut pkgconf = pkg_config::Config::new();
     let mut bindgen_builder = bindgen::Builder::default();
+    let mut orig_pkg_config = None;
 
     let mut dtls_backend = Option::None;
     if cfg!(feature = "dtls") {
@@ -84,7 +85,7 @@ fn main() {
         // Read required environment variables.
         let out_dir = std::env::var_os("OUT_DIR").unwrap();
         // Read Makeflags into vector of strings
-        let make_flags = std::env::var_os("CARGO_MAKEFLAGS")
+        let make_flags: Vec<String> = std::env::var_os("CARGO_MAKEFLAGS")
             .unwrap()
             .into_string()
             .unwrap()
@@ -194,16 +195,17 @@ fn main() {
         bindgen_builder = bindgen_builder
             .clang_arg(format!("-I{}", dst.join("include").to_str().unwrap()))
             .clang_arg(format!("-L{}", dst.join("lib").to_str().unwrap()));
+        orig_pkg_config =
+            std::env::var_os("PKG_CONFIG_PATH")
+                .map(|v| String::from(v.to_str().unwrap()));
         std::env::set_var(
             "PKG_CONFIG_PATH",
             format!(
                 "{}:{}",
                 dst.join("lib").join("pkgconfig").to_str().unwrap(),
-                std::env::var_os("PKG_CONFIG_PATH")
-                    .map(|v| String::from(v.to_str().unwrap()))
-                    .unwrap_or_else(String::new)
-            ),
-        );
+                orig_pkg_config.as_ref().map(String::clone).unwrap_or_else(String::new)
+            )
+        )
     }
 
     pkgconf.statik(cfg!(feature = "static"));
@@ -235,7 +237,11 @@ fn main() {
 
     bindgen_builder = bindgen_builder
         .header("src/wrapper.h")
-        .parse_callbacks(Box::new(bindgen::CargoCallbacks))
+        // Triggers a rebuild on every cargo build invocation, as the included headers seem to come
+        // from our built version.
+        // Should be fine, as we already printed `cargo:rerun-if-changed=src/libcoap/` at the start
+        // of the file.
+        //.parse_callbacks(Box::new(bindgen::CargoCallbacks))
         .default_enum_style(EnumVariation::Rust { non_exhaustive: true })
         .rustfmt_bindings(false)
         // Causes invalid syntax for some reason, so we have to disable it.
@@ -267,4 +273,9 @@ fn main() {
 
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     bindings.write_to_file(out_path.join("bindings.rs")).unwrap();
+
+    match orig_pkg_config.as_ref() {
+        Some(value) => std::env::set_var("PKG_CONFIG_PATH", value),
+        None => std::env::remove_var("PKG_CONFIG_PATH")
+    }
 }
