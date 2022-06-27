@@ -14,25 +14,26 @@ use libcoap_sys::{
     coap_session_t, coap_session_type_t, COAP_DTLS_SPSK_SETUP_VERSION,
 };
 
-use crate::crypto::CoapCryptoProviderResponse;
-use crate::mem::{CoapFfiRcCell, DropInnerExclusively};
-use crate::{
-    context::CoapContext,
-    crypto::{dtls_ih_callback, CoapClientCryptoProvider, CoapCryptoPskIdentity, CoapCryptoPskInfo},
-    error::SessionCreationError,
-    types::CoapAddress,
+#[cfg(feature = "dtls")]
+use crate::crypto::{
+    dtls_ih_callback, CoapClientCryptoProvider, CoapCryptoProviderResponse, CoapCryptoPskIdentity, CoapCryptoPskInfo,
 };
+use crate::mem::{CoapFfiRcCell, DropInnerExclusively};
+use crate::{context::CoapContext, error::SessionCreationError, types::CoapAddress};
 
 use super::{CoapSessionCommon, CoapSessionInner, CoapSessionInnerProvider};
 
 #[derive(Debug)]
 struct CoapClientSessionInner<'a> {
     inner: CoapSessionInner<'a>,
+    #[cfg(feature = "dtls")]
     crypto_provider: Option<Box<dyn CoapClientCryptoProvider>>,
+    #[cfg(feature = "dtls")]
     crypto_current_data: Option<CoapCryptoPskInfo>,
     // coap_dtls_cpsk_info_t created upon calling dtls_client_ih_callback().
     // The caller of the callback will make a defensive copy, so this one only has
     // to be valid for a very short time and can always be overridden.
+    #[cfg(feature = "dtls")]
     crypto_last_info_ref: coap_dtls_cpsk_info_t,
 }
 
@@ -51,6 +52,7 @@ impl CoapClientSession<'_> {
     /// # Errors
     /// Will return a [SessionCreationError] if libcoap was unable to create a session (most likely
     /// because it was not possible to bind to a port).
+    #[cfg(feature = "dtls")]
     pub fn connect_dtls<'a, 'b, P: 'static + CoapClientCryptoProvider>(
         ctx: &'b mut CoapContext<'a>,
         addr: SocketAddr,
@@ -119,7 +121,16 @@ impl CoapClientSession<'_> {
         }
         // SAFETY: Session was just checked for validity, no crypto info was provided to
         // coap_new_client_session().
-        Ok(unsafe { CoapClientSession::new(ctx, session as *mut coap_session_t, None, None) })
+        Ok(unsafe {
+            CoapClientSession::new(
+                ctx,
+                session as *mut coap_session_t,
+                #[cfg(feature = "dtls")]
+                None,
+                #[cfg(feature = "dtls")]
+                None,
+            )
+        })
     }
 
     /// Initializes a new CoapClientSession from its raw counterpart with the provided initial
@@ -134,13 +145,16 @@ impl CoapClientSession<'_> {
     unsafe fn new<'a>(
         ctx: &mut CoapContext<'a>,
         raw_session: *mut coap_session_t,
-        crypto_current_data: Option<CoapCryptoPskInfo>,
-        crypto_provider: Option<Box<dyn CoapClientCryptoProvider>>,
+        #[cfg(feature = "dtls")] crypto_current_data: Option<CoapCryptoPskInfo>,
+        #[cfg(feature = "dtls")] crypto_provider: Option<Box<dyn CoapClientCryptoProvider>>,
     ) -> CoapClientSession<'a> {
         let inner_session = CoapFfiRcCell::new(CoapClientSessionInner {
             inner: CoapSessionInner::new(raw_session),
+            #[cfg(feature = "dtls")]
             crypto_provider,
+            #[cfg(feature = "dtls")]
             crypto_current_data,
+            #[cfg(feature = "dtls")]
             crypto_last_info_ref: coap_dtls_cpsk_info_t {
                 identity: coap_bin_const_t {
                     length: 0,
@@ -199,10 +213,12 @@ impl CoapClientSession<'_> {
     }
 
     /// Sets the provider for cryptographic information for this session.
+    #[cfg(feature = "dtls")]
     pub fn set_crypto_provider(&mut self, crypto_provider: Option<Box<dyn CoapClientCryptoProvider>>) {
         self.inner.borrow_mut().crypto_provider = crypto_provider;
     }
 
+    #[cfg(feature = "dtls")]
     pub(crate) fn provide_raw_key_for_hint(
         &mut self,
         hint: &CoapCryptoPskIdentity,

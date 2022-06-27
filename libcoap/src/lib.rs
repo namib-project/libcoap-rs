@@ -42,7 +42,7 @@
 //!     time::Duration,
 //! };
 //!
-//! use libcoap::{
+//! use libcoap_rs::{
 //!     CoapContext,
 //!     message::{CoapMessageCommon, CoapResponse, CoapRequest},
 //!     protocol::{CoapRequestCode, CoapResponseCode, CoapMessageCode, CoapMessageType},
@@ -92,7 +92,7 @@
 //!     time::Duration,
 //! };
 //!
-//! use libcoap::{
+//! use libcoap_rs::{
 //!     CoapContext,
 //!     message::{CoapMessageCommon, CoapResponse, CoapRequest},
 //!     protocol::{CoapRequestCode, CoapResponseCode},
@@ -174,6 +174,7 @@
 //! backend being chosen based on the priority order (gnutls > openssl > mbedtls > tinydtls).
 
 mod context;
+#[cfg(feature = "dtls")]
 pub mod crypto;
 pub mod error;
 mod event;
@@ -182,7 +183,6 @@ pub mod message;
 pub mod protocol;
 mod resource;
 pub mod session;
-#[cfg(feature = "server")]
 pub mod transport;
 pub mod types;
 

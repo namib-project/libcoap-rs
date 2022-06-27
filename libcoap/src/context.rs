@@ -21,18 +21,24 @@ use libcoap_sys::{
     COAP_BLOCK_SINGLE_BODY, COAP_BLOCK_USE_LIBCOAP, COAP_DTLS_SPSK_SETUP_VERSION, COAP_IO_WAIT,
 };
 
+#[cfg(feature = "dtls")]
+use crate::crypto::{dtls_server_id_callback, dtls_server_sni_callback, CoapServerCryptoProvider};
+#[cfg(feature = "dtls")]
+use crate::crypto::{CoapCryptoProviderResponse, CoapCryptoPskIdentity, CoapCryptoPskInfo};
 use crate::event::{event_handler_callback, CoapEventHandler};
 use crate::mem::{CoapLendableFfiRcCell, CoapLendableFfiWeakCell, DropInnerExclusively};
-use crate::session::{CoapClientSession, CoapServerSession, CoapSession};
+
+use crate::session::CoapClientSession;
+
+use crate::session::CoapServerSession;
+use crate::session::CoapSession;
+#[cfg(feature = "dtls")]
+use crate::transport::CoapDtlsEndpoint;
 use crate::{
-    crypto::{
-        dtls_server_id_callback, dtls_server_sni_callback, CoapCryptoProviderResponse, CoapCryptoPskIdentity,
-        CoapCryptoPskInfo, CoapServerCryptoProvider,
-    },
     error::{ContextCreationError, EndpointCreationError, IoProcessError},
     resource::{CoapResource, UntypedCoapResource},
     session::session_response_handler,
-    transport::{CoapDtlsEndpoint, CoapEndpoint, CoapUdpEndpoint},
+    transport::{CoapEndpoint, CoapUdpEndpoint},
 };
 
 #[derive(Debug)]
@@ -53,19 +59,24 @@ struct CoapContextInner<'a> {
     /// The event handler responsible for library-user side handling of events.
     event_handler: Option<Box<dyn CoapEventHandler>>,
     /// The provider for cryptography information for server-side sessions.
+    #[cfg(feature = "dtls")]
     crypto_provider: Option<Box<dyn CoapServerCryptoProvider>>,
     /// Last default cryptography info provided to libcoap.
+    #[cfg(feature = "dtls")]
     crypto_default_info: Option<CoapCryptoPskInfo>,
     /// Container for SNI information so that the libcoap C library can keep referring to the memory
     /// locations.
+    #[cfg(feature = "dtls")]
     crypto_sni_info_container: Vec<CoapCryptoPskInfo>,
     /// Last provided cryptography information for server-side sessions (temporary storage as
     /// libcoap makes defensive copies).
+    #[cfg(feature = "dtls")]
     crypto_current_data: Option<CoapCryptoPskInfo>,
     /// Structure referring to the last provided cryptography information for server-side sessions.
     /// coap_dtls_spsk_info_t created upon calling dtls_server_sni_callback() as the SNI validation callback.
     /// The caller of the validate_sni_call_back will make a defensive copy, so this one only has
     /// to be valid for a very short time and can always be overridden by dtls_server_sni_callback().
+    #[cfg(feature = "dtls")]
     crypto_last_info_ref: coap_dtls_spsk_info_t,
     _context_lifetime_marker: PhantomData<&'a coap_context_t>,
 }
@@ -103,10 +114,15 @@ impl<'a> CoapContext<'a> {
             client_sessions: Vec::new(),
             server_sessions: Vec::new(),
             event_handler: None,
+            #[cfg(feature = "dtls")]
             crypto_provider: None,
+            #[cfg(feature = "dtls")]
             crypto_default_info: None,
+            #[cfg(feature = "dtls")]
             crypto_sni_info_container: Vec::new(),
+            #[cfg(feature = "dtls")]
             crypto_current_data: None,
+            #[cfg(feature = "dtls")]
             crypto_last_info_ref: coap_dtls_spsk_info_t {
                 hint: coap_bin_const_t {
                     length: 0,
@@ -235,6 +251,7 @@ impl CoapContext<'_> {
     }
 
     /// TODO
+    #[cfg(feature = "tcp")]
     pub fn add_endpoint_tcp(&mut self, _addr: SocketAddr) -> Result<(), EndpointCreationError> {
         todo!()
     }
@@ -243,6 +260,7 @@ impl CoapContext<'_> {
     ///
     /// Note that in order to actually connect to DTLS clients, you need to set a crypto provider
     /// using [set_server_crypto_provider()](CoapContext::set_server_crypto_provider())
+    #[cfg(feature = "dtls")]
     pub fn add_endpoint_dtls(&mut self, addr: SocketAddr) -> Result<(), EndpointCreationError> {
         // SAFETY: Provided context (i.e., this instance) will not outlive the endpoint, as we will
         // drop it alongside this context and never hand out copies of it.
@@ -254,6 +272,7 @@ impl CoapContext<'_> {
     }
 
     /// TODO
+    #[cfg(all(feature = "tcp", feature = "dtls"))]
     pub fn add_endpoint_tls(&mut self, _addr: SocketAddr) -> Result<(), EndpointCreationError> {
         todo!()
     }
@@ -273,6 +292,7 @@ impl CoapContext<'_> {
     }
 
     /// Sets the server-side cryptography information provider.
+    #[cfg(feature = "dtls")]
     pub fn set_server_crypto_provider(&mut self, provider: Option<Box<dyn CoapServerCryptoProvider>>) {
         let mut inner_ref = self.inner.borrow_mut();
         // TODO replace Option<Box<Something>> with Option<Borrow<Something>> in libcoap-rs to simplify API.
@@ -387,6 +407,7 @@ impl CoapContext<'_> {
     /// state.
     ///
     /// If this number is exceeded, no new handshakes will be accepted.
+
     pub fn set_max_handshake_sessions(&self, max_handshake_sessions: c_uint) {
         // SAFETY: Properly initialized CoapContext always has a valid raw_context that is not
         // deleted until the CoapContextInner is dropped.
@@ -491,6 +512,7 @@ impl CoapContext<'_> {
     /// # Safety
     /// Returned pointer should only be used if the context is borrowed.
     /// Calling this function may override previous returned values of this function.
+    #[cfg(feature = "dtls")]
     pub(crate) unsafe fn provide_raw_key_for_identity(
         &self,
         identity: &CoapCryptoPskIdentity,
@@ -523,6 +545,7 @@ impl CoapContext<'_> {
     /// # Safety
     /// Returned pointer should only be used if the context is borrowed.
     /// Calling this function may override previous returned values of this function.
+    #[cfg(all(feature = "dtls"))]
     pub(crate) unsafe fn provide_raw_hint_for_sni(&self, sni: &str) -> Option<*const coap_dtls_spsk_info_t> {
         let inner_ref = &mut *self.inner.borrow_mut();
         match inner_ref.crypto_provider.as_mut().map(|v| v.provide_hint_for_sni(sni)) {

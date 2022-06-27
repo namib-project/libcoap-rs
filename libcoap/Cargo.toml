@@ -4,9 +4,9 @@
 # See the README as well as the LICENSE file for more information.
 
 [package]
-name = "libcoap"
+name = "libcoap-rs"
 description = "An idiomatic wrapper around the libcoap CoAP library for Rust."
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "BSD-2-Clause"
 readme = "README.md"
@@ -16,9 +16,7 @@ categories = ["api-bindings", "network-programming", "embedded"]
 keywords = ["coap", "libcoap"]
 
 [features]
-default = ["client", "server", "dtls", "tcp", "dtls_openssl"]
-client = []
-server = []
+default = ["dtls", "tcp", "dtls_openssl"]
 dtls = ["libcoap-sys/dtls"]
 dtls_tinydtls = ["libcoap-sys/dtls_backend_tinydtls"]
 dtls_openssl = ["libcoap-sys/dtls_backend_openssl"]
@@ -28,10 +26,10 @@ tcp = []
 nightly = []
 
 [dependencies]
-libcoap-sys = {path = "../libcoap-sys"}
-libc = {version = "^0.2.95"}
-num-derive = {version = "^0.3.3"}
-num-traits = {version = "^0.2.14"}
-url = {version = "^2.2"}
-rand = {version = "^0.8.4"}
+libcoap-sys = { path = "../libcoap-sys" }
+libc = { version = "^0.2.95" }
+num-derive = { version = "^0.3.3" }
+num-traits = { version = "^0.2.14" }
+url = { version = "^2.2" }
+rand = { version = "^0.8.4" }
 thiserror = "^1.0"
