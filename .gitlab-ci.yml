@@ -12,11 +12,11 @@ workflow:
       when: never
     - if: '$CI_COMMIT_BRANCH'
 
-# Default image for all builds is the generic controller project build image containing most
-# external dependencies, including rust, clippy, cargo, and C library dependencies.
+# Default image for all builds is the generic rust project build image containing most
+# external dependencies, including rust, clippy, rust-analyzer and cargo.
 # Adding additional dependencies to this image (by opening a MR in the respective project)
 # is strongly preferred to installing dependencies in before_script.
-image: gitlab.informatik.uni-bremen.de:5005/namib-master/ci-docker-images/controller:generic
+image: gitlab.informatik.uni-bremen.de:5005/namib-master/ci-docker-images/rust:1.61
 
 # Cache definition for the cargo package cache.
 # Pull only by default - the fetch-deps job will update the cache for each build.
@@ -85,7 +85,7 @@ sys:test:
 lib:test:
   extends: .test_base
   variables:
-    PKG_NAME: libcoap
+    PKG_NAME: libcoap-rs
 
 
 .coverage_base:
@@ -104,7 +104,9 @@ lib:test:
     - mv cobertura.xml target/$PKG_NAME-coverage.xml
   artifacts:
     reports:
-      cobertura: target/$PKG_NAME-coverage.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: target/$PKG_NAME-coverage.xml
 
 
 sys:coverage:
@@ -121,7 +123,7 @@ lib:coverage:
     - job: lib:test
       artifacts: false
   variables:
-    PKG_NAME: libcoap
+    PKG_NAME: libcoap-rs
 
 .lint_base:
   stage: test
@@ -145,7 +147,7 @@ sys:lint:
 lib:lint:
   extends: .lint_base
   variables:
-    PKG_NAME: libcoap
+    PKG_NAME: libcoap-rs
 
 docs:
   stage: docs
