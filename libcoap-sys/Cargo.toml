@@ -6,7 +6,7 @@
 [package]
 name = "libcoap-sys"
 description = "Raw bindings to the libcoap CoAP library."
-version = "0.2.0+libcoap-develop-50128de"
+version = "0.2.0+libcoap-develop-8b9377e"
 edition = "2021"
 license = "BSD-2-Clause AND BSD-1-Clause"
 links = "coap-3"

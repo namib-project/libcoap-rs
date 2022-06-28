@@ -12,13 +12,13 @@ use std::{
     fmt::Debug,
     mem::MaybeUninit,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
-    os::raw::{c_int, c_uint},
+    os::raw::c_int,
     slice::Iter,
     str::FromStr,
     vec::Drain,
 };
 
-use libc::{in6_addr, in_addr, sa_family_t, sockaddr_in, sockaddr_in6, socklen_t, AF_INET, AF_INET6};
+use libc::{c_ushort, in6_addr, in_addr, sa_family_t, sockaddr_in, sockaddr_in6, socklen_t, AF_INET, AF_INET6};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 use url::{Host, Url};
@@ -39,7 +39,7 @@ use crate::error::UriParsingError;
 /// Interface index used internally by libcoap to refer to an endpoint.
 pub type IfIndex = c_int;
 /// Value for maximum retransmits.
-pub type MaxRetransmit = c_uint;
+pub type MaxRetransmit = c_ushort;
 /// Identifier for a CoAP message.
 pub type CoapMessageId = coap_mid_t;
 
