@@ -85,13 +85,13 @@ fn main() {
         // Read required environment variables.
         let out_dir = std::env::var_os("OUT_DIR").unwrap();
         // Read Makeflags into vector of strings
-        let make_flags: Vec<String> = std::env::var_os("CARGO_MAKEFLAGS")
-            .unwrap()
-            .into_string()
-            .unwrap()
-            .split(' ')
-            .map(String::from)
-            .collect();
+        //let make_flags: Vec<String> = std::env::var_os("CARGO_MAKEFLAGS")
+        //    .unwrap()
+        //    .into_string()
+        //    .unwrap()
+        //    .split(' ')
+        //    .map(String::from)
+        //    .collect();
 
         // Even though libcoap supports out-of-source builds, autogen.sh (or the corresponding
         // autotools) modify files in the source tree, which causes verification problems when
@@ -154,7 +154,7 @@ fn main() {
         }
         build_config
             // Set Makeflags
-            .make_args(make_flags)
+            //.make_args(make_flags)
             // Disable shared library compilation because the vendored library will always be
             // statically linked
             .disable("shared", None)
