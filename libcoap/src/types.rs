@@ -160,6 +160,7 @@ impl From<SocketAddr> for CoapAddress {
         }
     }
 }
+
 #[doc(hidden)]
 impl From<coap_address_t> for CoapAddress {
     fn from(raw_addr: coap_address_t) -> Self {

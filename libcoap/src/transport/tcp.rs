@@ -5,4 +5,5 @@
  * See the README as well as the LICENSE file for more information.
  */
 /// TODO
+#[cfg(feature = "tcp")]
 pub struct CoapTcpEndpoint {}

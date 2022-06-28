@@ -20,6 +20,7 @@ use crate::{context::CoapContext, session::CoapClientSession};
 
 /// Representation of cryptographic information used by a server.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg(feature = "dtls")]
 pub struct CoapCryptoPskInfo {
     /// The identity hint to return to the client.
     pub identity: Box<CoapCryptoPskIdentity>,
@@ -27,6 +28,7 @@ pub struct CoapCryptoPskInfo {
     pub key: Box<CoapCryptoPskData>,
 }
 
+#[cfg(feature = "dtls")]
 impl CoapCryptoPskInfo {
     /// Apply this key information to a coap_dtls_cpsk_info_t struct for use in libcoap.
     pub fn apply_to_cpsk_info(&self, info: &mut coap_dtls_cpsk_info_t) {
@@ -45,7 +47,9 @@ impl CoapCryptoPskInfo {
     }
 }
 
+#[cfg(feature = "dtls")]
 pub type CoapCryptoPskIdentity = [u8];
+#[cfg(feature = "dtls")]
 pub type CoapCryptoPskData = [u8];
 
 /// Type representing a possible return value of a cryptographic credential provider.
@@ -53,6 +57,7 @@ pub type CoapCryptoPskData = [u8];
 /// Most functions implemented in CoapCryptoProvider can return one of three possible responses,
 /// which are represented by this enum.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg(feature = "dtls")]
 pub enum CoapCryptoProviderResponse<T: Debug> {
     /// The current key (as indicated by a previous callback such as
     /// [CoapClientCryptoProvider::provide_default_info()]) is sufficient and should be used for this
@@ -67,6 +72,7 @@ pub enum CoapCryptoProviderResponse<T: Debug> {
 
 /// Trait implemented by types that can provide cryptographic information to CoapContexts and
 /// associated sessions when needed.
+#[cfg(feature = "dtls")]
 pub trait CoapClientCryptoProvider: Debug {
     /// Provide the appropriate cryptographic information for the given hint supplied by the server.
     ///
@@ -82,6 +88,7 @@ pub trait CoapClientCryptoProvider: Debug {
     fn provide_default_info(&mut self) -> CoapCryptoPskInfo;
 }
 
+#[cfg(feature = "dtls")]
 pub trait CoapServerCryptoProvider: Debug {
     /// Provide the appropiate cryptographic information for the given key identity supplied by the
     /// client.
@@ -117,6 +124,7 @@ pub trait CoapServerCryptoProvider: Debug {
 
 // TODO DTLS PKI/RPK
 
+#[cfg(feature = "dtls")]
 pub(crate) unsafe extern "C" fn dtls_ih_callback(
     hint: *mut coap_str_const_t,
     session: *mut coap_session_t,
@@ -130,6 +138,7 @@ pub(crate) unsafe extern "C" fn dtls_ih_callback(
         .unwrap_or(std::ptr::null())
 }
 
+#[cfg(feature = "dtls")]
 pub(crate) unsafe extern "C" fn dtls_server_id_callback(
     identity: *mut coap_bin_const_t,
     _session: *mut coap_session_t,
@@ -143,6 +152,7 @@ pub(crate) unsafe extern "C" fn dtls_server_id_callback(
         .unwrap_or(std::ptr::null())
 }
 
+#[cfg(feature = "dtls")]
 pub(crate) unsafe extern "C" fn dtls_server_sni_callback(
     sni: *const c_char,
     _session: *mut coap_session_t,

@@ -30,10 +30,10 @@ use crate::message::response::CoapResponse;
 use crate::message::CoapMessageCommon;
 use crate::protocol::CoapMessageCode;
 use crate::protocol::CoapMessageType;
+
+use crate::session::CoapServerSession;
 use crate::session::CoapSessionCommon;
-use crate::{
-    error::MessageConversionError, message::CoapMessage, protocol::CoapRequestCode, session::CoapServerSession,
-};
+use crate::{error::MessageConversionError, message::CoapMessage, protocol::CoapRequestCode};
 
 // Trait aliases are experimental
 //trait CoapMethodHandlerFn<D> = FnMut(&D, &mut CoapSession, &CoapRequestMessage, &mut CoapResponseMessage);

@@ -28,12 +28,12 @@ use libcoap_sys::{
     coap_session_t, coap_session_type_t,
 };
 
-use crate::crypto::CoapCryptoPskData;
+#[cfg(feature = "dtls")]
+use crate::crypto::{CoapCryptoPskData, CoapCryptoPskIdentity};
 
 use crate::message::request::CoapRequest;
 use crate::message::response::CoapResponse;
 use crate::{
-    crypto::CoapCryptoPskIdentity,
     error::{MessageConversionError, SessionGetAppDataError},
     message::{CoapMessage, CoapMessageCommon},
     protocol::CoapToken,
@@ -43,9 +43,11 @@ use crate::{
 pub use self::client::CoapClientSession;
 
 pub(self) use self::sealed::{CoapSessionCommonInternal, CoapSessionInnerProvider};
+
 pub use self::server::CoapServerSession;
 
 pub mod client;
+
 pub mod server;
 
 /// Representation of the states that a session can be in.
@@ -233,6 +235,7 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     }
 
     /// Returns the current PSK hint for this session.
+    #[cfg(feature = "dtls")]
     fn psk_hint(&self) -> Option<Box<CoapCryptoPskIdentity>> {
         // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         unsafe {
@@ -243,6 +246,7 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     }
 
     /// Returns the current PSK identity for this session.
+    #[cfg(feature = "dtls")]
     fn psk_identity(&self) -> Option<Box<CoapCryptoPskIdentity>> {
         // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         unsafe {
@@ -253,6 +257,7 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     }
 
     /// Returns the current PSK key for this session.
+    #[cfg(feature = "dtls")]
     fn psk_key(&self) -> Option<Box<CoapCryptoPskData>> {
         // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         unsafe {
@@ -401,6 +406,7 @@ impl<'a, T: CoapSessionCommonInternal<'a>> CoapSessionCommon<'a> for T {}
 /// server-side sessions, match this enum on the required session type.
 pub enum CoapSession<'a> {
     Client(CoapClientSession<'a>),
+
     Server(CoapServerSession<'a>),
 }
 
@@ -408,6 +414,7 @@ impl<'a> CoapSessionInnerProvider<'a> for CoapSession<'a> {
     fn inner_ref<'b>(&'b self) -> Ref<'b, CoapSessionInner<'a>> {
         match self {
             CoapSession::Client(sess) => sess.inner_ref(),
+
             CoapSession::Server(sess) => sess.inner_ref(),
         }
     }
@@ -415,6 +422,7 @@ impl<'a> CoapSessionInnerProvider<'a> for CoapSession<'a> {
     fn inner_mut<'b>(&'b self) -> RefMut<'b, CoapSessionInner<'a>> {
         match self {
             CoapSession::Client(sess) => sess.inner_mut(),
+
             CoapSession::Server(sess) => sess.inner_mut(),
         }
     }
@@ -440,7 +448,9 @@ impl<'a> CoapSession<'a> {
         let raw_session_type = coap_session_get_type(raw_session);
         match raw_session_type {
             coap_session_type_t::COAP_SESSION_TYPE_NONE => panic!("provided session has no type"),
+
             coap_session_type_t::COAP_SESSION_TYPE_CLIENT => CoapClientSession::from_raw(raw_session).into(),
+
             coap_session_type_t::COAP_SESSION_TYPE_SERVER | coap_session_type_t::COAP_SESSION_TYPE_HELLO => {
                 CoapServerSession::from_raw(raw_session).into()
             },
@@ -465,6 +475,7 @@ impl PartialEq for CoapSession<'_> {
     fn eq(&self, other: &Self) -> bool {
         match self {
             CoapSession::Client(cli_sess) => cli_sess.eq(other),
+
             CoapSession::Server(srv_sess) => srv_sess.eq(other),
         }
     }

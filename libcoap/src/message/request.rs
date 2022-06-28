@@ -413,12 +413,12 @@ impl CoapRequest {
                 CoapOption::LocationPath(_) => {
                     return Err(MessageConversionError::InvalidOptionForMessageType(
                         CoapOptionType::LocationPath,
-                    ))
+                    ));
                 },
                 CoapOption::LocationQuery(_) => {
                     return Err(MessageConversionError::InvalidOptionForMessageType(
                         CoapOptionType::LocationQuery,
-                    ))
+                    ));
                 },
                 CoapOption::ProxyUri(uri) => {
                     if proxy_uri.is_some() {
@@ -457,14 +457,14 @@ impl CoapRequest {
                 CoapOption::Size2(_) => {
                     return Err(MessageConversionError::InvalidOptionForMessageType(
                         CoapOptionType::Size2,
-                    ))
+                    ));
                 },
                 // libcoap handles blockwise transfer for us (for now).
                 CoapOption::Block1(_) => {},
                 CoapOption::Block2(_) => {
                     return Err(MessageConversionError::InvalidOptionForMessageType(
                         CoapOptionType::Block2,
-                    ))
+                    ));
                 },
                 CoapOption::HopLimit(value) => {
                     if hop_limit.is_some() {
