@@ -195,16 +195,14 @@ fn main() {
         bindgen_builder = bindgen_builder
             .clang_arg(format!("-I{}", dst.join("include").to_str().unwrap()))
             .clang_arg(format!("-L{}", dst.join("lib").to_str().unwrap()));
-        orig_pkg_config =
-            std::env::var_os("PKG_CONFIG_PATH")
-                .map(|v| String::from(v.to_str().unwrap()));
+        orig_pkg_config = std::env::var_os("PKG_CONFIG_PATH").map(|v| String::from(v.to_str().unwrap()));
         std::env::set_var(
             "PKG_CONFIG_PATH",
             format!(
                 "{}:{}",
                 dst.join("lib").join("pkgconfig").to_str().unwrap(),
                 orig_pkg_config.as_ref().map(String::clone).unwrap_or_else(String::new)
-            )
+            ),
         )
     }
 
@@ -237,11 +235,6 @@ fn main() {
 
     bindgen_builder = bindgen_builder
         .header("src/wrapper.h")
-        // Triggers a rebuild on every cargo build invocation, as the included headers seem to come
-        // from our built version.
-        // Should be fine, as we already printed `cargo:rerun-if-changed=src/libcoap/` at the start
-        // of the file.
-        //.parse_callbacks(Box::new(bindgen::CargoCallbacks))
         .default_enum_style(EnumVariation::Rust { non_exhaustive: true })
         .rustfmt_bindings(false)
         // Causes invalid syntax for some reason, so we have to disable it.
@@ -269,6 +262,13 @@ fn main() {
         // this problem.
         .blocklist_type("__(u)?int(8|16|32|64|128)_t")
         .size_t_is_usize(true);
+    if !cfg!(feature = "vendored") {
+        // Triggers a rebuild on every cargo build invocation if used for the vendored version, as
+        // the included headers seem to come from our built version.
+        // Should be fine though, as we already printed `cargo:rerun-if-changed=src/libcoap/` at the
+        // start of the file.
+        bindgen_builder = bindgen_builder.parse_callbacks(Box::new(bindgen::CargoCallbacks));
+    }
     let bindings = bindgen_builder.generate().unwrap();
 
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
@@ -276,6 +276,6 @@ fn main() {
 
     match orig_pkg_config.as_ref() {
         Some(value) => std::env::set_var("PKG_CONFIG_PATH", value),
-        None => std::env::remove_var("PKG_CONFIG_PATH")
+        None => std::env::remove_var("PKG_CONFIG_PATH"),
     }
 }
