@@ -87,6 +87,15 @@ use libc::{epoll_event, fd_set, sockaddr, sockaddr_in, sockaddr_in6, socklen_t, 
 
 use crate::coap_pdu_type_t::COAP_MESSAGE_RST;
 
+#[cfg(feature = "dtls_backend_gnutls")]
+use gnutls_sys as _;
+#[cfg(feature = "dtls_backend_mbedtls")]
+use mbedtls_sys as _;
+#[cfg(feature = "dtls_backend_openssl")]
+use openssl_sys as _;
+#[cfg(feature = "dtls_backend_tinydtls")]
+use tinydtls_sys as _;
+
 #[cfg(target_family = "windows")]
 include!(concat!(env!("OUT_DIR"), "\\bindings.rs"));
 #[cfg(not(target_family = "windows"))]

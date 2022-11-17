@@ -33,14 +33,14 @@ default = ["server", "client", "tcp", "async", "epoll", "vendored", "static"]
 # different backends), we select one based on the auto-detection order specified in
 # https://github.com/obgm/libcoap/blob/develop/configure.ac#L494 (gnutls > openssl > mbedtls > tinydtls).
 dtls = []
-dtls_backend_openssl = ["openssl-sys"]
-dtls_backend_gnutls = ["gnutls-sys"]
-dtls_backend_mbedtls = ["mbedtls-sys-auto"]
-dtls_backend_tinydtls = ["tinydtls-sys"]
+dtls_backend_openssl = ["dtls", "openssl-sys"]
+dtls_backend_gnutls = ["dtls", "gnutls-sys"]
+dtls_backend_mbedtls = ["dtls", "mbedtls-sys-auto"]
+dtls_backend_tinydtls = ["dtls", "tinydtls-sys"]
 # Enabling this feature will force libcoap-sys to be built with and statically linked to a vendored version of libcoap,
 # which will be built by the build-script before building libcoap-sys.
 # This way, it is no longer required to have libcoap installed to use this crate.
-vendored = ["static", "openssl-sys?/vendored"]
+vendored = ["static"]
 # Enable this feature to use static linking to libcoap instead of dynamic linking.
 static = []
 # --- FEATURE FLAGS ---
@@ -60,14 +60,17 @@ client = []
 epoll = []
 
 [dependencies]
-gnutls-sys = {version = "^0.1", optional = true}
-openssl-sys = {version = "^0.9", optional = true}
+gnutls-sys = {version = "^0.1.2", optional = true}
+openssl-sys = {version = "^0.9.74", optional = true}
 mbedtls-sys-auto = {version = "^2.26", optional = true}
-libc = "^0.2"
+libc = "^0.2.126"
 tinydtls-sys = {version = "^0.1.1", optional = true}
 
 [build-dependencies]
-bindgen = "^0.59.2"
+bindgen = "^0.62.0"
 autotools = "^0.2.3"
 fs_extra = "^1.2"
 pkg-config = "^0.3.24"
+
+[package.metadata.docs.rs]
+features = ["dtls", "dtls_backend_openssl", "vendored"]
