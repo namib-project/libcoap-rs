@@ -37,9 +37,8 @@ impl ToString for DtlsBackend {
 fn main() {
     println!("cargo:rerun-if-changed=src/libcoap/");
     println!("cargo:rerun-if-changed=src/wrapper.h");
-    let mut pkgconf = pkg_config::Config::new();
     let mut bindgen_builder = bindgen::Builder::default();
-    let mut orig_pkg_config = None;
+    let orig_pkg_config = std::env::var_os("PKG_CONFIG_PATH").map(|v| String::from(v.to_str().unwrap()));
 
     let mut dtls_backend = Option::None;
     if cfg!(feature = "dtls") {
@@ -125,6 +124,7 @@ fn main() {
                 DtlsBackend::TinyDtls => {
                     // We do not ship tinydtls with our source distribution. Instead, we use tinydtls-sys.
                     build_config.without("submodule-tinydtls", None);
+
                     // If tinydtls-sys is built with the vendored feature, the library is built alongside
                     // the Rust crate. To use the version built by the tinydtls-sys build script, we use the
                     // environment variables set by the build script.
@@ -141,27 +141,57 @@ fn main() {
                             ),
                         );
                     };
+
+                    if let Some(tinydtls_libs) = env::var_os("DEP_TINYDTLS_LIBS") {
+                        build_config.env("TinyDTLS_LIBS", format!("-L{}", tinydtls_libs.to_str().unwrap()));
+
+                        build_config.env(
+                            "PKG_CONFIG_PATH",
+                            Path::new(tinydtls_libs.as_os_str())
+                                .join("lib")
+                                .join("pkgconfig")
+                                .into_os_string(),
+                        );
+                    }
                 },
                 DtlsBackend::OpenSsl => {
                     // Set include path according to the path provided by openssl-sys (relevant if
                     // openssl-sys is vendored)
                     if let Some(openssl_include) = env::var_os("DEP_OPENSSL_INCLUDE") {
                         build_config.env("OpenSSL_CFLAGS", format!("-I{}", openssl_include.to_str().unwrap()));
+                        build_config.env(
+                            "PKG_CONFIG_PATH",
+                            Path::new(openssl_include.as_os_str())
+                                .parent()
+                                .unwrap()
+                                .join("lib")
+                                .join("pkgconfig")
+                                .into_os_string(),
+                        );
                     }
                 },
                 DtlsBackend::MbedTls => {
                     // Set include path according to the path provided by mbedtls-sys (relevant if
                     // mbedtls-sys is vendored).
-                    // libcoap doesn't support overriding the MbedTLS CFLAGS, but doesnt set those
+                    // libcoap doesn't support overriding the MbedTLS CFLAGS, but doesn't set those
                     // either, so we just set CFLAGS and hope they propagate.
                     if let Some(mbedtls_include) = env::var_os("DEP_MBEDTLS_INCLUDE") {
                         build_config.env("CFLAGS", format!("-I{}", mbedtls_include.to_str().unwrap()));
+                        build_config.env(
+                            "PKG_CONFIG_PATH",
+                            Path::new(mbedtls_include.as_os_str())
+                                .parent()
+                                .unwrap()
+                                .join("lib")
+                                .join("pkgconfig")
+                                .into_os_string(),
+                        );
                     }
                 },
                 DtlsBackend::GnuTls => {
-                    // GnuTLS doesn't provide include directory metadata, but doesn't support
+                    // gnutls-sys doesn't provide include directory metadata, but doesn't support
                     // vendoring the library either. Instead, it just uses the GnuTLS found via
-                    // pkg-config, which is the same which is already found by libcoap by default.
+                    // pkg-config, which is already found by libcoap by default.
                 },
             }
         } else {
@@ -210,8 +240,7 @@ fn main() {
         bindgen_builder = bindgen_builder
             .clang_arg(format!("-I{}", dst.join("include").to_str().unwrap()))
             .clang_arg(format!("-L{}", dst.join("lib").to_str().unwrap()));
-        orig_pkg_config = std::env::var_os("PKG_CONFIG_PATH").map(|v| String::from(v.to_str().unwrap()));
-        std::env::set_var(
+        env::set_var(
             "PKG_CONFIG_PATH",
             format!(
                 "{}:{}",
@@ -220,9 +249,6 @@ fn main() {
             ),
         )
     }
-
-    pkgconf.statik(cfg!(feature = "static"));
-    pkgconf.cargo_metadata(false);
     println!(
         "cargo:rustc-link-lib={}{}",
         cfg!(feature = "static").then(|| "static=").unwrap_or(""),
