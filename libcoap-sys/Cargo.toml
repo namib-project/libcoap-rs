@@ -64,7 +64,7 @@ gnutls-sys = {version = "^0.1.2", optional = true}
 openssl-sys = {version = "^0.9.74", optional = true}
 mbedtls-sys-auto = {version = "^2.26", optional = true}
 libc = "^0.2.126"
-tinydtls-sys = {version = "^0.1.1", optional = true}
+tinydtls-sys = {version = "^0.1.2", optional = true}
 
 [build-dependencies]
 bindgen = "^0.62.0"
