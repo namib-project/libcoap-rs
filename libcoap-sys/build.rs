@@ -38,7 +38,9 @@ fn main() {
     println!("cargo:rerun-if-changed=src/libcoap/");
     println!("cargo:rerun-if-changed=src/wrapper.h");
     let mut bindgen_builder = bindgen::Builder::default();
+    // Read required environment variables.
     let orig_pkg_config = std::env::var_os("PKG_CONFIG_PATH").map(|v| String::from(v.to_str().unwrap()));
+    let out_dir = env::var_os("OUT_DIR").unwrap();
 
     let mut dtls_backend = Option::None;
     if cfg!(feature = "dtls") {
@@ -81,8 +83,7 @@ fn main() {
 
     // Build vendored library if feature was set.
     if cfg!(feature = "vendored") {
-        // Read required environment variables.
-        let out_dir = std::env::var_os("OUT_DIR").unwrap();
+        let libcoap_src_dir = Path::new(&out_dir).join("libcoap");
         // Read Makeflags into vector of strings
         //let make_flags: Vec<String> = std::env::var_os("CARGO_MAKEFLAGS")
         //    .unwrap()
@@ -100,7 +101,7 @@ fn main() {
             overwrite: true,
             ..Default::default()
         };
-        match std::fs::remove_dir_all(Path::new(&out_dir).join("libcoap")) {
+        match std::fs::remove_dir_all(&libcoap_src_dir) {
             Ok(_) => {},
             Err(e) if e.kind() == ErrorKind::NotFound => {},
             e => e.unwrap(),
@@ -111,10 +112,11 @@ fn main() {
             &copy_options,
         )
         .unwrap();
-        let libcoap_src_dir = Path::new(&out_dir).join("libcoap");
+        let current_dir_backup = env::current_dir().unwrap();
+        env::set_current_dir(&libcoap_src_dir).expect("unable to change to libcoap build dir");
         Command::new(libcoap_src_dir.join("autogen.sh")).status().unwrap();
         let mut build_config = autotools::Config::new(libcoap_src_dir);
-        build_config.out_dir(out_dir);
+        build_config.out_dir(&out_dir);
         if let Some(dtls_backend) = dtls_backend {
             build_config
                 .enable("dtls", None)
@@ -247,7 +249,8 @@ fn main() {
                 dst.join("lib").join("pkgconfig").to_str().unwrap(),
                 orig_pkg_config.as_ref().map(String::clone).unwrap_or_else(String::new)
             ),
-        )
+        );
+        env::set_current_dir(current_dir_backup).expect("unable to switch back to source dir");
     }
     println!(
         "cargo:rustc-link-lib={}{}",
@@ -300,11 +303,11 @@ fn main() {
     }
     let bindings = bindgen_builder.generate().unwrap();
 
-    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let out_path = PathBuf::from(out_dir);
     bindings.write_to_file(out_path.join("bindings.rs")).unwrap();
 
     match orig_pkg_config.as_ref() {
-        Some(value) => std::env::set_var("PKG_CONFIG_PATH", value),
-        None => std::env::remove_var("PKG_CONFIG_PATH"),
+        Some(value) => env::set_var("PKG_CONFIG_PATH", value),
+        None => env::remove_var("PKG_CONFIG_PATH"),
     }
 }
