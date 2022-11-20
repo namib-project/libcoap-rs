@@ -1,4 +1,4 @@
 [submodule "libcoap"]
 	path = libcoap-sys/src/libcoap
 	url = https://github.com/obgm/libcoap.git
-	branch = develop
+	branch = release-4.3.1

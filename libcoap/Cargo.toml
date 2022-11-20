@@ -6,7 +6,7 @@
 [package]
 name = "libcoap-rs"
 description = "An idiomatic wrapper around the libcoap CoAP library for Rust."
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 license = "BSD-2-Clause"
 readme = "README.md"
@@ -24,12 +24,16 @@ dtls_gnutls = ["libcoap-sys/dtls_backend_gnutls"]
 dtls_mbedtls = ["libcoap-sys/dtls_backend_mbedtls"]
 tcp = []
 nightly = []
+vendored = ["libcoap-sys/vendored"]
 
 [dependencies]
-libcoap-sys = { version = "^0.2.0", path = "../libcoap-sys" }
+libcoap-sys = { version = "^0.2.1", path = "../libcoap-sys" }
 libc = { version = "^0.2.95" }
 num-derive = { version = "^0.3.3" }
 num-traits = { version = "^0.2.14" }
 url = { version = "^2.2" }
 rand = { version = "^0.8.4" }
 thiserror = "^1.0"
+
+[package.metadata.docs.rs]
+features = ["dtls", "dtls_openssl", "vendored"]

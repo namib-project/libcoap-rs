@@ -37,9 +37,10 @@ impl ToString for DtlsBackend {
 fn main() {
     println!("cargo:rerun-if-changed=src/libcoap/");
     println!("cargo:rerun-if-changed=src/wrapper.h");
-    let mut pkgconf = pkg_config::Config::new();
     let mut bindgen_builder = bindgen::Builder::default();
-    let mut orig_pkg_config = None;
+    // Read required environment variables.
+    let orig_pkg_config = std::env::var_os("PKG_CONFIG_PATH").map(|v| String::from(v.to_str().unwrap()));
+    let out_dir = env::var_os("OUT_DIR").unwrap();
 
     let mut dtls_backend = Option::None;
     if cfg!(feature = "dtls") {
@@ -82,8 +83,7 @@ fn main() {
 
     // Build vendored library if feature was set.
     if cfg!(feature = "vendored") {
-        // Read required environment variables.
-        let out_dir = std::env::var_os("OUT_DIR").unwrap();
+        let libcoap_src_dir = Path::new(&out_dir).join("libcoap");
         // Read Makeflags into vector of strings
         //let make_flags: Vec<String> = std::env::var_os("CARGO_MAKEFLAGS")
         //    .unwrap()
@@ -101,7 +101,7 @@ fn main() {
             overwrite: true,
             ..Default::default()
         };
-        match std::fs::remove_dir_all(Path::new(&out_dir).join("libcoap")) {
+        match std::fs::remove_dir_all(&libcoap_src_dir) {
             Ok(_) => {},
             Err(e) if e.kind() == ErrorKind::NotFound => {},
             e => e.unwrap(),
@@ -112,42 +112,89 @@ fn main() {
             &copy_options,
         )
         .unwrap();
-        let libcoap_src_dir = Path::new(&out_dir).join("libcoap");
+        let current_dir_backup = env::current_dir().unwrap();
+        env::set_current_dir(&libcoap_src_dir).expect("unable to change to libcoap build dir");
         Command::new(libcoap_src_dir.join("autogen.sh")).status().unwrap();
-
         let mut build_config = autotools::Config::new(libcoap_src_dir);
-        build_config.out_dir(out_dir);
+        build_config.out_dir(&out_dir);
         if let Some(dtls_backend) = dtls_backend {
             build_config
                 .enable("dtls", None)
                 .with(dtls_backend.to_string().as_str(), None);
 
-            if dtls_backend == DtlsBackend::TinyDtls {
-                // We do not ship tinydtls with our source distribution. Instead, we use tinydtls-sys.
-                build_config.with("system-tinydtls", None);
-                build_config.without("vendored-tinydtls", None);
-                // If tinydtls-sys is built with the vendored feature, the library is built alongside
-                // the Rust crate. To use the version built by the tinydtls-sys build script, we use the
-                // environment variables set by the build script.
-                if let Some(tinydtls_libs) = env::var_os("DEP_TINYDTLS_LIBS") {
-                    build_config.env(
-                        "TinyDTLS_LIBS",
-                        format!("-L{} -l:libtinydtls.a", tinydtls_libs.to_str().unwrap(),),
-                    );
-                }
-                if let Some(tinydtls_include) = env::var_os("DEP_TINYDTLS_INCLUDE") {
-                    build_config.env(
-                        "TinyDTLS_CFLAGS",
-                        format!(
-                            "-I{} -I{}",
-                            tinydtls_include.to_str().unwrap(),
-                            Path::new(tinydtls_include.to_str().unwrap())
-                                .join("tinydtls")
-                                .to_str()
+            match dtls_backend {
+                DtlsBackend::TinyDtls => {
+                    // We do not ship tinydtls with our source distribution. Instead, we use tinydtls-sys.
+                    build_config.without("submodule-tinydtls", None);
+
+                    // If tinydtls-sys is built with the vendored feature, the library is built alongside
+                    // the Rust crate. To use the version built by the tinydtls-sys build script, we use the
+                    // environment variables set by the build script.
+                    if let Some(tinydtls_include) = env::var_os("DEP_TINYDTLS_INCLUDE") {
+                        build_config.env(
+                            "TinyDTLS_CFLAGS",
+                            format!(
+                                "-I{} -I{}",
+                                tinydtls_include.to_str().unwrap(),
+                                Path::new(tinydtls_include.to_str().unwrap())
+                                    .join("tinydtls")
+                                    .to_str()
+                                    .unwrap()
+                            ),
+                        );
+                    };
+
+                    if let Some(tinydtls_libs) = env::var_os("DEP_TINYDTLS_LIBS") {
+                        build_config.env("TinyDTLS_LIBS", format!("-L{}", tinydtls_libs.to_str().unwrap()));
+
+                        build_config.env(
+                            "PKG_CONFIG_PATH",
+                            Path::new(tinydtls_libs.as_os_str())
+                                .join("lib")
+                                .join("pkgconfig")
+                                .into_os_string(),
+                        );
+                    }
+                },
+                DtlsBackend::OpenSsl => {
+                    // Set include path according to the path provided by openssl-sys (relevant if
+                    // openssl-sys is vendored)
+                    if let Some(openssl_include) = env::var_os("DEP_OPENSSL_INCLUDE") {
+                        build_config.env("OpenSSL_CFLAGS", format!("-I{}", openssl_include.to_str().unwrap()));
+                        build_config.env(
+                            "PKG_CONFIG_PATH",
+                            Path::new(openssl_include.as_os_str())
+                                .parent()
                                 .unwrap()
-                        ),
-                    );
-                }
+                                .join("lib")
+                                .join("pkgconfig")
+                                .into_os_string(),
+                        );
+                    }
+                },
+                DtlsBackend::MbedTls => {
+                    // Set include path according to the path provided by mbedtls-sys (relevant if
+                    // mbedtls-sys is vendored).
+                    // libcoap doesn't support overriding the MbedTLS CFLAGS, but doesn't set those
+                    // either, so we just set CFLAGS and hope they propagate.
+                    if let Some(mbedtls_include) = env::var_os("DEP_MBEDTLS_INCLUDE") {
+                        build_config.env("CFLAGS", format!("-I{}", mbedtls_include.to_str().unwrap()));
+                        build_config.env(
+                            "PKG_CONFIG_PATH",
+                            Path::new(mbedtls_include.as_os_str())
+                                .parent()
+                                .unwrap()
+                                .join("lib")
+                                .join("pkgconfig")
+                                .into_os_string(),
+                        );
+                    }
+                },
+                DtlsBackend::GnuTls => {
+                    // gnutls-sys doesn't provide include directory metadata, but doesn't support
+                    // vendoring the library either. Instead, it just uses the GnuTLS found via
+                    // pkg-config, which is already found by libcoap by default.
+                },
             }
         } else {
             build_config.disable("dtls", None);
@@ -195,43 +242,28 @@ fn main() {
         bindgen_builder = bindgen_builder
             .clang_arg(format!("-I{}", dst.join("include").to_str().unwrap()))
             .clang_arg(format!("-L{}", dst.join("lib").to_str().unwrap()));
-        orig_pkg_config = std::env::var_os("PKG_CONFIG_PATH").map(|v| String::from(v.to_str().unwrap()));
-        std::env::set_var(
+        env::set_var(
             "PKG_CONFIG_PATH",
             format!(
                 "{}:{}",
                 dst.join("lib").join("pkgconfig").to_str().unwrap(),
                 orig_pkg_config.as_ref().map(String::clone).unwrap_or_else(String::new)
             ),
-        )
-    }
-
-    pkgconf.statik(cfg!(feature = "static"));
-    pkgconf.cargo_metadata(false);
-    for link_lib in pkgconf
-        .probe(
-            format!(
-                "libcoap-3-{}",
-                &dtls_backend
-                    .as_ref()
-                    .map(|v| v.to_string())
-                    .unwrap_or_else(|| "notls".to_string())
-            )
-            .as_str(),
-        )
-        .unwrap()
-        .libs
-    {
-        let link_lib = match link_lib.as_str() {
-            ":libtinydtls.a" => String::from("tinydtls"),
-            v => String::from(v),
-        };
-        println!(
-            "cargo:rustc-link-lib={}{}",
-            cfg!(feature = "static").then(|| "static=").unwrap_or(""),
-            &link_lib
         );
+        env::set_current_dir(current_dir_backup).expect("unable to switch back to source dir");
     }
+    println!(
+        "cargo:rustc-link-lib={}{}",
+        cfg!(feature = "static").then(|| "static=").unwrap_or(""),
+        format!(
+            "coap-3-{}",
+            &dtls_backend
+                .as_ref()
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "notls".to_string())
+        )
+        .as_str()
+    );
 
     bindgen_builder = bindgen_builder
         .header("src/wrapper.h")
@@ -271,11 +303,11 @@ fn main() {
     }
     let bindings = bindgen_builder.generate().unwrap();
 
-    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let out_path = PathBuf::from(out_dir);
     bindings.write_to_file(out_path.join("bindings.rs")).unwrap();
 
     match orig_pkg_config.as_ref() {
-        Some(value) => std::env::set_var("PKG_CONFIG_PATH", value),
-        None => std::env::remove_var("PKG_CONFIG_PATH"),
+        Some(value) => env::set_var("PKG_CONFIG_PATH", value),
+        None => env::remove_var("PKG_CONFIG_PATH"),
     }
 }
