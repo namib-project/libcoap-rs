@@ -17,7 +17,7 @@ use libcoap_sys::{
     coap_context_set_csm_timeout, coap_context_set_keepalive, coap_context_set_max_handshake_sessions,
     coap_context_set_max_idle_sessions, coap_context_set_psk2, coap_context_set_session_timeout, coap_context_t,
     coap_dtls_spsk_info_t, coap_dtls_spsk_t, coap_event_t, coap_free_context, coap_get_app_data, coap_io_process,
-    coap_new_context, coap_register_response_handler, coap_set_app_data, coap_set_event_handler,
+    coap_new_context, coap_register_event_handler, coap_register_response_handler, coap_set_app_data,
     COAP_BLOCK_SINGLE_BODY, COAP_BLOCK_USE_LIBCOAP, COAP_DTLS_SPSK_SETUP_VERSION, COAP_IO_WAIT,
 };
 
@@ -28,7 +28,7 @@ use crate::crypto::{CoapCryptoProviderResponse, CoapCryptoPskIdentity, CoapCrypt
 use crate::event::{event_handler_callback, CoapEventHandler};
 use crate::mem::{CoapLendableFfiRcCell, CoapLendableFfiWeakCell, DropInnerExclusively};
 
-use crate::session::CoapClientSession;
+use crate::session::{CoapClientSession, CoapSessionCommon};
 
 use crate::session::CoapServerSession;
 use crate::session::CoapSession;
@@ -141,7 +141,7 @@ impl<'a> CoapContext<'a> {
         // `create_raw_weak_box()`.
         unsafe {
             coap_set_app_data(raw_context, inner.create_raw_weak_box() as *mut c_void);
-            coap_set_event_handler(raw_context, Some(event_handler_callback));
+            coap_register_event_handler(raw_context, Some(event_handler_callback));
         }
 
         Ok(CoapContext { inner })
@@ -516,6 +516,7 @@ impl CoapContext<'_> {
     pub(crate) unsafe fn provide_raw_key_for_identity(
         &self,
         identity: &CoapCryptoPskIdentity,
+        session: &CoapServerSession,
     ) -> Option<*const coap_bin_const_t> {
         let inner_ref = &mut *self.inner.borrow_mut();
         match inner_ref
@@ -532,10 +533,22 @@ impl CoapContext<'_> {
                 curr_data.apply_to_spsk_info(&mut inner_ref.crypto_last_info_ref);
                 Some(&inner_ref.crypto_last_info_ref.key as *const coap_bin_const_t)
             },
-            Some(CoapCryptoProviderResponse::UseCurrent) => inner_ref.crypto_current_data.as_ref().map(|v| {
-                v.apply_to_spsk_info(&mut inner_ref.crypto_last_info_ref);
-                &inner_ref.crypto_last_info_ref.key as *const coap_bin_const_t
-            }),
+            Some(CoapCryptoProviderResponse::UseCurrent) => {
+                if let Some(key) = session.psk_key() {
+                    inner_ref.crypto_current_data = Some(CoapCryptoPskInfo {
+                        identity: Box::new([]),
+                        key,
+                    });
+                    inner_ref
+                        .crypto_current_data
+                        .as_ref()
+                        .unwrap()
+                        .apply_to_spsk_info(&mut inner_ref.crypto_last_info_ref);
+                    Some(&inner_ref.crypto_last_info_ref.key)
+                } else {
+                    None
+                }
+            },
             None | Some(CoapCryptoProviderResponse::Unacceptable) => None,
         }
     }
@@ -623,6 +636,17 @@ impl CoapContext<'_> {
 
 impl Drop for CoapContextInner<'_> {
     fn drop(&mut self) {
+        // Disable event handler before dropping, as we would otherwise need to lend our reference
+        // and because calling event handlers is probably undesired when we are already dropping
+        // the context.
+        // SAFETY: Validity of our raw context is always given for the lifetime of CoapContextInner
+        // unless coap_free_context() is called during a violation of the [as_mut_raw_context()] and
+        // [as_mut_context()] contracts (we check validity of the pointer on construction).
+        // Passing a NULL handler/None to coap_register_event_handler() is allowed as per the
+        // documentation.
+        unsafe {
+            coap_register_event_handler(self.raw_context, None);
+        }
         // Clean up sessions while the remainder of the context is still available.
         for session in std::mem::take(&mut self.client_sessions).into_iter() {
             session.drop_exclusively();

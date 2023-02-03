@@ -89,7 +89,7 @@ pub trait CoapEventHandler: Debug {
     #[allow(unused_variables)]
     fn handle_server_session_new(&mut self, session: &mut CoapServerSession) {}
 
-    /// Handle the deletion of a new server-side session.
+    /// Handle the deletion of a server-side session.
     ///
     /// This event is called inside of the IO loop when a server-side session is deleted.
     /// This can happen for a number of reasons:

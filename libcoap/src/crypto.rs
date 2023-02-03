@@ -16,6 +16,7 @@ use libcoap_sys::{
     coap_bin_const_t, coap_context_t, coap_dtls_cpsk_info_t, coap_dtls_spsk_info_t, coap_session_t, coap_str_const_t,
 };
 
+use crate::session::CoapServerSession;
 use crate::{context::CoapContext, session::CoapClientSession};
 
 /// Representation of cryptographic information used by a server.
@@ -141,15 +142,14 @@ pub(crate) unsafe extern "C" fn dtls_ih_callback(
 #[cfg(feature = "dtls")]
 pub(crate) unsafe extern "C" fn dtls_server_id_callback(
     identity: *mut coap_bin_const_t,
-    _session: *mut coap_session_t,
+    session: *mut coap_session_t,
     userdata: *mut c_void,
 ) -> *const coap_bin_const_t {
     let context = CoapContext::from_raw(userdata as *mut coap_context_t);
     let provided_identity = std::slice::from_raw_parts((*identity).s, (*identity).length);
-    context
-        .provide_raw_key_for_identity(provided_identity)
-        .map(|v| (v as *const coap_bin_const_t))
-        .unwrap_or(std::ptr::null())
+    let session = CoapServerSession::from_raw(session);
+    let key = context.provide_raw_key_for_identity(provided_identity, &session);
+    key.unwrap_or(std::ptr::null())
 }
 
 #[cfg(feature = "dtls")]
