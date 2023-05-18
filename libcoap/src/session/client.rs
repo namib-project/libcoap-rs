@@ -10,14 +10,16 @@ use std::net::SocketAddr;
 
 use libcoap_sys::{
     coap_bin_const_t, coap_dtls_cpsk_info_t, coap_dtls_cpsk_t, coap_new_client_session, coap_new_client_session_psk2,
-    coap_proto_t, coap_session_get_app_data, coap_session_get_type, coap_session_release, coap_session_set_app_data,
-    coap_session_t, coap_session_type_t, COAP_DTLS_SPSK_SETUP_VERSION,
+    coap_proto_t, coap_register_event_handler, coap_session_get_app_data, coap_session_get_context,
+    coap_session_get_type, coap_session_release, coap_session_set_app_data, coap_session_t, coap_session_type_t,
+    COAP_DTLS_SPSK_SETUP_VERSION,
 };
 
 #[cfg(feature = "dtls")]
 use crate::crypto::{
     dtls_ih_callback, CoapClientCryptoProvider, CoapCryptoProviderResponse, CoapCryptoPskIdentity, CoapCryptoPskInfo,
 };
+use crate::event::event_handler_callback;
 use crate::mem::{CoapFfiRcCell, DropInnerExclusively};
 use crate::{context::CoapContext, error::SessionCreationError, types::CoapAddress};
 
@@ -95,7 +97,7 @@ impl CoapClientSession<'_> {
 
         // SAFETY: raw_session was just checked, crypto_current_data is data provided to
         // coap_new_client_session_psk2().
-        Ok(unsafe { CoapClientSession::new(ctx, raw_session, Some(id), Some(Box::new(crypto_provider))) })
+        Ok(unsafe { CoapClientSession::new(raw_session, Some(id), Some(Box::new(crypto_provider))) })
     }
 
     /// Create a new unencrypted session with the given peer over UDP.
@@ -123,7 +125,6 @@ impl CoapClientSession<'_> {
         // coap_new_client_session().
         Ok(unsafe {
             CoapClientSession::new(
-                ctx,
                 session as *mut coap_session_t,
                 #[cfg(feature = "dtls")]
                 None,
@@ -143,7 +144,6 @@ impl CoapClientSession<'_> {
     /// The provided value for `crypto_current_data` must be the one whose memory pointers were used
     /// when calling `coap_new_client_session_*` (if any was provided).
     unsafe fn new<'a>(
-        ctx: &mut CoapContext<'a>,
         raw_session: *mut coap_session_t,
         #[cfg(feature = "dtls")] crypto_current_data: Option<CoapCryptoPskInfo>,
         #[cfg(feature = "dtls")] crypto_provider: Option<Box<dyn CoapClientCryptoProvider>>,
@@ -173,8 +173,6 @@ impl CoapClientSession<'_> {
         // SAFETY: raw session is valid, inner session pointer must be valid as it was just created
         // from one of Rusts smart pointers.
         coap_session_set_app_data(raw_session, inner_session.create_raw_weak());
-        // TODO the client sessions are now only deleted if the context goes out of scope, i guess we need to work with weak references or pointers to the raw client sessions here.
-        ctx.attach_client_session(client_session.clone());
 
         client_session
     }
@@ -263,11 +261,33 @@ impl DropInnerExclusively for CoapClientSession<'_> {
 
 impl Drop for CoapClientSessionInner<'_> {
     fn drop(&mut self) {
+        // SAFETY:
+        // - raw_session is always valid as long as we are not dropped yet (as this is the only
+        //   function that calls coap_session_release on client-side sessions).
+        // - Application data validity is asserted.
+        // - For event handling access, see later comment.
         unsafe {
             let app_data = coap_session_get_app_data(self.inner.raw_session);
             assert!(!app_data.is_null());
+            // Recreate weak pointer instance so that it can be dropped (which in turn reduces the
+            // weak reference count, avoiding memory leaks).
             CoapFfiRcCell::<CoapClientSessionInner>::raw_ptr_to_weak(app_data);
+            // We need to temporarily disable event handling so that our own event handler does not
+            // access this already partially invalid session (and recursively also calls this Drop
+            // implementation), causing a SIGABRT.
+            // This is fine, because:
+            // - While this destructor is called, nothing is concurrently accessing the raw context
+            //   (as libcoap is single-threaded and all types are !Send)
+            // - The only way this could be problematic would be if libcoap assumed sessions to be
+            //   unchanging during a call to coap_io_process. However, this would be considered a
+            //   bug in libcoap (as the documentation does not explicitly forbid this AFAIK).
+            let raw_context = coap_session_get_context(self.inner.raw_session);
+            assert!(!raw_context.is_null());
+            coap_register_event_handler(raw_context, None);
+            // Let libcoap do its cleanup of the raw session and free the associated memory.
             coap_session_release(self.inner.raw_session);
+            // Restore event handler.
+            coap_register_event_handler(raw_context, Some(event_handler_callback));
         }
     }
 }

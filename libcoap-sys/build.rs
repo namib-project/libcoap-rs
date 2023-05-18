@@ -268,7 +268,7 @@ fn main() {
     bindgen_builder = bindgen_builder
         .header("src/wrapper.h")
         .default_enum_style(EnumVariation::Rust { non_exhaustive: true })
-        .rustfmt_bindings(false)
+        .formatter(bindgen::Formatter::None)
         // Causes invalid syntax for some reason, so we have to disable it.
         .generate_comments(false)
         .dynamic_link_require_all(true)
