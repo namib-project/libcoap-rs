@@ -67,7 +67,7 @@ libc = "^0.2.126"
 tinydtls-sys = {version = "^0.1.2", optional = true}
 
 [build-dependencies]
-bindgen = "^0.62.0"
+bindgen = "^0.65.1"
 autotools = "^0.2.3"
 fs_extra = "^1.2"
 pkg-config = "^0.3.24"
