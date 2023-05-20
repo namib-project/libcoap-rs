@@ -5,5 +5,6 @@
  * See the README as well as the LICENSE file for more information.
  */
 /// TODO
+#[allow(dead_code)]
 #[cfg(feature = "tcp")]
 pub struct CoapTcpEndpoint {}

@@ -55,8 +55,8 @@ impl CoapClientSession<'_> {
     /// Will return a [SessionCreationError] if libcoap was unable to create a session (most likely
     /// because it was not possible to bind to a port).
     #[cfg(feature = "dtls")]
-    pub fn connect_dtls<'a, 'b, P: 'static + CoapClientCryptoProvider>(
-        ctx: &'b mut CoapContext<'a>,
+    pub fn connect_dtls<'a, P: 'static + CoapClientCryptoProvider>(
+        ctx: &mut CoapContext<'a>,
         addr: SocketAddr,
         mut crypto_provider: P,
     ) -> Result<CoapClientSession<'a>, SessionCreationError> {
@@ -65,7 +65,17 @@ impl CoapClientSession<'_> {
         let client_setup_data = Box::into_raw(Box::new(coap_dtls_cpsk_t {
             version: COAP_DTLS_SPSK_SETUP_VERSION as u8,
             reserved: [0; 7],
-            validate_ih_call_back: Some(dtls_ih_callback),
+            validate_ih_call_back: {
+                // Unsupported by MbedTLS
+                #[cfg(not(feature = "dtls_mbedtls"))]
+                {
+                    Some(dtls_ih_callback)
+                }
+                #[cfg(feature = "dtls_mbedtls")]
+                {
+                    None
+                }
+            },
             ih_call_back_arg: std::ptr::null_mut(),
             client_sni: std::ptr::null_mut(),
             psk_info: coap_dtls_cpsk_info_t {

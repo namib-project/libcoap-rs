@@ -79,6 +79,8 @@ pub trait CoapClientCryptoProvider: Debug {
     ///
     /// Return a CoapCryptoProviderResponse corresponding to the cryptographic information that
     /// should be used.
+    ///
+    /// Note: Unsupported by the MBedTLS DTLS backend.
     fn provide_key_for_hint(
         &mut self,
         hint: &CoapCryptoPskIdentity,
@@ -110,6 +112,8 @@ pub trait CoapServerCryptoProvider: Debug {
     /// hint.
     ///
     /// Return None if the provided SNI is unacceptable, i.e. you have no key for this server name.
+    ///
+    /// Note: Unsupported by the TinyDTLS DTLS backend.
     #[allow(unused_variables)]
     fn provide_hint_for_sni(&mut self, sni: &str) -> CoapCryptoProviderResponse<CoapCryptoPskInfo> {
         CoapCryptoProviderResponse::UseCurrent
