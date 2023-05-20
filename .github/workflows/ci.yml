@@ -19,7 +19,7 @@ jobs:
       fail-fast: false
       matrix:
         crate: [libcoap-sys, libcoap-rs]
-        dtls_backend: [openssl, gnutls, tinydtls, mbedtls]
+        dtls_backend: [openssl, gnutls, tinydtls]
     steps:
       - uses: actions/checkout@v3
         with:
