@@ -305,7 +305,17 @@ impl CoapContext<'_> {
                         reserved: [0; 7],
                         validate_id_call_back: Some(dtls_server_id_callback),
                         id_call_back_arg: inner_ref.raw_context as *mut c_void,
-                        validate_sni_call_back: Some(dtls_server_sni_callback),
+                        validate_sni_call_back: {
+                            // Unsupported by TinyDTLS
+                            #[cfg(not(feature = "dtls_tinydtls"))]
+                            {
+                                Some(dtls_server_sni_callback)
+                            }
+                            #[cfg(feature = "dtls_tinydtls")]
+                            {
+                                None
+                            }
+                        },
                         sni_call_back_arg: inner_ref.raw_context as *mut c_void,
                         psk_info: initial_data,
                     })),
@@ -529,6 +539,13 @@ impl CoapContext<'_> {
                     });
                     inner_ref
                         .crypto_current_data
+                        .as_ref()
+                        .unwrap()
+                        .apply_to_spsk_info(&mut inner_ref.crypto_last_info_ref);
+                    Some(&inner_ref.crypto_last_info_ref.key)
+                } else if inner_ref.crypto_default_info.is_some() {
+                    inner_ref
+                        .crypto_default_info
                         .as_ref()
                         .unwrap()
                         .apply_to_spsk_info(&mut inner_ref.crypto_last_info_ref);

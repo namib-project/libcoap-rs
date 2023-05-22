@@ -509,7 +509,7 @@ impl CoapRequest {
         }
         pdu.clear_options();
         for opt in additional_opts {
-            (&mut pdu).add_option(opt);
+            pdu.add_option(opt);
         }
         if proxy_scheme.is_some() && proxy_uri.is_some() {
             return Err(MessageConversionError::InvalidOptionCombination(

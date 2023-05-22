@@ -1,0 +1,98 @@
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_TEST_TIME_UNIT: 60,120
+  RUST_TEST_TIME_INTEGRATION: 60,120
+  RUST_TEST_TIME_DOCTEST: 60,120
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        crate: [libcoap-sys, libcoap-rs]
+        dtls_backend: [openssl, gnutls, tinydtls]
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rust-src
+      - if: matrix.dtls_backend == 'gnutls'
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: libgnutls28-dev libgnutls30
+          version: 1.0
+      - if: matrix.crate == 'libcoap-rs'
+        run: cargo test -p ${{ matrix.crate }} --no-default-features --features dtls,tcp,vendored --features dtls_${{ matrix.dtls_backend }} --no-fail-fast -- -Z unstable-options --report-time --ensure-time
+      - if: matrix.crate == 'libcoap-sys'
+        run: cargo test -p ${{ matrix.crate }} --features dtls,dtls_backend_${{ matrix.dtls_backend }} --no-fail-fast -- -Z unstable-options --report-time --ensure-time
+
+  lint:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        crate: [libcoap-sys, libcoap-rs]
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: giraffate/clippy-action@main
+        with:
+          reporter: 'github-pr-check'
+          clippy_flags: -p ${{ matrix.crate }} --no-deps
+          level: warning
+          tool_name: clippy (${{ matrix.crate }})
+
+  coverage:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        crate: [libcoap-rs]
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: baptiste0928/cargo-install@v2
+        with:
+          crate: cargo-tarpaulin
+      - run: cargo tarpaulin --no-fail-fast --workspace --verbose --features dtls,tcp,vendored --exclude-files libcoap-sys/tests,libcoap/tests --timeout 120 --out Xml
+      - uses: irongut/CodeCoverageSummary@v1.3.0
+        with:
+          filename: ./cobertura.xml
+          badge: true
+          fail_below_min: false
+          format: markdown
+          hide_branch_rate: false
+          hide_complexity: true
+          indicators: true
+          output: file
+      - run: |
+          # Snippet taken from https://github.com/marocchino/sticky-pull-request-comment#append-after-comment-every-time-it-runs
+          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+          echo "coverage_report<<$EOF" >> "$GITHUB_ENV"
+          echo "### Code Coverage Report" >> "$GITHUB_ENV"
+          echo "Generated for commit ${{ github.sha }} on `date -u`." >> "$GITHUB_ENV"
+          cat code-coverage-results.md >> "$GITHUB_ENV"
+          echo "$EOF" >> "$GITHUB_ENV"
+      - if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          message: ${{ env.coverage_report }}
+      - run: cat code-coverage-results.md >> $GITHUB_STEP_SUMMARY

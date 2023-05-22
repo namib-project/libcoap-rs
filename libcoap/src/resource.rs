@@ -244,9 +244,11 @@ impl<D: Any + ?Sized + Debug> CoapResource<D> {
             let raw_resource = coap_resource_init(
                 uri_path,
                 (COAP_RESOURCE_FLAGS_RELEASE_URI
-                    | (notify_con
-                        .then(|| COAP_RESOURCE_FLAGS_NOTIFY_CON)
-                        .unwrap_or(COAP_RESOURCE_FLAGS_NOTIFY_NON))) as i32,
+                    | if notify_con {
+                        COAP_RESOURCE_FLAGS_NOTIFY_CON
+                    } else {
+                        COAP_RESOURCE_FLAGS_NOTIFY_NON
+                    }) as i32,
             );
             let inner = CoapFfiRcCell::new(CoapResourceInner {
                 raw_resource,

@@ -13,9 +13,7 @@ mod common;
 pub fn basic_client_server_request() {
     let server_address = common::get_unused_server_addr();
 
-    let server_handle = std::thread::spawn(move || {
-        common::run_test_server(|context| context.add_endpoint_udp(server_address).unwrap());
-    });
+    let server_handle = common::spawn_test_server(move |context| context.add_endpoint_udp(server_address).unwrap());
 
     let mut context = CoapContext::new().unwrap();
     let session = CoapClientSession::connect_udp(&mut context, server_address).unwrap();

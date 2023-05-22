@@ -5,10 +5,10 @@
  * See the README as well as the LICENSE file for more information.
  */
 
-use std::io::ErrorKind;
 use std::{
     default::Default,
     env,
+    io::ErrorKind,
     path::{Path, PathBuf},
     process::Command,
 };
@@ -178,16 +178,13 @@ fn main() {
                     // libcoap doesn't support overriding the MbedTLS CFLAGS, but doesn't set those
                     // either, so we just set CFLAGS and hope they propagate.
                     if let Some(mbedtls_include) = env::var_os("DEP_MBEDTLS_INCLUDE") {
+                        let mbedtls_library_path = Path::new(env::var_os("DEP_MBEDTLS_CONFIG_H").unwrap().as_os_str())
+                            .parent()
+                            .unwrap()
+                            .join("build")
+                            .join("library");
                         build_config.env("CFLAGS", format!("-I{}", mbedtls_include.to_str().unwrap()));
-                        build_config.env(
-                            "PKG_CONFIG_PATH",
-                            Path::new(mbedtls_include.as_os_str())
-                                .parent()
-                                .unwrap()
-                                .join("lib")
-                                .join("pkgconfig")
-                                .into_os_string(),
-                        );
+                        build_config.env("LDFLAGS", format!("-L{}", mbedtls_library_path.to_str().unwrap()));
                     }
                 },
                 DtlsBackend::GnuTls => {
