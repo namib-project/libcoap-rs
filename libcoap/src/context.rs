@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: BSD-2-Clause
 /*
  * context.rs - CoAP context related code.
- * Copyright (c) 2022 The NAMIB Project Developers, all rights reserved.
+ * This file is part of the libcoap-rs crate, see the README and LICENSE files for
+ * more information and terms of use.
+ * Copyright © 2021-2023 The NAMIB Project Developers, all rights reserved.
  * See the README as well as the LICENSE file for more information.
  */
+
 //! Module containing context-internal types and traits.
 
 use std::{any::Any, ffi::c_void, fmt::Debug, marker::PhantomData, net::SocketAddr, ops::Sub, time::Duration};

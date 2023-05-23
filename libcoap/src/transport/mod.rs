@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: BSD-2-Clause
 /*
  * transport/mod.rs - Module file for CoAP transports.
- * Copyright (c) 2022 The NAMIB Project Developers, all rights reserved.
+ * This file is part of the libcoap-rs crate, see the README and LICENSE files for
+ * more information and terms of use.
+ * Copyright © 2021-2023 The NAMIB Project Developers, all rights reserved.
  * See the README as well as the LICENSE file for more information.
  */
+
 use std::os::raw::c_uint;
 
 use libcoap_sys::{coap_endpoint_set_default_mtu, coap_endpoint_t};

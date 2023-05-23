@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: BSD-2-Clause
 /*
  * message.rs - Types related to CoAP messages.
- * Copyright (c) 2022 The NAMIB Project Developers, all rights reserved.
+ * This file is part of the libcoap-rs crate, see the README and LICENSE files for
+ * more information and terms of use.
+ * Copyright © 2021-2023 The NAMIB Project Developers, all rights reserved.
  * See the README as well as the LICENSE file for more information.
  */
+
 //! Types related to message handling, parsing and creation.
 //!
 //! The base unit that is transmitted between a CoAP client and a CoAP server is called a CoAP

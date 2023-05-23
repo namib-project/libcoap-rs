@@ -1,3 +1,12 @@
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * response.rs - Types wrapping messages into responses.
+ * This file is part of the libcoap-rs crate, see the README and LICENSE files for
+ * more information and terms of use.
+ * Copyright © 2021-2023 The NAMIB Project Developers, all rights reserved.
+ * See the README as well as the LICENSE file for more information.
+ */
+
 use crate::error::{MessageConversionError, MessageTypeError, OptionValueError};
 use crate::message::{CoapMessage, CoapMessageCommon, CoapOption};
 use crate::protocol::{

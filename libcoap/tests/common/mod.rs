@@ -1,3 +1,12 @@
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * tests/common/mod.rs - Common code for integration tests.
+ * This file is part of the libcoap-rs crate, see the README and LICENSE files for
+ * more information and terms of use.
+ * Copyright © 2021-2023 The NAMIB Project Developers, all rights reserved.
+ * See the README as well as the LICENSE file for more information.
+ */
+
 use libcoap_rs::message::{CoapMessageCommon, CoapRequest, CoapResponse};
 use libcoap_rs::protocol::{CoapMessageCode, CoapMessageType, CoapRequestCode, CoapResponseCode};
 use libcoap_rs::session::CoapSessionCommon;

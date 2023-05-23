@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: BSD-2-Clause
 /*
  * event.rs - Event handling traits and logic for the libcoap Rust Wrapper.
- * Copyright (c) 2022 The NAMIB Project Developers, all rights reserved.
+ * This file is part of the libcoap-rs crate, see the README and LICENSE files for
+ * more information and terms of use.
+ * Copyright © 2021-2023 The NAMIB Project Developers, all rights reserved.
  * See the README as well as the LICENSE file for more information.
  */
+
 //! Event handling-related code
+
 use std::fmt::Debug;
 
 use libcoap_sys::{coap_event_t, coap_session_get_context, coap_session_t};

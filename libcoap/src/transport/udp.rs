@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: BSD-2-Clause
 /*
  * transport/dtls.rs - transport-specific code for UDP.
- * Copyright (c) 2022 The NAMIB Project Developers, all rights reserved.
+ * This file is part of the libcoap-rs crate, see the README and LICENSE files for
+ * more information and terms of use.
+ * Copyright © 2021-2023 The NAMIB Project Developers, all rights reserved.
  * See the README as well as the LICENSE file for more information.
  */
+
 use std::net::SocketAddr;
 
 use libcoap_sys::{coap_endpoint_t, coap_free_endpoint, coap_new_endpoint, coap_proto_t::COAP_PROTO_UDP};
-
 
 use crate::{context::CoapContext, error::EndpointCreationError, transport::EndpointCommon, types::CoapAddress};
 

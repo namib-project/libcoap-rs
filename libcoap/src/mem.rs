@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: BSD-2-Clause
 /*
  * mem.rs - Memory handling helper structs and traits for the libcoap Rust Wrapper.
- * Copyright (c) 2022 The NAMIB Project Developers, all rights reserved.
+ * This file is part of the libcoap-rs crate, see the README and LICENSE files for
+ * more information and terms of use.
+ * Copyright © 2021-2023 The NAMIB Project Developers, all rights reserved.
  * See the README as well as the LICENSE file for more information.
  */
+
 //! Code related to memory handling, especially for passing objects through FFI
 
 use std::cell::{Ref, RefCell, RefMut};
