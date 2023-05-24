@@ -1,10 +1,13 @@
-use std::fmt::{Display, Formatter};
 // SPDX-License-Identifier: BSD-2-Clause
 /*
- * request.rs - Types wrapping messages into requests and responses.
- * Copyright (c) 2022 The NAMIB Project Developers, all rights reserved.
+ * request.rs - Types wrapping messages into requests.
+ * This file is part of the libcoap-rs crate, see the README and LICENSE files for
+ * more information and terms of use.
+ * Copyright © 2021-2023 The NAMIB Project Developers, all rights reserved.
  * See the README as well as the LICENSE file for more information.
  */
+
+use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
 use url::Url;

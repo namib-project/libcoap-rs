@@ -1,4 +1,9 @@
-# SPDX-License-Identifier: EPL-1.0 OR BSD-3-CLAUSE
+# SPDX-License-Identifier: BSD-2-Clause
+# Cargo.toml for the libcoap-rs repository.
+# This file is part of the libcoap-rs library, see the README and LICENSE files for
+# more information and terms of use.
+# Copyright © 2021-2023 The NAMIB Project Developers, all rights reserved.
+# See the README as well as the LICENSE file for more information.
 [workspace]
 members = [
     "libcoap",

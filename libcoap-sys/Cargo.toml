@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # Cargo.toml for libcoap-sys
-# Copyright (c) 2021-2022 The NAMIB Project Developers, all rights reserved.
-# See the README as well as the LICENSE file for more information.
+# This file is part of the libcoap-sys crate, see the README and LICENSE files for
+# more information and terms of use.
+# Copyright © 2021-2023 The NAMIB Project Developers, all rights reserved.
 
 [package]
 name = "libcoap-sys"
 description = "Raw bindings to the libcoap CoAP library."
-version = "0.2.1+libcoap-4.3.1"
+version = "0.2.2+libcoap-4.3.1"
 edition = "2021"
 license = "BSD-2-Clause AND BSD-1-Clause"
 links = "coap-3"
