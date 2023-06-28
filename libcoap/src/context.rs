@@ -41,7 +41,7 @@ use crate::{
     error::{ContextCreationError, EndpointCreationError, IoProcessError},
     resource::{CoapResource, UntypedCoapResource},
     session::session_response_handler,
-    transport::{CoapEndpoint, CoapUdpEndpoint},
+    transport::{CoapEndpoint, CoapUdpEndpoint, CoapTcpEndpoint},
 };
 
 #[derive(Debug)]
@@ -239,10 +239,16 @@ impl CoapContext<'_> {
         Ok(())
     }
 
-    /// TODO
+    /// Creates a new TCP endpoint that is bound to the given address.
     #[cfg(feature = "tcp")]
-    pub fn add_endpoint_tcp(&mut self, _addr: SocketAddr) -> Result<(), EndpointCreationError> {
-        todo!()
+    pub fn add_endpoint_tcp(&mut self, addr: SocketAddr) -> Result<(), EndpointCreationError> {
+        // SAFETY: Because we never return an owned reference to the endpoint, it cannot outlive the
+        // context it is bound to (i.e. this one).
+        let endpoint = unsafe { CoapTcpEndpoint::new(self, addr)? }.into();
+        let mut inner_ref = self.inner.borrow_mut();
+        inner_ref.endpoints.push(endpoint);
+        // Cannot fail, we just pushed to the Vec.
+        Ok(())
     }
 
     /// Creates a new DTLS endpoint that is bound to the given address.
@@ -607,7 +613,7 @@ impl CoapContext<'_> {
     ///   (will cause an abort on drop)
     /// - Calling `coap_free_context()` on this context (for obvious reasons, this will probably
     ///   cause a segfault if you don't immediately [std::mem::forget()] the CoapContext and never
-    ///   use anything related to the context again, but why would you do that?)  
+    ///   use anything related to the context again, but why would you do that?)
     // Kept here for consistency, even though it is unused.
     #[allow(unused)]
     pub(crate) unsafe fn as_raw_context(&self) -> &coap_context_t {
@@ -630,7 +636,7 @@ impl CoapContext<'_> {
     ///   (will cause an abort on drop)
     /// - Calling `coap_free_context()` on this context (for obvious reasons, this will probably
     ///   cause a segfault if you don't immediately [std::mem::forget()] the CoapContext and never
-    ///   use anything related to the context again, but why would you do that?)  
+    ///   use anything related to the context again, but why would you do that?)
     pub(crate) unsafe fn as_mut_raw_context(&mut self) -> &mut coap_context_t {
         // SAFETY: raw_context is checked to be a valid pointer on struct instantiation, cannot be
         // freed by anything outside of here (assuming the contract of this function is kept), and
