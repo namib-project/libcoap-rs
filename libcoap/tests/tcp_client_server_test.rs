@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: BSD-2-Clause
 /*
- * dtls_client_server_test.rs - Tests for UDP clients+servers.
+ * tcp_client_server_test.rs - Tests for TCP clients+servers.
  * This file is part of the libcoap-rs crate, see the README and LICENSE files for
  * more information and terms of use.
  * Copyright © 2021-2023 The NAMIB Project Developers, all rights reserved.

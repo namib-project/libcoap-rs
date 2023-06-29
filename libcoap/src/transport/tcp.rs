@@ -20,7 +20,7 @@ pub struct CoapTcpEndpoint {
 }
 
 impl CoapTcpEndpoint {
-    /// Creates a new CoapUdpEndpoint and binds it to the supplied SocketAddr.
+    /// Creates a new CoapTcpEndpoint and binds it to the supplied SocketAddr.
     ///
     /// This is an unsafe function (see #Safety for an explanation of why) used internally by
     /// libcoap-rs to instantiate new endpoints. You should most likely not use this function, and
