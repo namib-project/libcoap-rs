@@ -146,6 +146,41 @@ impl CoapClientSession<'_> {
         })
     }
 
+
+    /// Create a new unencrypted session with the given peer over TCP.
+    ///
+    /// # Errors
+    /// Will return a [SessionCreationError] if libcoap was unable to create a session (most likely
+    /// because it was not possible to bind to a port).
+    pub fn connect_tcp<'a>(
+        ctx: &mut CoapContext<'a>,
+        addr: SocketAddr,
+    ) -> Result<CoapClientSession<'a>, SessionCreationError> {
+        // SAFETY: self.raw_context is guaranteed to be valid, local_if can be null.
+        let session = unsafe {
+            coap_new_client_session(
+                ctx.as_mut_raw_context(),
+                std::ptr::null(),
+                CoapAddress::from(addr).as_raw_address(),
+                coap_proto_t::COAP_PROTO_TCP,
+            )
+        };
+        if session.is_null() {
+            return Err(SessionCreationError::Unknown);
+        }
+        // SAFETY: Session was just checked for validity, no crypto info was provided to
+        // coap_new_client_session().
+        Ok(unsafe {
+            CoapClientSession::new(
+                session as *mut coap_session_t,
+                #[cfg(feature = "dtls")]
+                None,
+                #[cfg(feature = "dtls")]
+                None,
+            )
+        })
+    }
+
     /// Initializes a new CoapClientSession from its raw counterpart with the provided initial
     /// information.
     ///

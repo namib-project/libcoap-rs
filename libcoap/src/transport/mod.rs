@@ -15,6 +15,9 @@ use libcoap_sys::{coap_endpoint_set_default_mtu, coap_endpoint_t};
 pub use dtls::CoapDtlsEndpoint;
 pub use udp::CoapUdpEndpoint;
 
+#[cfg(feature = "tcp")]
+pub use tcp::CoapTcpEndpoint;
+
 #[cfg(feature = "dtls")]
 mod dtls;
 #[cfg(feature = "tcp")]
@@ -63,6 +66,8 @@ pub trait EndpointCommon {
 #[derive(Debug)]
 pub enum CoapEndpoint {
     Udp(CoapUdpEndpoint),
+    #[cfg(feature = "tcp")]
+    Tcp(CoapTcpEndpoint),
     #[cfg(feature = "dtls")]
     Dtls(CoapDtlsEndpoint),
 }
@@ -70,6 +75,13 @@ pub enum CoapEndpoint {
 impl From<CoapUdpEndpoint> for CoapEndpoint {
     fn from(ep: CoapUdpEndpoint) -> Self {
         CoapEndpoint::Udp(ep)
+    }
+}
+
+#[cfg(feature = "tcp")]
+impl From<CoapTcpEndpoint> for CoapEndpoint {
+    fn from(ep: CoapTcpEndpoint) -> Self {
+        CoapEndpoint::Tcp(ep)
     }
 }
 
@@ -84,6 +96,8 @@ impl EndpointCommon for CoapEndpoint {
     unsafe fn as_raw_endpoint(&self) -> &coap_endpoint_t {
         match self {
             CoapEndpoint::Udp(ep) => ep.as_raw_endpoint(),
+            #[cfg(feature = "tcp")]
+            CoapEndpoint::Tcp(ep) => ep.as_raw_endpoint(),
             #[cfg(feature = "dtls")]
             CoapEndpoint::Dtls(ep) => ep.as_raw_endpoint(),
         }
@@ -92,6 +106,8 @@ impl EndpointCommon for CoapEndpoint {
     unsafe fn as_mut_raw_endpoint(&mut self) -> &mut coap_endpoint_t {
         match self {
             CoapEndpoint::Udp(ep) => ep.as_mut_raw_endpoint(),
+            #[cfg(feature = "tcp")]
+            CoapEndpoint::Tcp(ep) => ep.as_mut_raw_endpoint(),
             #[cfg(feature = "dtls")]
             CoapEndpoint::Dtls(ep) => ep.as_mut_raw_endpoint(),
         }

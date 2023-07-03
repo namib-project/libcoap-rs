@@ -12,6 +12,7 @@
 use std::fmt::Debug;
 
 use libcoap_sys::{coap_event_t, coap_session_get_context, coap_session_t};
+use libcoap_sys::{coap_session_get_type, coap_session_type_t};
 
 use crate::context::CoapContext;
 use crate::session::CoapSession;
@@ -110,11 +111,17 @@ pub trait CoapEventHandler: Debug {
 // This should be fine as we don't provide this type to a FFI function, we only read from it.
 #[allow(improper_ctypes_definitions)]
 pub(crate) unsafe extern "C" fn event_handler_callback(raw_session: *mut coap_session_t, event: coap_event_t) -> i32 {
-    let session: CoapSession = if event == coap_event_t::COAP_EVENT_SERVER_SESSION_NEW {
+    let raw_session_type = coap_session_get_type(raw_session);
+
+    let session: CoapSession = if event == coap_event_t::COAP_EVENT_SERVER_SESSION_NEW
+        || (event == coap_event_t::COAP_EVENT_TCP_CONNECTED
+            && raw_session_type == coap_session_type_t::COAP_SESSION_TYPE_SERVER)
+    {
         CoapServerSession::initialize_raw(raw_session).into()
     } else {
         CoapSession::from_raw(raw_session)
     };
+
     // SAFETY: Pointer is always valid as long as there is no bug in libcoap.
     let context = CoapContext::from_raw(coap_session_get_context(raw_session));
     context.handle_event(session, event);
