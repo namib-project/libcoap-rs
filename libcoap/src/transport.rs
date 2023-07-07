@@ -10,8 +10,7 @@
 use std::{net::SocketAddr, os::raw::c_uint};
 
 use libcoap_sys::{
-    coap_endpoint_set_default_mtu, coap_endpoint_t, coap_free_endpoint, coap_new_endpoint,
-    coap_proto_t::COAP_PROTO_DTLS, coap_proto_t::COAP_PROTO_TCP, coap_proto_t::COAP_PROTO_UDP,
+    coap_endpoint_set_default_mtu, coap_endpoint_t, coap_free_endpoint, coap_new_endpoint, coap_proto_t,
 };
 
 use crate::{error::EndpointCreationError, types::CoapAddress, CoapContext};
@@ -35,49 +34,44 @@ impl CoapEndpoint {
         }
     }
 
-    pub(crate) unsafe fn new_tcp_endpoint(
+    /// Method utilized by transport protocol specific constructors to actually create the endpoint in libcoap
+    fn new_endpoint(
         context: &mut CoapContext,
         addr: SocketAddr,
+        proto: coap_proto_t,
     ) -> Result<Self, EndpointCreationError> {
-        let endpoint = coap_new_endpoint(
-            context.as_mut_raw_context(),
-            CoapAddress::from(addr).as_raw_address(),
-            COAP_PROTO_TCP,
-        );
+        let endpoint = unsafe {
+            // SAFETY: coap_new_endpoint will return null if it is unable to add new endpoint.
+            // These states are processed further in the code
+            coap_new_endpoint(
+                context.as_mut_raw_context(),
+                CoapAddress::from(addr).as_raw_address(),
+                proto,
+            )
+        };
+
         if endpoint.is_null() {
-            return Err(EndpointCreationError::Unknown);
+            Err(EndpointCreationError::Unknown)
+        } else {
+            Ok(Self { raw_endpoint: endpoint })
         }
-        Ok(Self { raw_endpoint: endpoint })
     }
 
-    pub(crate) unsafe fn new_dtls_endpoint(
-        context: &mut CoapContext,
-        addr: SocketAddr,
-    ) -> Result<Self, EndpointCreationError> {
-        let endpoint = coap_new_endpoint(
-            context.as_mut_raw_context(),
-            CoapAddress::from(addr).as_raw_address(),
-            COAP_PROTO_DTLS,
-        );
-        if endpoint.is_null() {
-            return Err(EndpointCreationError::Unknown);
-        }
-        Ok(Self { raw_endpoint: endpoint })
+    #[cfg(feature = "tcp")]
+    pub(crate) fn new_tcp_endpoint(context: &mut CoapContext, addr: SocketAddr) -> Result<Self, EndpointCreationError> {
+        Self::new_endpoint(context, addr, coap_proto_t::COAP_PROTO_TCP)
     }
 
-    pub(crate) unsafe fn new_udp_endpoint(
+    #[cfg(feature = "dtls")]
+    pub(crate) fn new_dtls_endpoint(
         context: &mut CoapContext,
         addr: SocketAddr,
     ) -> Result<Self, EndpointCreationError> {
-        let endpoint = coap_new_endpoint(
-            context.as_mut_raw_context(),
-            CoapAddress::from(addr).as_raw_address(),
-            COAP_PROTO_UDP,
-        );
-        if endpoint.is_null() {
-            return Err(EndpointCreationError::Unknown);
-        }
-        Ok(Self { raw_endpoint: endpoint })
+        Self::new_endpoint(context, addr, coap_proto_t::COAP_PROTO_DTLS)
+    }
+
+    pub(crate) fn new_udp_endpoint(context: &mut CoapContext, addr: SocketAddr) -> Result<Self, EndpointCreationError> {
+        Self::new_endpoint(context, addr, coap_proto_t::COAP_PROTO_UDP)
     }
 }
 
