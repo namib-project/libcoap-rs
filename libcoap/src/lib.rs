@@ -186,8 +186,8 @@ pub mod message;
 pub mod protocol;
 mod resource;
 pub mod session;
-pub mod types;
 pub mod transport;
+pub mod types;
 
 pub use context::CoapContext;
 pub use event::CoapEventHandler;
