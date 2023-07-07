@@ -36,13 +36,14 @@ use crate::session::CoapSessionCommon;
 use crate::session::CoapServerSession;
 use crate::session::CoapSession;
 #[cfg(feature = "dtls")]
-use crate::transport::CoapDtlsEndpoint;
+
 use crate::{
     error::{ContextCreationError, EndpointCreationError, IoProcessError},
     resource::{CoapResource, UntypedCoapResource},
     session::session_response_handler,
-    transport::{CoapEndpoint, CoapUdpEndpoint, CoapTcpEndpoint},
 };
+
+use crate::transport::CoapEndpoint;
 
 #[derive(Debug)]
 struct CoapContextInner<'a> {
@@ -232,7 +233,7 @@ impl CoapContext<'_> {
     pub fn add_endpoint_udp(&mut self, addr: SocketAddr) -> Result<(), EndpointCreationError> {
         // SAFETY: Because we never return an owned reference to the endpoint, it cannot outlive the
         // context it is bound to (i.e. this one).
-        let endpoint = unsafe { CoapUdpEndpoint::new(self, addr)? }.into();
+        let endpoint = unsafe { CoapEndpoint::new_udp_endpoint(self, addr)? }.into();
         let mut inner_ref = self.inner.borrow_mut();
         inner_ref.endpoints.push(endpoint);
         // Cannot fail, we just pushed to the Vec.
@@ -244,7 +245,7 @@ impl CoapContext<'_> {
     pub fn add_endpoint_tcp(&mut self, addr: SocketAddr) -> Result<(), EndpointCreationError> {
         // SAFETY: Because we never return an owned reference to the endpoint, it cannot outlive the
         // context it is bound to (i.e. this one).
-        let endpoint = unsafe { CoapTcpEndpoint::new(self, addr)? }.into();
+        let endpoint = unsafe { CoapEndpoint::new_tcp_endpoint(self, addr)? }.into();
         let mut inner_ref = self.inner.borrow_mut();
         inner_ref.endpoints.push(endpoint);
         // Cannot fail, we just pushed to the Vec.
@@ -259,7 +260,7 @@ impl CoapContext<'_> {
     pub fn add_endpoint_dtls(&mut self, addr: SocketAddr) -> Result<(), EndpointCreationError> {
         // SAFETY: Provided context (i.e., this instance) will not outlive the endpoint, as we will
         // drop it alongside this context and never hand out copies of it.
-        let endpoint = unsafe { CoapDtlsEndpoint::new(self, addr)? }.into();
+        let endpoint = unsafe { CoapEndpoint::new_dtls_endpoint(self, addr)? }.into();
         let mut inner_ref = self.inner.borrow_mut();
         inner_ref.endpoints.push(endpoint);
         // Cannot fail, we just pushed to the Vec.

@@ -102,7 +102,7 @@
 //!     CoapRequestHandler, CoapResource,
 //!     session::{CoapSessionCommon, CoapServerSession},
 //! };
-//!  
+//!
 //! // This will give us a SocketAddress with a port in the local port range automatically
 //! // assigned by the operating system.
 //! // Because the UdpSocket goes out of scope, the Port will be free for usage by libcoap.
@@ -186,8 +186,8 @@ pub mod message;
 pub mod protocol;
 mod resource;
 pub mod session;
-pub mod transport;
 pub mod types;
+pub mod transport;
 
 pub use context::CoapContext;
 pub use event::CoapEventHandler;
