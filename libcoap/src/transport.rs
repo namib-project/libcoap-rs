@@ -35,7 +35,7 @@ impl CoapEndpoint {
     }
 
     /// Method utilized by transport protocol specific constructors to actually create the endpoint in libcoap
-    fn new_endpoint(
+    pub(crate) fn new_endpoint(
         context: &mut CoapContext,
         addr: SocketAddr,
         proto: coap_proto_t,
@@ -55,23 +55,6 @@ impl CoapEndpoint {
         } else {
             Ok(Self { raw_endpoint: endpoint })
         }
-    }
-
-    #[cfg(feature = "tcp")]
-    pub(crate) fn new_tcp_endpoint(context: &mut CoapContext, addr: SocketAddr) -> Result<Self, EndpointCreationError> {
-        Self::new_endpoint(context, addr, coap_proto_t::COAP_PROTO_TCP)
-    }
-
-    #[cfg(feature = "dtls")]
-    pub(crate) fn new_dtls_endpoint(
-        context: &mut CoapContext,
-        addr: SocketAddr,
-    ) -> Result<Self, EndpointCreationError> {
-        Self::new_endpoint(context, addr, coap_proto_t::COAP_PROTO_DTLS)
-    }
-
-    pub(crate) fn new_udp_endpoint(context: &mut CoapContext, addr: SocketAddr) -> Result<Self, EndpointCreationError> {
-        Self::new_endpoint(context, addr, coap_proto_t::COAP_PROTO_UDP)
     }
 }
 
