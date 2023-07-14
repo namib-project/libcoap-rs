@@ -20,7 +20,7 @@ use libcoap_sys::{
     coap_context_set_csm_timeout, coap_context_set_keepalive, coap_context_set_max_handshake_sessions,
     coap_context_set_max_idle_sessions, coap_context_set_psk2, coap_context_set_session_timeout, coap_context_t,
     coap_dtls_spsk_info_t, coap_dtls_spsk_t, coap_event_t, coap_free_context, coap_get_app_data, coap_io_process,
-    coap_new_context, coap_register_event_handler, coap_register_response_handler, coap_set_app_data,
+    coap_new_context, coap_proto_t, coap_register_event_handler, coap_register_response_handler, coap_set_app_data,
     COAP_BLOCK_SINGLE_BODY, COAP_BLOCK_USE_LIBCOAP, COAP_DTLS_SPSK_SETUP_VERSION, COAP_IO_WAIT,
 };
 
@@ -36,13 +36,13 @@ use crate::session::CoapSessionCommon;
 use crate::session::CoapServerSession;
 use crate::session::CoapSession;
 #[cfg(feature = "dtls")]
-use crate::transport::CoapDtlsEndpoint;
 use crate::{
     error::{ContextCreationError, EndpointCreationError, IoProcessError},
     resource::{CoapResource, UntypedCoapResource},
     session::session_response_handler,
-    transport::{CoapEndpoint, CoapUdpEndpoint, CoapTcpEndpoint},
 };
+
+use crate::transport::CoapEndpoint;
 
 #[derive(Debug)]
 struct CoapContextInner<'a> {
@@ -228,27 +228,24 @@ impl CoapContext<'_> {
         Ok(())
     }
 
-    /// Creates a new UDP endpoint that is bound to the given address.
-    pub fn add_endpoint_udp(&mut self, addr: SocketAddr) -> Result<(), EndpointCreationError> {
-        // SAFETY: Because we never return an owned reference to the endpoint, it cannot outlive the
-        // context it is bound to (i.e. this one).
-        let endpoint = unsafe { CoapUdpEndpoint::new(self, addr)? }.into();
+    /// Store reference to the endpoint
+    fn add_endpoint(&mut self, addr: SocketAddr, proto: coap_proto_t) -> Result<(), EndpointCreationError> {
+        let endpoint = CoapEndpoint::new_endpoint(self, addr, proto)?;
+
         let mut inner_ref = self.inner.borrow_mut();
         inner_ref.endpoints.push(endpoint);
-        // Cannot fail, we just pushed to the Vec.
         Ok(())
+    }
+
+    /// Creates a new UDP endpoint that is bound to the given address.
+    pub fn add_endpoint_udp(&mut self, addr: SocketAddr) -> Result<(), EndpointCreationError> {
+        self.add_endpoint(addr, coap_proto_t::COAP_PROTO_UDP)
     }
 
     /// Creates a new TCP endpoint that is bound to the given address.
     #[cfg(feature = "tcp")]
     pub fn add_endpoint_tcp(&mut self, addr: SocketAddr) -> Result<(), EndpointCreationError> {
-        // SAFETY: Because we never return an owned reference to the endpoint, it cannot outlive the
-        // context it is bound to (i.e. this one).
-        let endpoint = unsafe { CoapTcpEndpoint::new(self, addr)? }.into();
-        let mut inner_ref = self.inner.borrow_mut();
-        inner_ref.endpoints.push(endpoint);
-        // Cannot fail, we just pushed to the Vec.
-        Ok(())
+        self.add_endpoint(addr, coap_proto_t::COAP_PROTO_TCP)
     }
 
     /// Creates a new DTLS endpoint that is bound to the given address.
@@ -257,19 +254,14 @@ impl CoapContext<'_> {
     /// using [set_server_crypto_provider()](CoapContext::set_server_crypto_provider())
     #[cfg(feature = "dtls")]
     pub fn add_endpoint_dtls(&mut self, addr: SocketAddr) -> Result<(), EndpointCreationError> {
-        // SAFETY: Provided context (i.e., this instance) will not outlive the endpoint, as we will
-        // drop it alongside this context and never hand out copies of it.
-        let endpoint = unsafe { CoapDtlsEndpoint::new(self, addr)? }.into();
-        let mut inner_ref = self.inner.borrow_mut();
-        inner_ref.endpoints.push(endpoint);
-        // Cannot fail, we just pushed to the Vec.
-        Ok(())
+        self.add_endpoint(addr, coap_proto_t::COAP_PROTO_DTLS)
     }
 
     /// TODO
     #[cfg(all(feature = "tcp", feature = "dtls"))]
     pub fn add_endpoint_tls(&mut self, _addr: SocketAddr) -> Result<(), EndpointCreationError> {
         todo!()
+        // TODO: self.add_endpoint(addr, coap_proto_t::COAP_PROTO_TLS)
     }
 
     /// Adds the given resource to the resource pool of this context.
