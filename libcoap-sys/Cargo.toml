@@ -17,6 +17,7 @@ authors = ["Hugo Hakim Damer <hdamer@uni-bremen.de>"]
 categories = ["external-ffi-bindings", "network-programming", "embedded"]
 keywords = ["coap", "libcoap"]
 exclude = ["src/libcoap/ext/"]
+resolver = "2"
 
 [features]
 # The default features match those of libcoaps configure script, except for dtls, which is disabled here because it
@@ -34,10 +35,13 @@ default = ["server", "client", "tcp", "async", "epoll", "vendored", "static"]
 # different backends), we select one based on the auto-detection order specified in
 # https://github.com/obgm/libcoap/blob/develop/configure.ac#L494 (gnutls > openssl > mbedtls > tinydtls).
 dtls = []
-dtls_backend_openssl = ["dtls", "openssl-sys"]
-dtls_backend_gnutls = ["dtls", "gnutls-sys"]
-dtls_backend_mbedtls = ["dtls", "mbedtls-sys-auto"]
-dtls_backend_tinydtls = ["dtls", "tinydtls-sys"]
+dtls_backend_openssl = ["dtls", "dep:openssl-sys"]
+dtls_backend_openssl_vendored = ["dtls_backend_openssl", "openssl-sys/vendored"]
+dtls_backend_gnutls = ["dtls"]
+dtls_backend_mbedtls = ["dtls"] # can't use mbedtls-sys-auto to generate linker flags here, as the crate doesn't support mbedtls >= 3.0.0
+dtls_backend_mbedtls_vendored = ["dep:mbedtls-sys-auto", "dtls_backend_mbedtls"]
+dtls_backend_tinydtls = ["dtls", "dep:tinydtls-sys"]
+dtls_backend_tinydtls_vendored = ["dtls_backend_tinydtls", "tinydtls-sys/vendored"]
 # Enabling this feature will force libcoap-sys to be built with and statically linked to a vendored version of libcoap,
 # which will be built by the build-script before building libcoap-sys.
 # This way, it is no longer required to have libcoap installed to use this crate.
@@ -61,11 +65,10 @@ client = []
 epoll = []
 
 [dependencies]
-gnutls-sys = {version = "^0.1.2", optional = true}
 openssl-sys = {version = "^0.9.74", optional = true}
 mbedtls-sys-auto = {version = "^2.26", optional = true}
 libc = "^0.2.126"
-tinydtls-sys = {version = "^0.1.2", optional = true}
+tinydtls-sys = {version = "^0.1.2", default-features = false, optional = true}
 
 [build-dependencies]
 bindgen = "^0.65.1"

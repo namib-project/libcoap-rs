@@ -16,6 +16,7 @@ use std::{
 };
 
 use bindgen::EnumVariation;
+use pkg_config::probe_library;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum DtlsBackend {
@@ -124,6 +125,7 @@ fn main() {
                 .enable("dtls", None)
                 .with(dtls_backend.to_string().as_str(), None);
 
+            // If DTLS is vendored we need to tell libcoap about the vendored version
             match dtls_backend {
                 DtlsBackend::TinyDtls => {
                     // We do not ship tinydtls with our source distribution. Instead, we use tinydtls-sys.
@@ -190,9 +192,7 @@ fn main() {
                     }
                 },
                 DtlsBackend::GnuTls => {
-                    // gnutls-sys doesn't provide include directory metadata, but doesn't support
-                    // vendoring the library either. Instead, it just uses the GnuTLS found via
-                    // pkg-config, which is already found by libcoap by default.
+                    // Vendoring not supported                
                 },
             }
         } else {
@@ -251,6 +251,8 @@ fn main() {
         );
         env::set_current_dir(current_dir_backup).expect("unable to switch back to source dir");
     }
+
+    // Tell cargo to link libcoap.
     println!(
         "cargo:rustc-link-lib={}{}",
         cfg!(feature = "static").then(|| "static=").unwrap_or(""),
@@ -263,6 +265,44 @@ fn main() {
         )
         .as_str()
     );
+    
+    // For the DTLS libraries, we need to tell cargo which external libraries to link.
+    // Note that these linker instructions have to be added *after* the linker instruction
+    // for libcoap itself, as some linkers require dependencies to be in reverse order. 
+    if let Some(dtls_backend) = dtls_backend {
+        match dtls_backend {
+            DtlsBackend::TinyDtls => {
+                // Handled by tinydtls-sys
+            },
+            DtlsBackend::OpenSsl => {
+                // Handled by openssl-sys
+            },
+            DtlsBackend::MbedTls => {
+                // If mbedtls is vendored, mbedtls-sys-auto already takes care of linking.
+                if env::var_os("DEP_MBEDTLS_INCLUDE").is_none() {
+                    // We aren't using mbedtls-sys-auto if we aren't vendoring (as it doesn't support 
+                    // mbedtls >= 3.0.0), so we need to tell cargo to link to mbedtls ourselves.
+                    
+                    // Try to find mbedtls using pkg-config
+                    if probe_library("mbedtls").is_err() {
+                        // couldn't find using pkg-config, just try linking with default library search path
+                        println!("cargo:rustc-link-lib=mbedtls");
+                        println!("cargo:rustc-link-lib=mbedx509");
+                        println!("cargo:rustc-link-lib=mbedcrypto");
+                    }
+                }
+            },
+            DtlsBackend::GnuTls => {
+                // gnutls-sys is unmaintained, so we need to link to gnutls ourselves.
+
+                // try pkg-config
+                if probe_library("gnutls").is_err() {
+                    // if that doesn't work, try using the standard library search path.
+                    println!("cargo:rustc-link-lib=gnutls")
+                }
+            },
+        }
+    }
 
     bindgen_builder = bindgen_builder
         .header("src/wrapper.h")

@@ -15,14 +15,18 @@ repository = "https://github.com/namib-project/libcoap-rs"
 authors = ["Hugo Hakim Damer <hdamer@uni-bremen.de>"]
 categories = ["api-bindings", "network-programming", "embedded"]
 keywords = ["coap", "libcoap"]
+resolver = "2"
 
 [features]
 default = ["dtls", "tcp", "dtls_openssl"]
 dtls = ["libcoap-sys/dtls"]
 dtls_tinydtls = ["libcoap-sys/dtls_backend_tinydtls"]
+dtls_tinydtls_vendored = ["dtls_tinydtls", "libcoap-sys/dtls_backend_tinydtls_vendored"]
 dtls_openssl = ["libcoap-sys/dtls_backend_openssl"]
+dtls_openssl_vendored = ["dtls_openssl", "libcoap-sys/dtls_backend_openssl_vendored"]
 dtls_gnutls = ["libcoap-sys/dtls_backend_gnutls"]
 dtls_mbedtls = ["libcoap-sys/dtls_backend_mbedtls"]
+dtls_mbedtls_vendored = ["dtls_mbedtls", "libcoap-sys/dtls_backend_mbedtls_vendored"]
 tcp = []
 nightly = []
 vendored = ["libcoap-sys/vendored"]

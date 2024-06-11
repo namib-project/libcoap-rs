@@ -90,9 +90,9 @@ use libc::{epoll_event, fd_set, sockaddr, sockaddr_in, sockaddr_in6, socklen_t, 
 
 use crate::coap_pdu_type_t::COAP_MESSAGE_RST;
 
-#[cfg(feature = "dtls_backend_gnutls")]
-use gnutls_sys as _;
-#[cfg(feature = "dtls_backend_mbedtls")]
+// use dtls backend libraries in cases where they set our linker flags, otherwise cargo will 
+// optimize them out.
+#[cfg(feature = "dtls_backend_mbedtls_vendored")]
 use mbedtls_sys as _;
 #[cfg(feature = "dtls_backend_openssl")]
 use openssl_sys as _;
