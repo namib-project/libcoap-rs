@@ -20,7 +20,7 @@ use num_traits::FromPrimitive;
 use libcoap_sys::{
     coap_option_num_t, coap_pdu_code_t, coap_pdu_type_t,
     coap_pdu_type_t::{COAP_MESSAGE_ACK, COAP_MESSAGE_CON, COAP_MESSAGE_NON, COAP_MESSAGE_RST},
-    coap_request_t, coap_response_phrase, COAP_MEDIATYPE_ANY, COAP_MEDIATYPE_APPLICATION_CBOR,
+    coap_request_t, coap_response_phrase, COAP_MEDIATYPE_APPLICATION_CBOR,
     COAP_MEDIATYPE_APPLICATION_COSE_ENCRYPT, COAP_MEDIATYPE_APPLICATION_COSE_ENCRYPT0,
     COAP_MEDIATYPE_APPLICATION_COSE_KEY, COAP_MEDIATYPE_APPLICATION_COSE_KEY_SET, COAP_MEDIATYPE_APPLICATION_COSE_MAC,
     COAP_MEDIATYPE_APPLICATION_COSE_MAC0, COAP_MEDIATYPE_APPLICATION_COSE_SIGN, COAP_MEDIATYPE_APPLICATION_COSE_SIGN1,
@@ -206,7 +206,6 @@ impl TryFrom<coap_option_num_t> for CoapOptionType {
 #[derive(Copy, Clone, FromPrimitive, Eq, PartialEq, Hash, Debug)]
 #[non_exhaustive]
 pub enum CoapContentFormat {
-    Any = COAP_MEDIATYPE_ANY as u16,
     Cbor = COAP_MEDIATYPE_APPLICATION_CBOR as u16,
     DotsCbor = COAP_MEDIATYPE_APPLICATION_DOTS_CBOR as u16,
     SenMlCbor = COAP_MEDIATYPE_APPLICATION_SENML_CBOR as u16,

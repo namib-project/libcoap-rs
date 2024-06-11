@@ -86,7 +86,7 @@
 #![allow(deref_nullptr)]
 #![allow(non_snake_case)]
 
-use libc::{epoll_event, fd_set, sockaddr, sockaddr_in, sockaddr_in6, socklen_t, time_t};
+use libc::{epoll_event, fd_set, sockaddr, sockaddr_in, sockaddr_in6, socklen_t, time_t, sa_family_t};
 
 use crate::coap_pdu_type_t::COAP_MESSAGE_RST;
 

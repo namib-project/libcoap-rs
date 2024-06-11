@@ -40,7 +40,7 @@ dtls_backend_openssl_vendored = ["dtls_backend_openssl", "openssl-sys/vendored"]
 dtls_backend_gnutls = ["dtls"]
 dtls_backend_mbedtls = ["dtls"] # can't use mbedtls-sys-auto to generate linker flags here, as the crate doesn't support mbedtls >= 3.0.0
 dtls_backend_mbedtls_vendored = ["dep:mbedtls-sys-auto", "dtls_backend_mbedtls"]
-dtls_backend_tinydtls = ["dtls", "dep:tinydtls-sys"]
+dtls_backend_tinydtls = ["dtls", "dep:tinydtls-sys", "tinydtls-sys/ecc", "tinydtls-sys/psk"]
 dtls_backend_tinydtls_vendored = ["dtls_backend_tinydtls", "tinydtls-sys/vendored"]
 # Enabling this feature will force libcoap-sys to be built with and statically linked to a vendored version of libcoap,
 # which will be built by the build-script before building libcoap-sys.
@@ -68,10 +68,10 @@ epoll = []
 openssl-sys = {version = "^0.9.74", optional = true}
 mbedtls-sys-auto = {version = "^2.26", optional = true}
 libc = "^0.2.126"
-tinydtls-sys = {version = "^0.1.2", default-features = false, optional = true}
+tinydtls-sys = {version = "^0.2.0", default-features = false, optional = true}
 
 [build-dependencies]
-bindgen = "^0.65.1"
+bindgen = "^0.69.4"
 autotools = "^0.2.3"
 fs_extra = "^1.2"
 pkg-config = "^0.3.24"
