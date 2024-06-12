@@ -10,6 +10,7 @@
 //! Module containing context-internal types and traits.
 
 use std::{any::Any, ffi::c_void, fmt::Debug, marker::PhantomData, net::SocketAddr, ops::Sub, time::Duration};
+use std::sync::Once;
 
 use libc::c_uint;
 
@@ -22,7 +23,10 @@ use libcoap_sys::{
     coap_dtls_spsk_info_t, coap_dtls_spsk_t, coap_event_t, coap_free_context, coap_get_app_data, coap_io_process,
     coap_new_context, coap_proto_t, coap_register_event_handler, coap_register_response_handler, coap_set_app_data,
     COAP_BLOCK_SINGLE_BODY, COAP_BLOCK_USE_LIBCOAP, COAP_DTLS_SPSK_SETUP_VERSION, COAP_IO_WAIT,
+    coap_startup
 };
+
+static COAP_STARTUP_ONCE: Once = Once::new();
 
 #[cfg(feature = "dtls")]
 use crate::crypto::{dtls_server_id_callback, dtls_server_sni_callback, CoapServerCryptoProvider};
@@ -94,6 +98,10 @@ impl<'a> CoapContext<'a> {
     /// Returns an error if the underlying libcoap library was unable to create a new context
     /// (probably an allocation error?).
     pub fn new() -> Result<CoapContext<'a>, ContextCreationError> {
+        // TODO this should actually be done before calling _any_ libcoap function, not just the
+        //      context initialization. Maybe we need to make sure to call this in other places too
+        //      (e.g. if a resource is initialized before a context is created).
+        COAP_STARTUP_ONCE.call_once(|| unsafe { coap_startup(); });
         // SAFETY: Providing null here is fine, the context will just not be bound to an endpoint
         // yet.
         let raw_context = unsafe { coap_new_context(std::ptr::null()) };
@@ -102,7 +110,7 @@ impl<'a> CoapContext<'a> {
         }
         // SAFETY: We checked that raw_context is not null.
         unsafe {
-            coap_context_set_block_mode(raw_context, (COAP_BLOCK_USE_LIBCOAP | COAP_BLOCK_SINGLE_BODY) as u8);
+            coap_context_set_block_mode(raw_context, (COAP_BLOCK_USE_LIBCOAP | COAP_BLOCK_SINGLE_BODY) as u32);
             coap_register_response_handler(raw_context, Some(session_response_handler));
         }
         let inner = CoapLendableFfiRcCell::new(CoapContextInner {

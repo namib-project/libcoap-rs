@@ -95,7 +95,7 @@ pub unsafe fn prepare_resource_handler_data<'a, D: Any + ?Sized + Debug>(
     match (request, response) {
         (Ok(request), Ok(response)) => Ok((resource, session, request, response)),
         (v1, v2) => {
-            coap_send_rst(raw_session, raw_incoming_pdu, COAP_MESSAGE_RST);
+            coap_send_rst(raw_session, raw_incoming_pdu);
             Err(v1.and(v2).err().unwrap())
         },
     }

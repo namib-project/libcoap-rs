@@ -2,8 +2,7 @@
 <project version="4">
   <component name="VcsDirectoryMappings">
     <mapping directory="$PROJECT_DIR$" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/libcoap-sys/dep/libcoap" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/libcoap-sys/dep/libcoap/ext/tinydtls" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/libcoap-sys/dep/libcoap/ext/tinydtls/tinydtls" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/libcoap-sys/src/libcoap" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/libcoap-sys/src/libcoap/ext/tinydtls" vcs="Git" />
   </component>
 </project>

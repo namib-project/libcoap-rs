@@ -23,6 +23,7 @@ use libcoap_rs::{
     session::CoapSessionCommon,
     CoapContext,
 };
+use libcoap_sys::coap_startup;
 
 mod common;
 

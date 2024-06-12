@@ -61,6 +61,7 @@ fn main() {
             if dtls_backend.is_some() {
                 multiple_backends = true;
             }
+            println!("cargo:rerun-if-env-changed=MBEDTLS_LIBRARY_PATH");
             dtls_backend = Some(DtlsBackend::MbedTls);
         }
         if cfg!(feature = "dtls_backend_openssl") {
@@ -187,8 +188,28 @@ fn main() {
                             .unwrap()
                             .join("build")
                             .join("library");
-                        build_config.env("CFLAGS", format!("-I{}", mbedtls_include.to_str().unwrap()));
-                        build_config.env("LDFLAGS", format!("-L{}", mbedtls_library_path.to_str().unwrap()));
+                        build_config.env("MbedTLS_CFLAGS", format!("-I{}", mbedtls_include.to_str().unwrap()));
+                        build_config.env("MbedTLS_LIBS", format!("-lmbedtls -lmbedcrypto -lmbedx509 -L{}", mbedtls_library_path.to_str().unwrap()));
+                    } else {
+                        // If we're not vendoring mbedtls, allow manually setting the mbedtls
+                        // library path (required if linking statically, which is always the case
+                        // when vendoring libcoap).
+                        if let Some(mbedtls_lib_path) = env::var_os("MBEDTLS_LIBRARY_PATH") {
+                            build_config.env("MbedTLS_LIBS", format!("-lmbedtls -lmbedcrypto -lmbedx509 -L{}", mbedtls_lib_path.to_str().unwrap()));
+                            if let Some(mbedtls_include_path) = env::var_os("MBEDTLS_INCLUDE_PATH") {
+                                build_config.env("MbedTLS_CFLAGS", format!("-I{}", mbedtls_include_path.to_str().unwrap()));
+                            }
+                        } else {
+                            // mbedtls will get pkg-config support in the near future, prepare for that
+                            if let Ok(lib) = &pkg_config::Config::new().cargo_metadata(false).probe("mbedtls") {
+                                let mut lib_flags = "-lmbedtls -lmbedcrypto -lmbedx509".to_string();
+                                lib_flags.push_str(lib.link_paths.iter().map(|x| format!("-L{} ", x.display())).collect::<String>().as_str());
+                                build_config.env("MbedTLS_LIBS", lib_flags);
+                                build_config.env("MbedTLS_CFLAGS", lib.link_paths.iter().map(|x| format!("-I{}", x.display())).collect::<String>());
+                            } else {
+                                println!("cargo:warning=You have enabled libcoap vendoring with mbedtls, but haven't provided a static library path for mbedtls (MBEDTLS_LIBRARY_PATH environment variable is unset). Building might fail because of that.");
+                            }
+                        }
                     }
                 },
                 DtlsBackend::GnuTls => {
@@ -214,7 +235,9 @@ fn main() {
             // Disable tests and examples as well as test coverage
             .disable("tests", None)
             .disable("examples", None)
-            .disable("gcov", None);
+            .disable("gcov", None)
+            // TODO allow multithreaded access
+            .disable("thread-safe", None);
 
         // Enable debug symbols if enabled in Rust
         match std::env::var_os("DEBUG").unwrap().to_str().unwrap() {
@@ -255,7 +278,7 @@ fn main() {
     // Tell cargo to link libcoap.
     println!(
         "cargo:rustc-link-lib={}{}",
-        cfg!(feature = "static").then(|| "static=").unwrap_or(""),
+        cfg!(feature = "static").then(|| "static=").unwrap_or("dylib="),
         format!(
             "coap-3-{}",
             &dtls_backend
@@ -265,10 +288,10 @@ fn main() {
         )
         .as_str()
     );
-    
+
     // For the DTLS libraries, we need to tell cargo which external libraries to link.
     // Note that these linker instructions have to be added *after* the linker instruction
-    // for libcoap itself, as some linkers require dependencies to be in reverse order. 
+    // for libcoap itself, as some linkers require dependencies to be in reverse order.
     if let Some(dtls_backend) = dtls_backend {
         match dtls_backend {
             DtlsBackend::TinyDtls => {
@@ -280,15 +303,25 @@ fn main() {
             DtlsBackend::MbedTls => {
                 // If mbedtls is vendored, mbedtls-sys-auto already takes care of linking.
                 if env::var_os("DEP_MBEDTLS_INCLUDE").is_none() {
-                    // We aren't using mbedtls-sys-auto if we aren't vendoring (as it doesn't support 
+                    // We aren't using mbedtls-sys-auto if we aren't vendoring (as it doesn't support
                     // mbedtls >= 3.0.0), so we need to tell cargo to link to mbedtls ourselves.
-                    
-                    // Try to find mbedtls using pkg-config
-                    if probe_library("mbedtls").is_err() {
-                        // couldn't find using pkg-config, just try linking with default library search path
-                        println!("cargo:rustc-link-lib=mbedtls");
-                        println!("cargo:rustc-link-lib=mbedx509");
-                        println!("cargo:rustc-link-lib=mbedcrypto");
+
+                    if let Some(mbedtls_lib_path) = env::var_os("MBEDTLS_LIBRARY_PATH") {
+                        println!("cargo:rustc-link-search=native={}", mbedtls_lib_path.to_str().unwrap())
+                    }
+                    // Try to find mbedtls using pkg-config, will emit cargo link statements if successful
+                    if env::var_os("MBEDTLS_LIBRARY_PATH").is_some() || pkg_config::Config::new().statik(cfg!(feature = "static")).probe("mbedtls").is_err() {
+                        // couldn't find using pkg-config or MBEDTLS_LIBRARY_PATH was set, just try
+                        // linking with given library search path
+                        println!("cargo:rustc-link-lib={}mbedtls",
+                                 cfg!(feature = "static").then(|| "static=").unwrap_or("dylib=")
+                        );
+                        println!("cargo:rustc-link-lib={}mbedx509",
+                                 cfg!(feature = "static").then(|| "static=").unwrap_or("dylib=")
+                        );
+                        println!("cargo:rustc-link-lib={}mbedcrypto",
+                                 cfg!(feature = "static").then(|| "static=").unwrap_or("dylib=")
+                        );
                     }
                 }
             },
