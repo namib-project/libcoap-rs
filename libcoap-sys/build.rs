@@ -37,13 +37,105 @@ impl ToString for DtlsBackend {
     }
 }
 
+fn get_builder_espidf() -> bindgen::Builder {
+        embuild::espidf::sysenv::output();
+        let esp_idf_path = embuild::espidf::sysenv::idf_path().ok_or("missing IDF path").unwrap();
+        let esp_idf_buildroot  = env::var("DEP_ESP_IDF_ROOT").unwrap();
+        let esp_include_path = embuild::espidf::sysenv::cincl_args().ok_or("missing IDF cincl args").unwrap();
+        let embuild_env = embuild::espidf::sysenv::env_path().ok_or("missing IDF env path").unwrap();
+        let esp_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap();
+        let cfg_flags = embuild::espidf::sysenv::cfg_args().ok_or("missing cfg flags from IDF").unwrap();
+        
+        // Determine compiler path
+        env::set_var("PATH", &embuild_env);
+        let cmake_info = embuild::cmake::Query::new(
+            &Path::new(&esp_idf_buildroot).join("build"),
+            "cargo",
+            &[embuild::cmake::file_api::ObjKind::Codemodel, embuild::cmake::file_api::ObjKind::Toolchains, embuild::cmake::file_api::ObjKind::Cache],
+        ).unwrap().get_replies().unwrap();
+        let compiler = cmake_info
+            .get_toolchains().map_err(|_e| "Can't get toolchains")
+            .and_then(|mut t| {
+                t.take(embuild::cmake::file_api::codemodel::Language::C)
+                    .ok_or("No C toolchain")
+            })
+            .and_then(|t| {
+                t.compiler
+                    .path
+                    .ok_or("No compiler path set")
+            }).unwrap();
+
+        // Parse include arguments
+        let arg_splitter = regex::Regex::new(r##"(?:[^\\]"[^"]*[^\\]")?(\s)"##).unwrap();
+        let apostrophe_remover = regex::Regex::new(r##"^"(?<content>.*)"$"##).unwrap();
+        let esp_clang_args = arg_splitter.split(
+            esp_include_path.args.as_str()
+        ).map(|x| apostrophe_remover.replace(x.trim(), "$content").to_string()).collect::<Vec<String>>();
+        let bindgen_builder = embuild::bindgen::Factory {
+            clang_args: esp_clang_args.clone(),
+            linker: Some(compiler),
+            mcu: None,
+            force_cpp: false,
+            sysroot: None
+        }.builder().unwrap();
+
+        let clang_target = if esp_arch.starts_with("riscv32") {"riscv32"} else {esp_arch.as_str()};
+        let short_target = if esp_arch.starts_with("riscv32") {"riscv"} else {esp_arch.as_str()};
+        let target_mcu = if cfg_flags.get("esp32").is_some() {"esp32"}
+            else if cfg_flags.get("esp32s2").is_some() { "esp32s2" }
+            else if cfg_flags.get("esp32s3").is_some() { "esp32s3" }
+            else if cfg_flags.get("esp32c3").is_some() { "esp32c3" }
+            else if cfg_flags.get("esp32c2").is_some() { "esp32c2" }
+            else if cfg_flags.get("esp32h2").is_some() { "esp32h2" }
+            else if cfg_flags.get("esp32c5").is_some() { "esp32c5" }
+            else if cfg_flags.get("esp32c6").is_some() { "esp32c6" }
+            else if cfg_flags.get("esp32p4").is_some() { "esp32p4" }
+            else {panic!("unknown ESP target MCU, please add target to libcoap-sys build.rs file!")};
+        
+        return bindgen_builder
+            .clang_args(&esp_clang_args)
+            .clang_arg("-target")
+            .clang_arg(clang_target)
+            .clang_arg("-DESP_PLATFORM")
+            .clang_arg("-DLWIP_IPV4=1")
+            .clang_arg("-DLWIP_IPV6=1")
+            .clang_arg(format!("-I{}/components/lwip/lwip/src/include", esp_idf_path))
+            .clang_arg(format!("-I{}/components/lwip/port/freertos/include", esp_idf_path))
+            .clang_arg(format!("-I{}/components/esp_system/include", esp_idf_path))
+            .clang_arg(format!("-I{}/components/freertos/esp_additions/include", esp_idf_path))
+            .clang_arg(format!("-I{}/components/freertos/esp_additions/include/freertos", esp_idf_path))
+            .clang_arg(format!("-I{}/components/freertos/esp_additions/arch/{}/include", esp_idf_path, short_target)) // for older espidf
+            .clang_arg(format!("-I{}/components/freertos/config/{}/include", esp_idf_path, short_target)) // for newer espidf
+            .clang_arg(format!("-I{}/components/{}/include", esp_idf_path, short_target))
+            .clang_arg(format!("-I{}/components/freertos/FreeRTOS-Kernel-SMP/include", esp_idf_path))
+            .clang_arg(format!("-I{}/components/freertos/FreeRTOS-Kernel-SMP/portable/{}/include/freertos", esp_idf_path, short_target))
+            .clang_arg(format!("-I{}/components/soc/{}/include", esp_idf_path, target_mcu))
+            .clang_arg(format!("-I{}/components/heap/include", esp_idf_path))
+            .clang_arg(format!("-I{}/components/esp_rom/include", esp_idf_path))
+            .clang_arg(format!("-I{}/managed_components/espressif__coap/libcoap/include", esp_idf_buildroot))
+            .clang_arg(format!("-I{}/build/config/", esp_idf_buildroot))
+            .allowlist_type("epoll_event");
+}
+
+fn get_builder() -> bindgen::Builder {
+    bindgen::Builder::default()
+        .blocklist_type("epoll_event")
+}
+
 fn main() {
     println!("cargo:rerun-if-changed=src/libcoap/");
     println!("cargo:rerun-if-changed=src/wrapper.h");
-    let mut bindgen_builder = bindgen::Builder::default();
     // Read required environment variables.
     let orig_pkg_config = std::env::var_os("PKG_CONFIG_PATH").map(|v| String::from(v.to_str().unwrap()));
     let out_dir = env::var_os("OUT_DIR").unwrap();
+    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
+
+    let mut bindgen_builder = match target_os.as_str() {
+        "espidf" => get_builder_espidf(),
+        _ => get_builder()
+    };
+
+    
 
     let mut dtls_backend = Option::None;
     if cfg!(feature = "dtls") {
@@ -86,7 +178,7 @@ fn main() {
     }
 
     // Build vendored library if feature was set.
-    if cfg!(feature = "vendored") {
+    if cfg!(feature = "vendored") && target_os.as_str() != "espidf" {
         let libcoap_src_dir = Path::new(&out_dir).join("libcoap");
         // Read Makeflags into vector of strings
         //let make_flags: Vec<String> = std::env::var_os("CARGO_MAKEFLAGS")
@@ -275,72 +367,74 @@ fn main() {
         env::set_current_dir(current_dir_backup).expect("unable to switch back to source dir");
     }
 
-    // Tell cargo to link libcoap.
-    println!(
-        "cargo:rustc-link-lib={}{}",
-        cfg!(feature = "static").then(|| "static=").unwrap_or("dylib="),
-        format!(
-            "coap-3-{}",
-            &dtls_backend
-                .as_ref()
-                .map(|v| v.to_string())
-                .unwrap_or_else(|| "notls".to_string())
-        )
-        .as_str()
-    );
+    if target_os.as_str() != "espidf" {
+        // Tell cargo to link libcoap.
+        println!(
+            "cargo:rustc-link-lib={}{}",
+            cfg!(feature = "static").then(|| "static=").unwrap_or("dylib="),
+            format!(
+                "coap-3-{}",
+                &dtls_backend
+                    .as_ref()
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| "notls".to_string())
+            )
+            .as_str()
+        );
 
-    // For the DTLS libraries, we need to tell cargo which external libraries to link.
-    // Note that these linker instructions have to be added *after* the linker instruction
-    // for libcoap itself, as some linkers require dependencies to be in reverse order.
-    if let Some(dtls_backend) = dtls_backend {
-        match dtls_backend {
-            DtlsBackend::TinyDtls => {
-                // Handled by tinydtls-sys
-            },
-            DtlsBackend::OpenSsl => {
-                // Handled by openssl-sys
-            },
-            DtlsBackend::MbedTls => {
-                // If mbedtls is vendored, mbedtls-sys-auto already takes care of linking.
-                if env::var_os("DEP_MBEDTLS_INCLUDE").is_none() {
-                    // We aren't using mbedtls-sys-auto if we aren't vendoring (as it doesn't support
-                    // mbedtls >= 3.0.0), so we need to tell cargo to link to mbedtls ourselves.
+        // For the DTLS libraries, we need to tell cargo which external libraries to link.
+        // Note that these linker instructions have to be added *after* the linker instruction
+        // for libcoap itself, as some linkers require dependencies to be in reverse order.
+        if let Some(dtls_backend) = dtls_backend {
+            match dtls_backend {
+                DtlsBackend::TinyDtls => {
+                    // Handled by tinydtls-sys
+                },
+                DtlsBackend::OpenSsl => {
+                    // Handled by openssl-sys
+                },
+                DtlsBackend::MbedTls => {
+                    // If mbedtls is vendored, mbedtls-sys-auto already takes care of linking.
+                    if env::var_os("DEP_MBEDTLS_INCLUDE").is_none() {
+                        // We aren't using mbedtls-sys-auto if we aren't vendoring (as it doesn't support
+                        // mbedtls >= 3.0.0), so we need to tell cargo to link to mbedtls ourselves.
 
-                    if let Some(mbedtls_lib_path) = env::var_os("MBEDTLS_LIBRARY_PATH") {
-                        println!("cargo:rustc-link-search=native={}", mbedtls_lib_path.to_str().unwrap())
+                        if let Some(mbedtls_lib_path) = env::var_os("MBEDTLS_LIBRARY_PATH") {
+                            println!("cargo:rustc-link-search=native={}", mbedtls_lib_path.to_str().unwrap())
+                        }
+                        // Try to find mbedtls using pkg-config, will emit cargo link statements if successful
+                        if env::var_os("MBEDTLS_LIBRARY_PATH").is_some() || pkg_config::Config::new().statik(cfg!(feature = "static")).probe("mbedtls").is_err() {
+                            // couldn't find using pkg-config or MBEDTLS_LIBRARY_PATH was set, just try
+                            // linking with given library search path
+                            println!("cargo:rustc-link-lib={}mbedtls",
+                                     cfg!(feature = "static").then(|| "static=").unwrap_or("dylib=")
+                            );
+                            println!("cargo:rustc-link-lib={}mbedx509",
+                                     cfg!(feature = "static").then(|| "static=").unwrap_or("dylib=")
+                            );
+                            println!("cargo:rustc-link-lib={}mbedcrypto",
+                                     cfg!(feature = "static").then(|| "static=").unwrap_or("dylib=")
+                            );
+                        }
                     }
-                    // Try to find mbedtls using pkg-config, will emit cargo link statements if successful
-                    if env::var_os("MBEDTLS_LIBRARY_PATH").is_some() || pkg_config::Config::new().statik(cfg!(feature = "static")).probe("mbedtls").is_err() {
-                        // couldn't find using pkg-config or MBEDTLS_LIBRARY_PATH was set, just try
-                        // linking with given library search path
-                        println!("cargo:rustc-link-lib={}mbedtls",
-                                 cfg!(feature = "static").then(|| "static=").unwrap_or("dylib=")
-                        );
-                        println!("cargo:rustc-link-lib={}mbedx509",
-                                 cfg!(feature = "static").then(|| "static=").unwrap_or("dylib=")
-                        );
-                        println!("cargo:rustc-link-lib={}mbedcrypto",
-                                 cfg!(feature = "static").then(|| "static=").unwrap_or("dylib=")
-                        );
-                    }
-                }
-            },
-            DtlsBackend::GnuTls => {
-                // gnutls-sys is unmaintained, so we need to link to gnutls ourselves.
+                },
+                DtlsBackend::GnuTls => {
+                    // gnutls-sys is unmaintained, so we need to link to gnutls ourselves.
 
-                // try pkg-config
-                if probe_library("gnutls").is_err() {
-                    // if that doesn't work, try using the standard library search path.
-                    println!("cargo:rustc-link-lib=gnutls")
-                }
-            },
+                    // try pkg-config
+                    if probe_library("gnutls").is_err() {
+                        // if that doesn't work, try using the standard library search path.
+                        println!("cargo:rustc-link-lib=gnutls")
+                    }
+                },
+            }
         }
     }
 
     bindgen_builder = bindgen_builder
         .header("src/wrapper.h")
         .default_enum_style(EnumVariation::Rust { non_exhaustive: true })
-        .formatter(bindgen::Formatter::None)
+        .rustfmt_bindings(false)
         // Causes invalid syntax for some reason, so we have to disable it.
         .generate_comments(false)
         .dynamic_link_require_all(true)
@@ -353,7 +447,6 @@ fn main() {
         // We use the definitions made by the libc crate instead
         .blocklist_type("sockaddr(_in|_in6)?")
         .blocklist_type("in6?_(addr|port)(_t)?")
-        .blocklist_type("epoll_event")
         .blocklist_type("in6_addr__bindgen_ty_1")
         .blocklist_type("(__)?socklen_t")
         .blocklist_type("fd_set")

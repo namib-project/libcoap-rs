@@ -110,7 +110,7 @@ impl<'a> CoapContext<'a> {
         }
         // SAFETY: We checked that raw_context is not null.
         unsafe {
-            coap_context_set_block_mode(raw_context, (COAP_BLOCK_USE_LIBCOAP | COAP_BLOCK_SINGLE_BODY) as u32);
+            coap_context_set_block_mode(raw_context, (COAP_BLOCK_USE_LIBCOAP | COAP_BLOCK_SINGLE_BODY) as u8);
             coap_register_response_handler(raw_context, Some(session_response_handler));
         }
         let inner = CoapLendableFfiRcCell::new(CoapContextInner {

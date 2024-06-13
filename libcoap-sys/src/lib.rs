@@ -86,9 +86,9 @@
 #![allow(deref_nullptr)]
 #![allow(non_snake_case)]
 
-use libc::{epoll_event, fd_set, sockaddr, sockaddr_in, sockaddr_in6, socklen_t, time_t, sa_family_t};
-
-use crate::coap_pdu_type_t::COAP_MESSAGE_RST;
+use libc::{fd_set, sockaddr, sockaddr_in, sockaddr_in6, socklen_t, time_t, sa_family_t};
+#[cfg(not(target_os = "espidf"))]
+use libc::{epoll_event};
 
 // use dtls backend libraries in cases where they set our linker flags, otherwise cargo will 
 // optimize them out.
@@ -104,7 +104,16 @@ include!(concat!(env!("OUT_DIR"), "\\bindings.rs"));
 #[cfg(not(target_family = "windows"))]
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
-#[cfg(test)]
+#[inline]
+pub unsafe fn coap_send_rst(
+    session: *mut coap_session_t,
+    request: *const coap_pdu_t,
+    _type_: coap_pdu_type_t,
+) -> coap_mid_t {
+    coap_send_message_type(session, request, crate::coap_pdu_type_t::COAP_MESSAGE_RST)
+}
+
+#[cfg(all(test, not(feature = "esp")))]
 mod tests {
     use std::{
         ffi::c_void,

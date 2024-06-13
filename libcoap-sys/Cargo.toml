@@ -70,11 +70,20 @@ mbedtls-sys-auto = {version = "^2.26", optional = true}
 libc = "^0.2.126"
 tinydtls-sys = {version = "^0.2.0", default-features = false, optional = true}
 
+[target.'cfg(target_os="espidf")'.dependencies]
+esp-idf-sys = { version = "0.34.1"}
+
 [build-dependencies]
-bindgen = "^0.69.4"
+bindgen = "^0.63"
 autotools = "^0.2.3"
 fs_extra = "^1.2"
 pkg-config = "^0.3.24"
+regex = "1.10.5"
+embuild = { version = "0.31.3", features = ["bindgen", "espidf", "cmake"]}
 
 [package.metadata.docs.rs]
 features = ["dtls", "dtls_backend_openssl", "vendored"]
+
+[[package.metadata.esp-idf-sys.extra_components]]
+remote_component = { name = "espressif/coap", version = "4.3.4~3"}
+bindings_header = "src/wrapper.h"
