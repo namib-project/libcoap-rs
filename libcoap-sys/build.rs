@@ -14,9 +14,42 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
 };
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::ffi::{CStr, CString};
+use std::fmt::{Debug, Formatter};
+use bindgen::callbacks::{IntKind, ParseCallbacks};
 
 use bindgen::EnumVariation;
 use pkg_config::probe_library;
+use version_compare::{Cmp, Version};
+
+#[derive(Debug, Default)]
+pub struct CoapConfigMacroParser {
+    version: RefCell<String>,
+}
+
+impl ParseCallbacks for CoapConfigMacroParser {
+    fn int_macro(&self, _name: &str, _value: i64) -> Option<IntKind> {
+        None
+    }
+
+    fn str_macro(&self, name: &str, value: &[u8]) {
+        match name {
+            "PACKAGE_VERSION" => {
+                let version_str = String::from_utf8_lossy(value);
+                println!("cargo:rustc-cfg=libcoap_version=\"{}\"", version_str.as_ref());
+                let version = Version::from(version_str.as_ref()).unwrap();
+                match version.compare(Version::from("4.3.4").unwrap()) {
+                    Cmp::Lt | Cmp::Eq => println!("cargo:rustc-cfg=inlined_coap_send_rst"),
+                    _ => {}
+                }
+                self.version.replace(version.to_string());
+            },
+            _ => {}
+        }
+    }
+}
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum DtlsBackend {
@@ -47,7 +80,7 @@ fn get_builder_espidf() -> bindgen::Builder {
         let cfg_flags = embuild::espidf::sysenv::cfg_args().ok_or("missing cfg flags from IDF").unwrap();
         
         // Determine compiler path
-        env::set_var("PATH", embuild_env);
+        unsafe {env::set_var("PATH", embuild_env)};
         let cmake_info = embuild::cmake::Query::new(
             &Path::new(&esp_idf_buildroot).join("build"),
             "cargo",
@@ -350,14 +383,16 @@ fn main() {
         bindgen_builder = bindgen_builder
             .clang_arg(format!("-I{}", dst.join("include").to_str().unwrap()))
             .clang_arg(format!("-L{}", dst.join("lib").to_str().unwrap()));
-        env::set_var(
-            "PKG_CONFIG_PATH",
-            format!(
-                "{}:{}",
-                dst.join("lib").join("pkgconfig").to_str().unwrap(),
-                orig_pkg_config.as_ref().map(String::clone).unwrap_or_else(String::new)
-            ),
-        );
+        unsafe {
+            env::set_var(
+                "PKG_CONFIG_PATH",
+                format!(
+                    "{}:{}",
+                    dst.join("lib").join("pkgconfig").to_str().unwrap(),
+                    orig_pkg_config.as_ref().map(String::clone).unwrap_or_else(String::new)
+                ),
+            );
+        }
         env::set_current_dir(current_dir_backup).expect("unable to switch back to source dir");
     }
 
@@ -425,6 +460,8 @@ fn main() {
         }
     }
 
+    let cfg_info = Box::new(CoapConfigMacroParser::default());
+
     bindgen_builder = bindgen_builder
         .header("src/wrapper.h")
         .default_enum_style(EnumVariation::Rust { non_exhaustive: true })
@@ -453,7 +490,8 @@ fn main() {
         // See https://github.com/rust-lang/rust-bindgen/issues/1215 for an open issue concerning
         // this problem.
         .blocklist_type("__(u)?int(8|16|32|64|128)_t")
-        .size_t_is_usize(true);
+        .size_t_is_usize(true)
+        .parse_callbacks(cfg_info);
     if !cfg!(feature = "vendored") {
         // Triggers a rebuild on every cargo build invocation if used for the vendored version, as
         // the included headers seem to come from our built version.
@@ -466,8 +504,10 @@ fn main() {
     let out_path = PathBuf::from(out_dir);
     bindings.write_to_file(out_path.join("bindings.rs")).unwrap();
 
-    match orig_pkg_config.as_ref() {
-        Some(value) => env::set_var("PKG_CONFIG_PATH", value),
-        None => env::remove_var("PKG_CONFIG_PATH"),
+    unsafe {
+        match orig_pkg_config.as_ref() {
+            Some(value) => env::set_var("PKG_CONFIG_PATH", value),
+            None => env::remove_var("PKG_CONFIG_PATH"),
+        }
     }
 }

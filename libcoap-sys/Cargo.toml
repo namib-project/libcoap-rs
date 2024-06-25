@@ -80,6 +80,7 @@ fs_extra = "^1.2"
 pkg-config = "^0.3.24"
 regex = "1.10.5"
 embuild = { version = "0.31.3", features = ["bindgen", "espidf", "cmake"]}
+version-compare = "0.2.0"
 
 [package.metadata.docs.rs]
 features = ["dtls", "dtls_backend_openssl", "vendored"]

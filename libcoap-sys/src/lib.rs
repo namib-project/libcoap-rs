@@ -105,6 +105,7 @@ include!(concat!(env!("OUT_DIR"), "\\bindings.rs"));
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 #[inline]
+#[cfg(inlined_coap_send_rst)]
 pub unsafe fn coap_send_rst(
     session: *mut coap_session_t,
     request: *const coap_pdu_t,
@@ -113,7 +114,7 @@ pub unsafe fn coap_send_rst(
     coap_send_message_type(session, request, crate::coap_pdu_type_t::COAP_MESSAGE_RST)
 }
 
-#[cfg(all(test, not(feature = "esp")))]
+#[cfg(all(test, not(target_os = "espidf")))]
 mod tests {
     use std::{
         ffi::c_void,
