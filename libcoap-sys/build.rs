@@ -47,7 +47,7 @@ fn get_builder_espidf() -> bindgen::Builder {
         let cfg_flags = embuild::espidf::sysenv::cfg_args().ok_or("missing cfg flags from IDF").unwrap();
         
         // Determine compiler path
-        env::set_var("PATH", &embuild_env);
+        env::set_var("PATH", embuild_env);
         let cmake_info = embuild::cmake::Query::new(
             &Path::new(&esp_idf_buildroot).join("build"),
             "cargo",
@@ -92,7 +92,7 @@ fn get_builder_espidf() -> bindgen::Builder {
             else if cfg_flags.get("esp32p4").is_some() { "esp32p4" }
             else {panic!("unknown ESP target MCU, please add target to libcoap-sys build.rs file!")};
         
-        return bindgen_builder
+        bindgen_builder
             .clang_args(&esp_clang_args)
             .clang_arg("-target")
             .clang_arg(clang_target)
@@ -114,7 +114,7 @@ fn get_builder_espidf() -> bindgen::Builder {
             .clang_arg(format!("-I{}/components/esp_rom/include", esp_idf_path))
             .clang_arg(format!("-I{}/managed_components/espressif__coap/libcoap/include", esp_idf_buildroot))
             .clang_arg(format!("-I{}/build/config/", esp_idf_buildroot))
-            .allowlist_type("epoll_event");
+            .allowlist_type("epoll_event")
 }
 
 fn get_builder() -> bindgen::Builder {
@@ -180,14 +180,6 @@ fn main() {
     // Build vendored library if feature was set.
     if cfg!(feature = "vendored") && target_os.as_str() != "espidf" {
         let libcoap_src_dir = Path::new(&out_dir).join("libcoap");
-        // Read Makeflags into vector of strings
-        //let make_flags: Vec<String> = std::env::var_os("CARGO_MAKEFLAGS")
-        //    .unwrap()
-        //    .into_string()
-        //    .unwrap()
-        //    .split(' ')
-        //    .map(String::from)
-        //    .collect();
 
         // Even though libcoap supports out-of-source builds, autogen.sh (or the corresponding
         // autotools) modify files in the source tree, which causes verification problems when
@@ -211,7 +203,7 @@ fn main() {
         let current_dir_backup = env::current_dir().unwrap();
         env::set_current_dir(&libcoap_src_dir).expect("unable to change to libcoap build dir");
         Command::new(libcoap_src_dir.join("autogen.sh")).status().unwrap();
-        let mut build_config = autotools::Config::new(libcoap_src_dir);
+        let mut build_config = autotools::Config::new(&libcoap_src_dir);
         build_config.out_dir(&out_dir);
         if let Some(dtls_backend) = dtls_backend {
             build_config
@@ -350,6 +342,8 @@ fn main() {
         // Run build
         let dst = build_config.build();
 
+        std::fs::copy(dst.join("build").join("coap_config.h"), dst.join("include").join("coap_config.h")).unwrap();
+
         // Add the built library to the search path
         println!("cargo:rustc-link-search=native={}", dst.join("lib").to_str().unwrap());
         println!("cargo:include={}", dst.join("include").to_str().unwrap());
@@ -438,12 +432,13 @@ fn main() {
         // Causes invalid syntax for some reason, so we have to disable it.
         .generate_comments(false)
         .dynamic_link_require_all(true)
-        .allowlist_function("coap_.*")
-        .allowlist_type("coap_.*")
-        .allowlist_var("coap_.*")
-        .allowlist_function("COAP_.*")
-        .allowlist_type("COAP_.*")
-        .allowlist_var("COAP_.*")
+        .allowlist_function("(oscore|coap)_.*")
+        .allowlist_type("(oscore|coap)_.*")
+        .allowlist_var("(oscore|coap)_.*")
+        .allowlist_function("(OSCORE|COAP)_.*")
+        .allowlist_type("(OSCORE|COAP)_.*")
+        .allowlist_var("(OSCORE|COAP)_.*")
+        .allowlist_file(r".*\/coap_config.h")
         // We use the definitions made by the libc crate instead
         .blocklist_type("sockaddr(_in|_in6)?")
         .blocklist_type("in6?_(addr|port)(_t)?")

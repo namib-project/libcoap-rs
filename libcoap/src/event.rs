@@ -90,7 +90,7 @@ pub trait CoapEventHandler: Debug {
 
     /// Handle the creation of a new server-side session.
     ///
-    /// This event is called inside of the IO loop when a new server-side session is created.
+    /// This event is called inside the IO loop when a new server-side session is created.
     #[allow(unused_variables)]
     fn handle_server_session_new(&mut self, session: &mut CoapServerSession) {}
 
@@ -108,7 +108,7 @@ pub trait CoapEventHandler: Debug {
     fn handle_server_session_del(&mut self, session: &mut CoapServerSession) {}
 }
 
-// This should be fine as we don't provide this type to a FFI function, we only read from it.
+// This should be fine as we don't provide this type to an FFI function, we only read from it.
 #[allow(improper_ctypes_definitions)]
 pub(crate) unsafe extern "C" fn event_handler_callback(raw_session: *mut coap_session_t, event: coap_event_t) -> i32 {
     let raw_session_type = coap_session_get_type(raw_session);
