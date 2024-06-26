@@ -110,7 +110,7 @@ impl<'a> CoapContext<'a> {
         }
         // SAFETY: We checked that raw_context is not null.
         unsafe {
-            coap_context_set_block_mode(raw_context, (COAP_BLOCK_USE_LIBCOAP | COAP_BLOCK_SINGLE_BODY) as u8);
+            coap_context_set_block_mode(raw_context, (COAP_BLOCK_USE_LIBCOAP | COAP_BLOCK_SINGLE_BODY).into());
             coap_register_response_handler(raw_context, Some(session_response_handler));
         }
         let inner = CoapLendableFfiRcCell::new(CoapContextInner {
@@ -197,6 +197,19 @@ impl<'a> CoapContext<'a> {
                         panic!("server-side session event fired for non-server-side session");
                     }
                 },
+                coap_event_t::COAP_EVENT_XMIT_BLOCK_FAIL => handler.handle_xmit_block_fail(&mut session),
+                coap_event_t::COAP_EVENT_BAD_PACKET => handler.handle_bad_packet(&mut session),
+                coap_event_t::COAP_EVENT_MSG_RETRANSMITTED => handler.handle_msg_retransmitted(&mut session),
+                coap_event_t::COAP_EVENT_OSCORE_DECRYPTION_FAILURE => handler.handle_oscore_decryption_failure(&mut session),
+                coap_event_t::COAP_EVENT_OSCORE_NOT_ENABLED => handler.handle_oscore_not_enabled(&mut session),
+                coap_event_t::COAP_EVENT_OSCORE_NO_PROTECTED_PAYLOAD => handler.handle_oscore_no_protected_payload(&mut session),
+                coap_event_t::COAP_EVENT_OSCORE_NO_SECURITY => handler.handle_oscore_no_security(&mut session),
+                coap_event_t::COAP_EVENT_OSCORE_INTERNAL_ERROR => handler.handle_oscore_internal_error(&mut session),
+                coap_event_t::COAP_EVENT_OSCORE_DECODE_ERROR => handler.handle_oscore_decode_error(&mut session),
+                coap_event_t::COAP_EVENT_WS_PACKET_SIZE => handler.handle_ws_packet_size(&mut session),
+                coap_event_t::COAP_EVENT_WS_CONNECTED => handler.handle_ws_connected(&mut session),
+                coap_event_t::COAP_EVENT_WS_CLOSED => handler.handle_ws_closed(&mut session),
+                coap_event_t::COAP_EVENT_KEEPALIVE_FAILURE => handler.handle_keepalive_failure(&mut session),
                 _ => {
                     // TODO probably a log message is justified here.
                 },

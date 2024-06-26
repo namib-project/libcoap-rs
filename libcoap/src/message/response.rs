@@ -9,9 +9,7 @@
 
 use crate::error::{MessageConversionError, MessageTypeError, OptionValueError};
 use crate::message::{CoapMessage, CoapMessageCommon, CoapOption};
-use crate::protocol::{
-    CoapMessageCode, CoapMessageType, CoapOptionType, CoapResponseCode, ContentFormat, ETag, MaxAge, Observe,
-};
+use crate::protocol::{CoapMessageCode, CoapMessageType, CoapOptionType, CoapResponseCode, ContentFormat, Echo, ETag, MaxAge, Observe};
 use crate::types::CoapUri;
 use std::fmt::Display;
 use std::fmt::Formatter;
@@ -69,6 +67,7 @@ pub struct CoapResponse {
     content_format: Option<ContentFormat>,
     max_age: Option<MaxAge>,
     etag: Option<ETag>,
+    echo: Option<Echo>,
     location: Option<CoapResponseLocation>,
     observe: Option<Observe>,
 }
@@ -88,6 +87,7 @@ impl CoapResponse {
             content_format: None,
             max_age: None,
             etag: None,
+            echo: None,
             location: None,
             observe: None,
         })
@@ -140,6 +140,26 @@ impl CoapResponse {
     /// for more information.
     pub fn set_etag(&mut self, etag: Option<ETag>) {
         self.etag = etag
+    }
+
+    /// Returns the "Echo" option value for this request.
+    pub fn echo(&self) -> Option<&Echo> {
+        self.echo.as_ref()
+    }
+
+    /// Sets the "Echo" option value for this response.
+    ///
+    /// This option can be used by servers to ensure that a request is recent.
+    ///
+    /// The client should include the provided request in its response.
+    ///
+    /// As handling echo options on the client side is done automatically by libcoap, this option
+    /// is not accessible in [CoapRequest], see `man coap_send` for more information.
+    ///
+    /// See [RFC 9175, Section 2.2](https://datatracker.ietf.org/doc/html/rfc9175#section-2.2)
+    /// for more information.
+    pub fn set_echo(&mut self, echo: Option<Echo>) {
+        self.echo = echo
     }
 
     /// Returns the "Observe" option value for this request.
@@ -211,6 +231,7 @@ impl CoapResponse {
         let mut location_query = None;
         let mut max_age = None;
         let mut etag = None;
+        let mut echo = None;
         let mut observe = None;
         let mut content_format = None;
         let mut additional_opts = Vec::new();
@@ -317,6 +338,8 @@ impl CoapResponse {
                     ));
                 },
                 CoapOption::Block2(_) => {},
+                CoapOption::QBlock1(_) => {},
+                CoapOption::QBlock2(_) => {},
                 CoapOption::HopLimit(_) => {
                     return Err(MessageConversionError::InvalidOptionForMessageType(
                         CoapOptionType::HopLimit,
@@ -328,6 +351,23 @@ impl CoapResponse {
                     ));
                 },
                 CoapOption::Other(n, v) => additional_opts.push(CoapOption::Other(*n, v.clone())),
+
+                // Handling of echo options is automatically done by libcoap (see man coap_send)
+                CoapOption::Echo(v) => {
+
+                    if echo.is_some() {
+                        return Err(MessageConversionError::NonRepeatableOptionRepeated(
+                            CoapOptionType::Echo,
+                        ));
+                    }
+                    echo = Some(v.clone());
+                },
+                // Handling of request tag options is automatically done by libcoap (see man
+                // coap_send)
+                CoapOption::RTag(_) => {},
+                // OSCORE is currently not supported, and even if it should probably be handled by
+                // libcoap, so I'm unsure whether we have to expose this.
+                CoapOption::OsCore(_) => {},
             }
         }
         let location = if location_path.is_some() || location_query.is_some() {
@@ -349,6 +389,7 @@ impl CoapResponse {
             content_format,
             max_age,
             etag,
+            echo,
             location,
             observe,
         })

@@ -29,7 +29,7 @@ use libcoap_sys::{
 pub use request::CoapRequest;
 pub use response::CoapResponse;
 
-use crate::types::{decode_var_len_u16, decode_var_len_u32, encode_var_len_u16, encode_var_len_u32, encode_var_len_u8};
+use crate::types::{decode_var_len_u16, decode_var_len_u32, decode_var_len_u8, encode_var_len_u16, encode_var_len_u32, encode_var_len_u8};
 use crate::{
     error::{MessageConversionError, OptionValueError},
     protocol::{
@@ -39,6 +39,7 @@ use crate::{
     session::CoapSessionCommon,
     types::CoapMessageId,
 };
+use crate::protocol::{Echo, OsCore, RequestTag};
 
 pub mod request;
 pub mod response;
@@ -65,14 +66,17 @@ pub enum CoapOption {
     Size2(Size),
     Block1(Block),
     Block2(Block),
-    // TODO
-    // OsCore
     HopLimit(HopLimit),
     NoResponse(NoResponse),
     ETag(ETag),
     MaxAge(MaxAge),
     Observe(Observe),
     Other(CoapOptionNum, Box<[u8]>),
+    OsCore(OsCore),
+    Echo(Echo),
+    RTag(RequestTag),
+    QBlock1(Block),
+    QBlock2(Block),
 }
 
 impl CoapOption {
@@ -122,8 +126,13 @@ impl CoapOption {
                     CoapOptionType::Block1 => Ok(CoapOption::Block1(decode_var_len_u32(value.as_slice()))),
                     CoapOptionType::Block2 => Ok(CoapOption::Block2(decode_var_len_u32(value.as_slice()))),
                     CoapOptionType::HopLimit => Ok(CoapOption::HopLimit(decode_var_len_u16(value.as_slice()))),
-                    CoapOptionType::NoResponse => Ok(CoapOption::Size2(decode_var_len_u32(value.as_slice()))),
+                    CoapOptionType::NoResponse => Ok(CoapOption::NoResponse(decode_var_len_u8(value.as_slice()) as NoResponse)),
                     CoapOptionType::Observe => Ok(CoapOption::Observe(decode_var_len_u32(value.as_slice()))),
+                    CoapOptionType::OsCore => Ok(CoapOption::OsCore(value.into_boxed_slice())),
+                    CoapOptionType::Echo =>  Ok(CoapOption::Echo(value.into_boxed_slice())),
+                    CoapOptionType::RTag => Ok(CoapOption::RTag(value.into_boxed_slice())),
+                    CoapOptionType::QBlock1 => Ok(CoapOption::QBlock1(decode_var_len_u32(value.as_slice()))),
+                    CoapOptionType::QBlock2 => Ok(CoapOption::QBlock2(decode_var_len_u32(value.as_slice())))
                 }
             },
             _ => Ok(CoapOption::Other(number, value.into_boxed_slice())),
@@ -154,6 +163,11 @@ impl CoapOption {
             CoapOption::ETag(_) => CoapOptionType::ETag as u16,
             CoapOption::MaxAge(_) => CoapOptionType::MaxAge as u16,
             CoapOption::Observe(_) => CoapOptionType::Observe as u16,
+            CoapOption::OsCore(_) => CoapOptionType::OsCore as u16,
+            CoapOption::Echo(_) => CoapOptionType::Echo as u16,
+            CoapOption::RTag(_) => CoapOptionType::RTag as u16,
+            CoapOption::QBlock1(_) => CoapOptionType::QBlock1 as u16,
+            CoapOption::QBlock2(_) => CoapOptionType::QBlock2 as u16,
             CoapOption::Other(num, _) => *num,
         }
     }
@@ -187,6 +201,11 @@ impl CoapOption {
             CoapOption::MaxAge(value) => encode_var_len_u32(value),
             CoapOption::Observe(value) => encode_var_len_u32(value),
             CoapOption::Other(_num, data) => data,
+            CoapOption::OsCore(value) => value,
+            CoapOption::Echo(value) => value,
+            CoapOption::RTag(value) => value,
+            CoapOption::QBlock1(value) => encode_var_len_u32(value),
+            CoapOption::QBlock2(value) => encode_var_len_u32(value),
         };
         if let Some(opt_type) = <CoapOptionType as FromPrimitive>::from_u16(num) {
             if bytes.len() < opt_type.min_len() {

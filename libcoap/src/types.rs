@@ -504,7 +504,6 @@ pub(crate) fn encode_var_len_u16(val: u16) -> Box<[u8]> {
 }
 
 // Kept for consistency
-#[allow(unused)]
 pub(crate) fn decode_var_len_u8(val: &[u8]) -> u16 {
     u16::from_be_bytes(
         convert_to_fixed_size_slice(1, val)[..1]
