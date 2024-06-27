@@ -24,6 +24,8 @@
 //!         - [ ] DTLS using PKI/RPK
 //!     - [ ] TCP
 //!     - [ ] TLS
+//!     - [ ] OSCORE
+//!     - [ ] WebSockets
 //! - [ ] Blockwise Transfer
 //!     - [x] Receiving large messages
 //!         - Note: Handled by libcoap by setting `COAP_BLOCK_USE_LIBCOAP|COAP_BLOCK_SINGLE_BODY`
