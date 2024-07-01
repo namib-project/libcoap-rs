@@ -15,12 +15,11 @@ use std::{
     process::Command,
 };
 use std::cell::RefCell;
-use std::collections::HashMap;
-use std::ffi::{CStr, CString};
-use std::fmt::{Debug, Formatter};
+use std::ffi::OsString;
+use std::fmt::Debug;
 
+use bindgen::{Builder, EnumVariation};
 use bindgen::callbacks::{IntKind, ParseCallbacks};
-use bindgen::EnumVariation;
 use pkg_config::probe_library;
 use version_compare::{Cmp, Version};
 
@@ -39,7 +38,7 @@ impl ParseCallbacks for CoapConfigMacroParser {
             "PACKAGE_VERSION" => {
                 let version_str = String::from_utf8_lossy(value);
                 println!("cargo:rustc-cfg=libcoap_version=\"{}\"", version_str.as_ref());
-                let version = Version::from(version_str.as_ref()).unwrap();
+                let version = Version::from(version_str.as_ref()).expect("invalid libcoap version");
                 match version.compare(Version::from("4.3.4").unwrap()) {
                     Cmp::Lt | Cmp::Eq => println!("cargo:rustc-cfg=inlined_coap_send_rst"),
                     _ => {},
@@ -73,14 +72,14 @@ impl ToString for DtlsBackend {
 fn get_builder_espidf() -> bindgen::Builder {
     embuild::espidf::sysenv::output();
     let esp_idf_path = embuild::espidf::sysenv::idf_path().ok_or("missing IDF path").unwrap();
-    let esp_idf_buildroot = env::var("DEP_ESP_IDF_ROOT").unwrap();
+    let esp_idf_buildroot = env::var("DEP_ESP_IDF_ROOT").expect("DEP_ESP_IDF_ROOT is not set");
     let esp_include_path = embuild::espidf::sysenv::cincl_args()
         .ok_or("missing IDF cincl args")
         .unwrap();
     let embuild_env = embuild::espidf::sysenv::env_path()
         .ok_or("missing IDF env path")
         .unwrap();
-    let esp_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap();
+    let esp_arch = env::var("CARGO_CFG_TARGET_ARCH").expect("CARGO_CFG_TARGET_ARCH is not set");
     let cfg_flags = embuild::espidf::sysenv::cfg_args()
         .ok_or("missing cfg flags from IDF")
         .unwrap();
@@ -96,9 +95,9 @@ fn get_builder_espidf() -> bindgen::Builder {
             embuild::cmake::file_api::ObjKind::Cache,
         ],
     )
-    .unwrap()
+    .expect("unable to query cmake API for compiler path")
     .get_replies()
-    .unwrap();
+    .expect("unable to get cmake query replies for compiler path");
     let compiler = cmake_info
         .get_toolchains()
         .map_err(|_e| "Can't get toolchains")
@@ -107,9 +106,10 @@ fn get_builder_espidf() -> bindgen::Builder {
                 .ok_or("No C toolchain")
         })
         .and_then(|t| t.compiler.path.ok_or("No compiler path set"))
-        .unwrap();
+        .expect("unable to determine compiler path");
 
     // Parse include arguments
+    // Regexes are correct and never change, therefore it is ok to unwrap here.
     let arg_splitter = regex::Regex::new(r##"(?:[^\\]"[^"]*[^\\]")?(\s)"##).unwrap();
     let apostrophe_remover = regex::Regex::new(r##"^"(?<content>.*)"$"##).unwrap();
     let esp_clang_args = arg_splitter
@@ -124,7 +124,7 @@ fn get_builder_espidf() -> bindgen::Builder {
         sysroot: None,
     }
     .builder()
-    .unwrap();
+    .expect("unable to create bindgen builder for libcoap bindings from ESP-IDF");
 
     let clang_target = if esp_arch.starts_with("riscv32") {
         "riscv32"
@@ -205,13 +205,241 @@ fn get_builder() -> bindgen::Builder {
     bindgen::Builder::default().blocklist_type("epoll_event")
 }
 
+fn build_vendored_library(out_dir: &OsString, dtls_backend: Option<&DtlsBackend>, mut builder: Builder) -> Builder {
+    let libcoap_src_dir = Path::new(&out_dir).join("libcoap");
+
+    // Even though libcoap supports out-of-source builds, autogen.sh (or the corresponding
+    // autotools) modify files in the source tree, which causes verification problems when
+    // running cargo package.
+    // Therefore, we copy the libcoap source over to the output directory and build from there.
+    let copy_options = fs_extra::dir::CopyOptions {
+        overwrite: true,
+        ..Default::default()
+    };
+    match std::fs::remove_dir_all(&libcoap_src_dir) {
+        Ok(_) => {},
+        Err(e) if e.kind() == ErrorKind::NotFound => {},
+        e => e.expect("unable to clear libcoap build directory"),
+    }
+    fs_extra::dir::copy(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join("libcoap"),
+        Path::new(&out_dir),
+        &copy_options,
+    )
+    .expect("unable to prepare libcoap build source directory");
+    let current_dir_backup = env::current_dir().expect("unable to get current directory");
+    env::set_current_dir(&libcoap_src_dir).expect("unable to change to libcoap build dir");
+    Command::new(libcoap_src_dir.join("autogen.sh"))
+        .status()
+        .expect("unable to execute autogen.sh");
+    let mut build_config = autotools::Config::new(&libcoap_src_dir);
+    build_config.out_dir(&out_dir);
+    if let Some(dtls_backend) = dtls_backend {
+        build_config
+            .enable("dtls", None)
+            .with(dtls_backend.to_string().as_str(), None);
+
+        // If DTLS is vendored we need to tell libcoap about the vendored version
+        match dtls_backend {
+            DtlsBackend::TinyDtls => {
+                // We do not ship tinydtls with our source distribution. Instead, we use tinydtls-sys.
+                build_config.without("submodule-tinydtls", None);
+
+                // If tinydtls-sys is built with the vendored feature, the library is built alongside
+                // the Rust crate. To use the version built by the tinydtls-sys build script, we use the
+                // environment variables set by the build script.
+                if let Some(tinydtls_include) = env::var_os("DEP_TINYDTLS_INCLUDE") {
+                    build_config.env(
+                        "TinyDTLS_CFLAGS",
+                        format!(
+                            "-I{} -I{}",
+                            tinydtls_include
+                                .to_str()
+                                .expect("DEP_TINYDTLS_INCLUDE is not a valid string"),
+                            Path::new(&tinydtls_include)
+                                .join("tinydtls")
+                                .to_str()
+                                .expect("DEP_TINYDTLS_INCLUDE is not a valid string")
+                        ),
+                    );
+                };
+
+                if let Some(tinydtls_libs) = env::var_os("DEP_TINYDTLS_LIBS") {
+                    build_config.env(
+                        "TinyDTLS_LIBS",
+                        format!(
+                            "-L{}",
+                            tinydtls_libs.to_str().expect("DEP_TINYDTLS_LIBS is invalid string")
+                        ),
+                    );
+
+                    build_config.env(
+                        "PKG_CONFIG_PATH",
+                        Path::new(tinydtls_libs.as_os_str())
+                            .join("lib")
+                            .join("pkgconfig")
+                            .into_os_string(),
+                    );
+                }
+            },
+            DtlsBackend::OpenSsl => {
+                // Set include path according to the path provided by openssl-sys (relevant if
+                // openssl-sys is vendored)
+                if let Some(openssl_include) = env::var_os("DEP_OPENSSL_INCLUDE") {
+                    build_config.env(
+                        "OpenSSL_CFLAGS",
+                        format!(
+                            "-I{}",
+                            openssl_include.to_str().expect("DEP_OPENSSL_INCLUDE is invalid path")
+                        ),
+                    );
+                    build_config.env(
+                        "PKG_CONFIG_PATH",
+                        Path::new(openssl_include.as_os_str())
+                            .parent()
+                            .expect("DEP_OPENSSL_INCLUDE has no parent directory")
+                            .join("lib")
+                            .join("pkgconfig")
+                            .into_os_string(),
+                    );
+                }
+            },
+            DtlsBackend::MbedTls => {
+                // Set include path according to the path provided by mbedtls-sys (relevant if
+                // mbedtls-sys is vendored).
+                // libcoap doesn't support overriding the MbedTLS CFLAGS, but doesn't set those
+                // either, so we just set CFLAGS and hope they propagate.
+                if let Some(mbedtls_include) = env::var_os("DEP_MBEDTLS_INCLUDE") {
+                    // the config.h of mbedtls-sys-auto is generated separately from all other
+                    // includes in the root of mbedtls-sys-auto's OUT_DIR.
+                    // In order to let libcoap read use the correct config file, we need to copy
+                    // this file into our own OUT_DIR under include/mbedtls/config.h, so that we
+                    // can then set OUT_DIR/include as an additional include path.
+                    let config_h = env::var_os("DEP_MBEDTLS_CONFIG_H")
+                        .expect("DEP_MBEDTLS_INCLUDE is set but DEP_MBEDTLS_CONFIG_H is not");
+                    let config_path = Path::new(&config_h);
+                    let out_include = Path::new(&out_dir).join("include");
+                    std::fs::create_dir_all(out_include.join("mbedtls"))
+                        .expect("unable to prepare include directory for mbedtls config.h");
+                    std::fs::copy(config_path, out_include.join("mbedtls").join("config.h"))
+                        .expect("unable to copy mbedtls config.h to include directory");
+                    let mbedtls_library_path = config_path
+                        .parent()
+                        .expect("DEP_MBEDTLS_CONFIG_H has no parent directory")
+                        .join("build")
+                        .join("library");
+                    build_config.env(
+                        "MbedTLS_CFLAGS",
+                        format!(
+                            "-I{} -I{}",
+                            out_include.to_str().expect("OUT_DIR is not a valid string"),
+                            mbedtls_include
+                                .to_str()
+                                .expect("DEP_MBEDTLS_INCLUDE is not a valid string")
+                        ),
+                    );
+                    build_config.env(
+                        "MbedTLS_LIBS",
+                        format!(
+                            "-L{0} -l:libmbedtls.a -l:libmbedcrypto.a -l:libmbedx509.a",
+                            mbedtls_library_path
+                                .to_str()
+                                .expect("DEP_MBEDTLS_CONFIG_H is not a valid string"),
+                        ),
+                    );
+                }
+            },
+            DtlsBackend::GnuTls => {
+                // Vendoring not supported
+            },
+        }
+    } else {
+        build_config.disable("dtls", None);
+    }
+    build_config
+        // Set Makeflags
+        //.make_args(make_flags)
+        // Disable shared library compilation because the vendored library will always be
+        // statically linked
+        .disable("shared", None)
+        // Disable any documentation for vendored C library
+        .disable("documentation", None)
+        .disable("doxygen", None)
+        .disable("manpages", None)
+        // This would install the license into the documentation directory, but we don't use the
+        // generated documentation anywhere.
+        .disable("license-install", None)
+        // Disable tests and examples as well as test coverage
+        .disable("tests", None)
+        .disable("examples", None)
+        .disable("gcov", None)
+        // TODO allow multithreaded access
+        .disable("thread-safe", None);
+
+    // Enable debug symbols if enabled in Rust
+    match env::var_os("DEBUG")
+        .expect("env variable DEBUG that should have been set by cargo is not set")
+        .to_str()
+        .expect("env variable DEBUG is not valid")
+    {
+        "0" | "false" => {},
+        _ => {
+            build_config.with("debug", None);
+        },
+    }
+    // Enable dependency features based on selected cargo features.
+    build_config
+        .enable("async", Some(if cfg!(feature = "async") { "yes" } else { "no" }))
+        .enable("tcp", Some(if cfg!(feature = "tcp") { "yes" } else { "no" }))
+        .enable("server-mode", Some(if cfg!(feature = "server") { "yes" } else { "no" }))
+        .enable("client-mode", Some(if cfg!(feature = "client") { "yes" } else { "no" }))
+        .with("epoll", Some(if cfg!(feature = "epoll") { "yes" } else { "no" }));
+
+    // Run build
+    let dst = build_config.build();
+
+    std::fs::copy(
+        dst.join("build").join("coap_config.h"),
+        dst.join("include").join("coap_config.h"),
+    )
+    .expect("unable to copy coap_config.h from build to include directory");
+
+    // Add the built library to the search path
+    println!(
+        "cargo:rustc-link-search=native={}",
+        dst.join("lib")
+            .to_str()
+            .expect("libcoap build output dir is not a valid string")
+    );
+    println!(
+        "cargo:include={}",
+        dst.join("include")
+            .to_str()
+            .expect("libcoap build output dir is not a valid string")
+    );
+    builder = builder
+        .clang_arg(format!(
+            "-I{}",
+            dst.join("include")
+                .to_str()
+                .expect("libcoap build output dir is not a valid string")
+        ))
+        .clang_arg(format!(
+            "-L{}",
+            dst.join("lib")
+                .to_str()
+                .expect("libcoap build output dir is not a valid string")
+        ));
+    env::set_current_dir(current_dir_backup).expect("unable to switch back to source dir");
+    builder
+}
+
 fn main() {
     println!("cargo:rerun-if-changed=src/libcoap/");
     println!("cargo:rerun-if-changed=src/wrapper.h");
     // Read required environment variables.
-    let orig_pkg_config = std::env::var_os("PKG_CONFIG_PATH").map(|v| String::from(v.to_str().unwrap()));
-    let out_dir = env::var_os("OUT_DIR").unwrap();
-    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
+    let out_dir = env::var_os("OUT_DIR").expect("unsupported OUT_DIR");
+    let target_os = env::var("CARGO_CFG_TARGET_OS").expect("invalid TARGET_OS environment variable");
 
     let mut bindgen_builder = match target_os.as_str() {
         "espidf" => get_builder_espidf(),
@@ -250,7 +478,8 @@ fn main() {
             dtls_backend = Some(DtlsBackend::GnuTls);
         }
         if multiple_backends {
-            println!("cargo:warning=Multiple DTLS backends enabled for libcoap-sys. Only one can be enabled, choosing {:?} as the backend to use. This can cause problems.", dtls_backend.as_ref().unwrap());
+            // more than one backend was set, so unwrapping is ok here.
+            println!("cargo:warning=Multiple DTLS backends enabled for libcoap-sys. Only one can be enabled, choosing {:?} as the backend to use. This may cause problems.", dtls_backend.as_ref().unwrap());
         }
         if dtls_backend.is_none() {
             println!("cargo:warning=No DTLS backend selected for libcoap-sys, aborting build.");
@@ -260,193 +489,8 @@ fn main() {
 
     // Build vendored library if feature was set.
     if cfg!(feature = "vendored") && target_os.as_str() != "espidf" {
-        let libcoap_src_dir = Path::new(&out_dir).join("libcoap");
-
-        // Even though libcoap supports out-of-source builds, autogen.sh (or the corresponding
-        // autotools) modify files in the source tree, which causes verification problems when
-        // running cargo package.
-        // Therefore, we copy the libcoap source over to the output directory and build from there.
-        let copy_options = fs_extra::dir::CopyOptions {
-            overwrite: true,
-            ..Default::default()
-        };
-        match std::fs::remove_dir_all(&libcoap_src_dir) {
-            Ok(_) => {},
-            Err(e) if e.kind() == ErrorKind::NotFound => {},
-            e => e.unwrap(),
-        }
-        fs_extra::dir::copy(
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join("libcoap"),
-            Path::new(&out_dir),
-            &copy_options,
-        )
-        .unwrap();
-        let current_dir_backup = env::current_dir().unwrap();
-        env::set_current_dir(&libcoap_src_dir).expect("unable to change to libcoap build dir");
-        Command::new(libcoap_src_dir.join("autogen.sh")).status().unwrap();
-        let mut build_config = autotools::Config::new(&libcoap_src_dir);
-        build_config.out_dir(&out_dir);
-        if let Some(dtls_backend) = dtls_backend {
-            build_config
-                .enable("dtls", None)
-                .with(dtls_backend.to_string().as_str(), None);
-
-            // If DTLS is vendored we need to tell libcoap about the vendored version
-            match dtls_backend {
-                DtlsBackend::TinyDtls => {
-                    // We do not ship tinydtls with our source distribution. Instead, we use tinydtls-sys.
-                    build_config.without("submodule-tinydtls", None);
-
-                    // If tinydtls-sys is built with the vendored feature, the library is built alongside
-                    // the Rust crate. To use the version built by the tinydtls-sys build script, we use the
-                    // environment variables set by the build script.
-                    if let Some(tinydtls_include) = env::var_os("DEP_TINYDTLS_INCLUDE") {
-                        build_config.env(
-                            "TinyDTLS_CFLAGS",
-                            format!(
-                                "-I{} -I{}",
-                                tinydtls_include.to_str().unwrap(),
-                                Path::new(tinydtls_include.to_str().unwrap())
-                                    .join("tinydtls")
-                                    .to_str()
-                                    .unwrap()
-                            ),
-                        );
-                    };
-
-                    if let Some(tinydtls_libs) = env::var_os("DEP_TINYDTLS_LIBS") {
-                        build_config.env("TinyDTLS_LIBS", format!("-L{}", tinydtls_libs.to_str().unwrap()));
-
-                        build_config.env(
-                            "PKG_CONFIG_PATH",
-                            Path::new(tinydtls_libs.as_os_str())
-                                .join("lib")
-                                .join("pkgconfig")
-                                .into_os_string(),
-                        );
-                    }
-                },
-                DtlsBackend::OpenSsl => {
-                    // Set include path according to the path provided by openssl-sys (relevant if
-                    // openssl-sys is vendored)
-                    if let Some(openssl_include) = env::var_os("DEP_OPENSSL_INCLUDE") {
-                        build_config.env("OpenSSL_CFLAGS", format!("-I{}", openssl_include.to_str().unwrap()));
-                        build_config.env(
-                            "PKG_CONFIG_PATH",
-                            Path::new(openssl_include.as_os_str())
-                                .parent()
-                                .unwrap()
-                                .join("lib")
-                                .join("pkgconfig")
-                                .into_os_string(),
-                        );
-                    }
-                },
-                DtlsBackend::MbedTls => {
-                    // Set include path according to the path provided by mbedtls-sys (relevant if
-                    // mbedtls-sys is vendored).
-                    // libcoap doesn't support overriding the MbedTLS CFLAGS, but doesn't set those
-                    // either, so we just set CFLAGS and hope they propagate.
-                    if let Some(mbedtls_include) = env::var_os("DEP_MBEDTLS_INCLUDE") {
-                        // the config.h of mbedtls-sys-auto is generated separately from all other
-                        // includes in the root of mbedtls-sys-auto's OUT_DIR.
-                        // In order to let libcoap read use the correct config file, we need to copy
-                        // this file into our own OUT_DIR under include/mbedtls/config.h, so that we
-                        // can then set OUT_DIR/include as an additional include path.
-                        let config_h = env::var_os("DEP_MBEDTLS_CONFIG_H").unwrap();
-                        let config_path = Path::new(&config_h);
-                        let out_include = Path::new(&out_dir).join("include");
-                        std::fs::create_dir_all(out_include.join("mbedtls")).unwrap();
-                        std::fs::copy(config_path, out_include.join("mbedtls").join("config.h")).unwrap();
-                        let mbedtls_library_path = config_path.parent().unwrap().join("build").join("library");
-                        println!("cargo:warning={}", mbedtls_library_path.to_str().unwrap());
-                        build_config.env(
-                            "MbedTLS_CFLAGS",
-                            format!(
-                                "-I{} -I{}",
-                                out_include.to_str().unwrap(),
-                                mbedtls_include.to_str().unwrap()
-                            ),
-                        );
-                        build_config.env(
-                            "MbedTLS_LIBS",
-                            format!(
-                                "-L{0} -l:libmbedtls.a -l:libmbedcrypto.a -l:libmbedx509.a",
-                                mbedtls_library_path.to_str().unwrap(),
-                            ),
-                        );
-                    }
-                },
-                DtlsBackend::GnuTls => {
-                    // Vendoring not supported
-                },
-            }
-        } else {
-            build_config.disable("dtls", None);
-        }
-        build_config
-            // Set Makeflags
-            //.make_args(make_flags)
-            // Disable shared library compilation because the vendored library will always be
-            // statically linked
-            .disable("shared", None)
-            // Disable any documentation for vendored C library
-            .disable("documentation", None)
-            .disable("doxygen", None)
-            .disable("manpages", None)
-            // This would install the license into the documentation directory, but we don't use the
-            // generated documentation anywhere.
-            .disable("license-install", None)
-            // Disable tests and examples as well as test coverage
-            .disable("tests", None)
-            .disable("examples", None)
-            .disable("gcov", None)
-            // TODO allow multithreaded access
-            .disable("thread-safe", None);
-
-        // Enable debug symbols if enabled in Rust
-        match std::env::var_os("DEBUG").unwrap().to_str().unwrap() {
-            "0" | "false" => {},
-            _ => {
-                build_config.with("debug", None);
-            },
-        }
-
-        // Enable dependency features based on selected cargo features.
-        build_config
-            .enable("async", Some(if cfg!(feature = "async") { "yes" } else { "no" }))
-            .enable("tcp", Some(if cfg!(feature = "tcp") { "yes" } else { "no" }))
-            .enable("server-mode", Some(if cfg!(feature = "server") { "yes" } else { "no" }))
-            .enable("client-mode", Some(if cfg!(feature = "client") { "yes" } else { "no" }))
-            .with("epoll", Some(if cfg!(feature = "epoll") { "yes" } else { "no" }));
-
-        // Run build
-        let dst = build_config.build();
-
-        std::fs::copy(
-            dst.join("build").join("coap_config.h"),
-            dst.join("include").join("coap_config.h"),
-        )
-        .unwrap();
-
-        // Add the built library to the search path
-        println!("cargo:rustc-link-search=native={}", dst.join("lib").to_str().unwrap());
-        println!("cargo:include={}", dst.join("include").to_str().unwrap());
-        bindgen_builder = bindgen_builder
-            .clang_arg(format!("-I{}", dst.join("include").to_str().unwrap()))
-            .clang_arg(format!("-L{}", dst.join("lib").to_str().unwrap()));
-        unsafe {
-            env::set_var(
-                "PKG_CONFIG_PATH",
-                format!(
-                    "{}:{}",
-                    dst.join("lib").join("pkgconfig").to_str().unwrap(),
-                    orig_pkg_config.as_ref().map(String::clone).unwrap_or_else(String::new)
-                ),
-            );
-        }
-        env::set_current_dir(current_dir_backup).expect("unable to switch back to source dir");
-    }
+        bindgen_builder = build_vendored_library(&out_dir, dtls_backend.as_ref(), bindgen_builder);
+    };
 
     if target_os.as_str() != "espidf" {
         // Tell cargo to link libcoap.
@@ -546,15 +590,10 @@ fn main() {
         // start of the file.
         bindgen_builder = bindgen_builder.parse_callbacks(Box::new(bindgen::CargoCallbacks));
     }
-    let bindings = bindgen_builder.generate().unwrap();
+    let bindings = bindgen_builder.generate().expect("unable to generate bindings");
 
     let out_path = PathBuf::from(out_dir);
-    bindings.write_to_file(out_path.join("bindings.rs")).unwrap();
-
-    unsafe {
-        match orig_pkg_config.as_ref() {
-            Some(value) => env::set_var("PKG_CONFIG_PATH", value),
-            None => env::remove_var("PKG_CONFIG_PATH"),
-        }
-    }
+    bindings
+        .write_to_file(out_path.join("bindings.rs"))
+        .expect("unable to write generated bindings to file");
 }
