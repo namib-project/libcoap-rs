@@ -258,7 +258,7 @@ pub enum CoapContentFormat {
     AceCbor = COAP_MEDIATYPE_APPLICATION_ACE_CBOR as u16,
     CoapGroupJson = COAP_MEDIATYPE_APPLICATION_COAP_GROUP_JSON as u16,
     MbCborSeq = COAP_MEDIATYPE_APPLICATION_MB_CBOR_SEQ as u16,
-    OsCore = COAP_MEDIATYPE_APPLICATION_OSCORE as u16,
+    Oscore = COAP_MEDIATYPE_APPLICATION_OSCORE as u16,
     Other,
 }
 
@@ -336,7 +336,7 @@ pub enum CoapRequestCode {
 }
 
 impl CoapRequestCode {
-    /// Returns the [coap_request_t](libcoap_sys::coap_request_t) corresponding to this request code.
+    /// Returns the [coap_request_t](coap_request_t) corresponding to this request code.
     ///
     /// Note that this is *not* the code that should be set inside of a [coap_pdu_t](libcoap_sys::coap_pdu_t),
     /// but a value used internally by the libcoap C library. See [to_raw_pdu_code()](CoapRequestCode::to_raw_pdu_code())
@@ -353,7 +353,7 @@ impl CoapRequestCode {
         }
     }
 
-    /// Returns the raw [coap_pdu_code_t](libcoap_sys::coap_pdu_code_t) corresponding to this
+    /// Returns the raw [coap_pdu_code_t](coap_pdu_code_t) corresponding to this
     /// request code.
     pub fn to_raw_pdu_code(self) -> coap_pdu_code_t {
         match self {
@@ -429,7 +429,7 @@ pub enum CoapResponseCode {
 }
 
 impl CoapResponseCode {
-    /// Returns the raw [coap_pdu_code_t](libcoap_sys::coap_pdu_code_t) corresponding to this
+    /// Returns the raw [coap_pdu_code_t](coap_pdu_code_t) corresponding to this
     /// request code.
     pub fn to_raw_pdu_code(self) -> coap_pdu_code_t {
         match self {
@@ -507,7 +507,7 @@ pub enum CoapMessageType {
 }
 
 impl CoapMessageType {
-    /// Returns the corresponding raw [coap_pdu_type_t](libcoap_sys::coap_pdu_type_t) instance for
+    /// Returns the corresponding raw [coap_pdu_type_t](coap_pdu_type_t) instance for
     /// this message type.
     pub fn to_raw_pdu_type(&self) -> coap_pdu_type_t {
         match self {
@@ -521,6 +521,6 @@ impl CoapMessageType {
 
 impl From<coap_pdu_type_t> for CoapMessageType {
     fn from(raw_type: coap_pdu_type_t) -> Self {
-        num_traits::FromPrimitive::from_u32(raw_type as u32).expect("unknown PDU type")
+        FromPrimitive::from_u32(raw_type as u32).expect("unknown PDU type")
     }
 }

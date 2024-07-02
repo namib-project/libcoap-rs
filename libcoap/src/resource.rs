@@ -20,23 +20,21 @@ use std::{
 use libc::c_int;
 
 use libcoap_sys::{
-    coap_delete_resource, coap_new_str_const, coap_pdu_t, coap_pdu_type_t::COAP_MESSAGE_RST,
-    coap_register_request_handler, coap_resource_get_uri_path, coap_resource_get_userdata, coap_resource_init,
-    coap_resource_notify_observers, coap_resource_set_get_observable, coap_resource_set_mode,
-    coap_resource_set_userdata, coap_resource_t, coap_send_rst, coap_session_t, coap_string_t,
-    COAP_RESOURCE_FLAGS_NOTIFY_CON, COAP_RESOURCE_FLAGS_NOTIFY_NON, COAP_RESOURCE_FLAGS_RELEASE_URI,
+    coap_delete_resource, coap_new_str_const, coap_pdu_t, coap_register_request_handler, COAP_RESOURCE_FLAGS_NOTIFY_CON,
+    COAP_RESOURCE_FLAGS_NOTIFY_NON, COAP_RESOURCE_FLAGS_RELEASE_URI, coap_resource_get_uri_path, coap_resource_get_userdata,
+    coap_resource_init, coap_resource_notify_observers, coap_resource_set_get_observable, coap_resource_set_mode, coap_resource_set_userdata, coap_resource_t,
+    coap_send_rst, coap_session_t, coap_string_t,
 };
 
+use crate::{error::MessageConversionError, message::CoapMessage, protocol::CoapRequestCode};
 use crate::mem::{CoapFfiRcCell, DropInnerExclusively};
+use crate::message::CoapMessageCommon;
 use crate::message::request::CoapRequest;
 use crate::message::response::CoapResponse;
-use crate::message::CoapMessageCommon;
 use crate::protocol::CoapMessageCode;
 use crate::protocol::CoapMessageType;
-
 use crate::session::CoapServerSession;
 use crate::session::CoapSessionCommon;
-use crate::{error::MessageConversionError, message::CoapMessage, protocol::CoapRequestCode};
 
 // Trait aliases are experimental
 //trait CoapMethodHandlerFn<D> = FnMut(&D, &mut CoapSession, &CoapRequestMessage, &mut CoapResponseMessage);

@@ -60,7 +60,8 @@ impl<D> CoapFfiRcCell<D> {
     pub unsafe fn clone_raw_rc(ptr: *mut c_void) -> CoapFfiRcCell<D> {
         let orig_ref = Rc::from_raw(ptr as *const RefCell<D>);
         let new_ref = Rc::clone(&orig_ref);
-        Rc::into_raw(orig_ref);
+        // Pointer should not have changed, so we don't need to use the returned value.
+        let _ = Rc::into_raw(orig_ref);
         CoapFfiRcCell(new_ref)
     }
 

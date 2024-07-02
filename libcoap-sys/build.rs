@@ -16,7 +16,7 @@ use std::{
 };
 use std::cell::RefCell;
 use std::ffi::OsString;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
 use bindgen::callbacks::{IntKind, ParseCallbacks};
 use bindgen::EnumVariation;
@@ -34,6 +34,8 @@ impl ParseCallbacks for CoapConfigMacroParser {
     }
 
     fn str_macro(&self, name: &str, value: &[u8]) {
+        // Will allow this here, as we might want to add additional cfg flags later on.
+        #[allow(clippy::single_match)]
         match name {
             "PACKAGE_VERSION" => {
                 let version_str = String::from_utf8_lossy(value);
@@ -57,15 +59,16 @@ pub enum DtlsBackend {
     MbedTls,
     TinyDtls,
 }
-impl ToString for DtlsBackend {
-    fn to_string(&self) -> String {
-        match self {
+impl Display for DtlsBackend {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
             DtlsBackend::GnuTls => "gnutls",
             DtlsBackend::OpenSsl => "openssl",
             DtlsBackend::MbedTls => "mbedtls",
             DtlsBackend::TinyDtls => "tinydtls",
         }
-        .to_string()
+        .to_string();
+        write!(f, "{}", str)
     }
 }
 
@@ -89,9 +92,6 @@ fn get_builder_espidf() -> bindgen::Builder {
     let esp_include_path = embuild::espidf::sysenv::cincl_args().expect("missing IDF cincl args");
     let embuild_env = embuild::espidf::sysenv::env_path().expect("missing IDF env path");
     let esp_arch = env::var("CARGO_CFG_TARGET_ARCH").expect("CARGO_CFG_TARGET_ARCH is not set");
-    let cfg_flags = embuild::espidf::sysenv::cfg_args()
-        .ok_or("missing cfg flags from IDF")
-        .unwrap();
 
     // Determine compiler path
     unsafe { env::set_var("PATH", embuild_env) };
@@ -145,27 +145,7 @@ fn get_builder_espidf() -> bindgen::Builder {
     } else {
         esp_arch.as_str()
     };
-    let target_mcu = if cfg_flags.get("esp32").is_some() {
-        "esp32"
-    } else if cfg_flags.get("esp32s2").is_some() {
-        "esp32s2"
-    } else if cfg_flags.get("esp32s3").is_some() {
-        "esp32s3"
-    } else if cfg_flags.get("esp32c3").is_some() {
-        "esp32c3"
-    } else if cfg_flags.get("esp32c2").is_some() {
-        "esp32c2"
-    } else if cfg_flags.get("esp32h2").is_some() {
-        "esp32h2"
-    } else if cfg_flags.get("esp32c5").is_some() {
-        "esp32c5"
-    } else if cfg_flags.get("esp32c6").is_some() {
-        "esp32c6"
-    } else if cfg_flags.get("esp32p4").is_some() {
-        "esp32p4"
-    } else {
-        panic!("unknown ESP target MCU, please add target to libcoap-sys build.rs file!")
-    };
+    let target_mcu = get_target_mcu();
 
     bindgen_builder
         .clang_args(&esp_clang_args)
@@ -246,7 +226,7 @@ fn build_vendored_library(
         .status()
         .expect("unable to execute autogen.sh");
     let mut build_config = autotools::Config::new(&libcoap_src_dir);
-    build_config.out_dir(&out_dir);
+    build_config.out_dir(out_dir);
     if let Some(dtls_backend) = dtls_backend {
         build_config
             .enable("dtls", None)
@@ -370,8 +350,6 @@ fn build_vendored_library(
         build_config.disable("dtls", None);
     }
     build_config
-        // Set Makeflags
-        //.make_args(make_flags)
         // Disable shared library compilation because the vendored library will always be
         // statically linked
         .disable("shared", None)

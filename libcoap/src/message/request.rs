@@ -514,7 +514,7 @@ impl CoapRequest {
                 CoapOption::RTag(_) => {},
                 // OSCORE is currently not supported, and even if it should probably be handled by
                 // libcoap, so I'm unsure whether we have to expose this.
-                CoapOption::Oscore(v) => {},
+                CoapOption::Oscore(_v) => {},
                 // TODO maybe we can save some copies here if we use into_iter for the options instead.
                 CoapOption::Other(n, v) => {
                     additional_opts.push(CoapOption::Other(*n, v.clone()));
