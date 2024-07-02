@@ -18,8 +18,8 @@ use std::cell::RefCell;
 use std::ffi::OsString;
 use std::fmt::Debug;
 
-use bindgen::{Builder, EnumVariation};
 use bindgen::callbacks::{IntKind, ParseCallbacks};
+use bindgen::EnumVariation;
 use pkg_config::probe_library;
 use version_compare::{Cmp, Version};
 
@@ -69,16 +69,25 @@ impl ToString for DtlsBackend {
     }
 }
 
+fn get_target_mcu() -> &'static str {
+    let cfg_flags = embuild::espidf::sysenv::cfg_args().expect("missing cfg flags from IDF");
+    let mcus = [
+        "esp32", "esp32s2", "esp32s3", "esp32c3", "esp32c2", "esp32h2", "esp32c5", "esp32c6", "esp32p4",
+    ];
+    for mcu in mcus {
+        if cfg_flags.get(mcu).is_some() {
+            return mcu;
+        }
+    }
+    panic!("unknown ESP target MCU, please add target to libcoap-sys build.rs file!")
+}
+
 fn get_builder_espidf() -> bindgen::Builder {
     embuild::espidf::sysenv::output();
-    let esp_idf_path = embuild::espidf::sysenv::idf_path().ok_or("missing IDF path").unwrap();
+    let esp_idf_path = embuild::espidf::sysenv::idf_path().expect("missing IDF path");
     let esp_idf_buildroot = env::var("DEP_ESP_IDF_ROOT").expect("DEP_ESP_IDF_ROOT is not set");
-    let esp_include_path = embuild::espidf::sysenv::cincl_args()
-        .ok_or("missing IDF cincl args")
-        .unwrap();
-    let embuild_env = embuild::espidf::sysenv::env_path()
-        .ok_or("missing IDF env path")
-        .unwrap();
+    let esp_include_path = embuild::espidf::sysenv::cincl_args().expect("missing IDF cincl args");
+    let embuild_env = embuild::espidf::sysenv::env_path().expect("missing IDF env path");
     let esp_arch = env::var("CARGO_CFG_TARGET_ARCH").expect("CARGO_CFG_TARGET_ARCH is not set");
     let cfg_flags = embuild::espidf::sysenv::cfg_args()
         .ok_or("missing cfg flags from IDF")
@@ -205,7 +214,11 @@ fn get_builder() -> bindgen::Builder {
     bindgen::Builder::default().blocklist_type("epoll_event")
 }
 
-fn build_vendored_library(out_dir: &OsString, dtls_backend: Option<&DtlsBackend>, mut builder: Builder) -> Builder {
+fn build_vendored_library(
+    out_dir: &OsString,
+    dtls_backend: Option<&DtlsBackend>,
+    mut builder: bindgen::Builder,
+) -> bindgen::Builder {
     let libcoap_src_dir = Path::new(&out_dir).join("libcoap");
 
     // Even though libcoap supports out-of-source builds, autogen.sh (or the corresponding

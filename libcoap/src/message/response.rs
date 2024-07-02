@@ -7,12 +7,15 @@
  * See the README as well as the LICENSE file for more information.
  */
 
-use crate::error::{MessageConversionError, MessageTypeError, OptionValueError};
-use crate::message::{CoapMessage, CoapMessageCommon, CoapOption};
-use crate::protocol::{CoapMessageCode, CoapMessageType, CoapOptionType, CoapResponseCode, ContentFormat, Echo, ETag, MaxAge, Observe};
-use crate::types::CoapUri;
 use std::fmt::Display;
 use std::fmt::Formatter;
+
+use crate::error::{MessageConversionError, MessageTypeError, OptionValueError};
+use crate::message::{CoapMessage, CoapMessageCommon, CoapOption};
+use crate::protocol::{
+    CoapMessageCode, CoapMessageType, CoapOptionType, CoapResponseCode, ContentFormat, Echo, ETag, MaxAge, Observe,
+};
+use crate::types::CoapUri;
 
 /// Internal representation of a CoAP URI that can be used as a response location.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -151,7 +154,7 @@ impl CoapResponse {
     ///
     /// This option can be used by servers to ensure that a request is recent.
     ///
-    /// The client should include the provided request in its response.
+    /// The client should include the provided option value in its next request.
     ///
     /// As handling echo options on the client side is done automatically by libcoap, this option
     /// is not accessible in [CoapRequest], see `man coap_send` for more information.
@@ -350,11 +353,9 @@ impl CoapResponse {
                         CoapOptionType::NoResponse,
                     ));
                 },
-                CoapOption::Other(n, v) => additional_opts.push(CoapOption::Other(*n, v.clone())),
 
                 // Handling of echo options is automatically done by libcoap (see man coap_send)
                 CoapOption::Echo(v) => {
-
                     if echo.is_some() {
                         return Err(MessageConversionError::NonRepeatableOptionRepeated(
                             CoapOptionType::Echo,
@@ -367,7 +368,8 @@ impl CoapResponse {
                 CoapOption::RTag(_) => {},
                 // OSCORE is currently not supported, and even if it should probably be handled by
                 // libcoap, so I'm unsure whether we have to expose this.
-                CoapOption::OsCore(_) => {},
+                CoapOption::Oscore(_) => {},
+                CoapOption::Other(n, v) => additional_opts.push(CoapOption::Other(*n, v.clone())),
             }
         }
         let location = if location_path.is_some() || location_query.is_some() {

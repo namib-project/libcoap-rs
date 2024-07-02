@@ -9,7 +9,6 @@
 
 //! Types required for conversion between libcoap C library abstractions and Rust types.
 
-use std::fmt::{Display, Formatter};
 use std::{
     convert::Infallible,
     fmt::Debug,
@@ -20,8 +19,9 @@ use std::{
     str::FromStr,
     vec::Drain,
 };
+use std::fmt::{Display, Formatter};
 
-use libc::{c_ushort, in6_addr, in_addr, sa_family_t, sockaddr_in, sockaddr_in6, socklen_t, AF_INET, AF_INET6};
+use libc::{AF_INET, AF_INET6, c_ushort, in6_addr, in_addr, sa_family_t, sockaddr_in, sockaddr_in6, socklen_t};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 use url::{Host, Url};
@@ -29,12 +29,12 @@ use url::{Host, Url};
 use libcoap_sys::{
     coap_address_t, coap_mid_t, coap_proto_t,
     coap_proto_t::{COAP_PROTO_DTLS, COAP_PROTO_NONE, COAP_PROTO_TCP, COAP_PROTO_TLS, COAP_PROTO_UDP},
+    COAP_URI_SCHEME_SECURE_MASK,
     coap_uri_scheme_t,
     coap_uri_scheme_t::{
-        COAP_URI_SCHEME_COAP, COAP_URI_SCHEME_COAPS, COAP_URI_SCHEME_COAPS_TCP, COAP_URI_SCHEME_COAP_TCP,
+        COAP_URI_SCHEME_COAP, COAP_URI_SCHEME_COAP_TCP, COAP_URI_SCHEME_COAPS, COAP_URI_SCHEME_COAPS_TCP,
         COAP_URI_SCHEME_HTTP, COAP_URI_SCHEME_HTTPS,
     },
-    COAP_URI_SCHEME_SECURE_MASK,
 };
 
 use crate::error::UriParsingError;
@@ -136,7 +136,7 @@ impl From<SocketAddr> for CoapAddress {
                             target_os = "haiku",
                             target_os = "hurd",
                             target_os = "espidf",
-                        ))]                            
+                        ))]
                         sin_len: (std::mem::size_of::<sockaddr_in>() as u8),
                         sin_family: AF_INET as sa_family_t,
                         sin_port: addr.port().to_be(),
@@ -144,7 +144,7 @@ impl From<SocketAddr> for CoapAddress {
                             s_addr: u32::from_ne_bytes(addr.ip().octets()),
                         },
                         sin_zero: Default::default(),
-                    };                    
+                    };
                     CoapAddress(coap_addr)
                 }
             },
@@ -157,7 +157,7 @@ impl From<SocketAddr> for CoapAddress {
                         size: std::mem::size_of::<sockaddr_in6>() as socklen_t,
                         addr: std::mem::zeroed(),
                     };
-                    
+
                     *coap_addr.addr.sin6.as_mut() = sockaddr_in6 {
                         #[cfg(any(
                             bsd,
@@ -165,7 +165,7 @@ impl From<SocketAddr> for CoapAddress {
                             target_os = "haiku",
                             target_os = "hurd",
                             target_os = "espidf",
-                        ))]                        
+                        ))]
                         sin6_len: (std::mem::size_of::<sockaddr_in6>() as u8),
                         sin6_family: AF_INET6 as sa_family_t,
                         sin6_port: addr.port().to_be(),
@@ -175,7 +175,7 @@ impl From<SocketAddr> for CoapAddress {
                         sin6_flowinfo: addr.flowinfo(),
                         sin6_scope_id: addr.scope_id(),
                     };
-                    
+
                     CoapAddress(coap_addr)
                 }
             },
@@ -503,7 +503,6 @@ pub(crate) fn encode_var_len_u16(val: u16) -> Box<[u8]> {
     ret_val.into_boxed_slice()
 }
 
-// Kept for consistency
 pub(crate) fn decode_var_len_u8(val: &[u8]) -> u16 {
     u16::from_be_bytes(
         convert_to_fixed_size_slice(1, val)[..1]

@@ -153,7 +153,6 @@ pub trait CoapEventHandler: Debug {
     fn handle_ws_packet_size(&mut self, session: &mut CoapSession) {}
 
     /// Handle a WebSocket layer up event.
-
     #[allow(unused_variables)]
     fn handle_ws_connected(&mut self, session: &mut CoapSession) {}
 
@@ -161,7 +160,6 @@ pub trait CoapEventHandler: Debug {
 
     #[allow(unused_variables)]
     fn handle_ws_closed(&mut self, session: &mut CoapSession) {}
-
 
     /// Handle a failure to perform a keepalive (no response to keepalive packet)
     #[allow(unused_variables)]
