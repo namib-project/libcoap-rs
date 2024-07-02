@@ -11,19 +11,19 @@ use std::cell::{Ref, RefMut};
 use std::net::SocketAddr;
 
 use libcoap_sys::{
-    coap_bin_const_t, coap_dtls_cpsk_info_t, coap_dtls_cpsk_t, coap_new_client_session, coap_new_client_session_psk2,
-    coap_proto_t, coap_register_event_handler, coap_session_get_app_data, coap_session_get_context,
-    coap_session_get_type, coap_session_release, coap_session_set_app_data, coap_session_t, coap_session_type_t,
-    COAP_DTLS_SPSK_SETUP_VERSION,
+    coap_bin_const_t, coap_dtls_cpsk_info_t, coap_dtls_cpsk_t, COAP_DTLS_SPSK_SETUP_VERSION, coap_new_client_session,
+    coap_new_client_session_psk2, coap_proto_t, coap_register_event_handler, coap_session_get_app_data,
+    coap_session_get_context, coap_session_get_type, coap_session_release, coap_session_set_app_data, coap_session_t,
+    coap_session_type_t,
 };
 
+use crate::{context::CoapContext, error::SessionCreationError, types::CoapAddress};
 #[cfg(feature = "dtls")]
-use crate::crypto::{
-    dtls_ih_callback, CoapClientCryptoProvider, CoapCryptoProviderResponse, CoapCryptoPskIdentity, CoapCryptoPskInfo,
-};
+use crate::crypto::{CoapClientCryptoProvider, CoapCryptoProviderResponse, CoapCryptoPskIdentity, CoapCryptoPskInfo};
+#[cfg(not(feature = "dtls_mbedtls"))]
+use crate::crypto::dtls_ih_callback;
 use crate::event::event_handler_callback;
 use crate::mem::{CoapFfiRcCell, DropInnerExclusively};
-use crate::{context::CoapContext, error::SessionCreationError, types::CoapAddress};
 
 use super::{CoapSessionCommon, CoapSessionInner, CoapSessionInnerProvider};
 
@@ -145,7 +145,6 @@ impl CoapClientSession<'_> {
             )
         })
     }
-
 
     /// Create a new unencrypted session with the given peer over TCP.
     ///

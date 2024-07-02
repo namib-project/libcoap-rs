@@ -15,22 +15,26 @@ repository = "https://github.com/namib-project/libcoap-rs"
 authors = ["Hugo Hakim Damer <hdamer@uni-bremen.de>"]
 categories = ["api-bindings", "network-programming", "embedded"]
 keywords = ["coap", "libcoap"]
+resolver = "2"
 
 [features]
 default = ["dtls", "tcp", "dtls_openssl"]
 dtls = ["libcoap-sys/dtls"]
 dtls_tinydtls = ["libcoap-sys/dtls_backend_tinydtls"]
+dtls_tinydtls_vendored = ["dtls_tinydtls", "libcoap-sys/dtls_backend_tinydtls_vendored"]
 dtls_openssl = ["libcoap-sys/dtls_backend_openssl"]
+dtls_openssl_vendored = ["dtls_openssl", "libcoap-sys/dtls_backend_openssl_vendored"]
 dtls_gnutls = ["libcoap-sys/dtls_backend_gnutls"]
 dtls_mbedtls = ["libcoap-sys/dtls_backend_mbedtls"]
-tcp = []
+dtls_mbedtls_vendored = ["dtls_mbedtls", "libcoap-sys/dtls_backend_mbedtls_vendored"]
+tcp = ["libcoap-sys/tcp"]
 nightly = []
 vendored = ["libcoap-sys/vendored"]
 
 [dependencies]
-libcoap-sys = { version = "^0.2.2", path = "../libcoap-sys" }
+libcoap-sys = { version = "^0.2.2", path = "../libcoap-sys", default-features = false, features = ["client", "server"] }
 libc = { version = "^0.2.95" }
-num-derive = { version = "^0.3.3" }
+num-derive = { version = "^0.3.3" } 
 num-traits = { version = "^0.2.14" }
 url = { version = "^2.2" }
 rand = { version = "^0.8.4" }

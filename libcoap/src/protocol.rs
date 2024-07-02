@@ -18,23 +18,26 @@ use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 
 use libcoap_sys::{
-    coap_option_num_t, coap_pdu_code_t, coap_pdu_type_t,
-    coap_pdu_type_t::{COAP_MESSAGE_ACK, COAP_MESSAGE_CON, COAP_MESSAGE_NON, COAP_MESSAGE_RST},
-    coap_request_t, coap_response_phrase, COAP_MEDIATYPE_ANY, COAP_MEDIATYPE_APPLICATION_CBOR,
-    COAP_MEDIATYPE_APPLICATION_COSE_ENCRYPT, COAP_MEDIATYPE_APPLICATION_COSE_ENCRYPT0,
-    COAP_MEDIATYPE_APPLICATION_COSE_KEY, COAP_MEDIATYPE_APPLICATION_COSE_KEY_SET, COAP_MEDIATYPE_APPLICATION_COSE_MAC,
-    COAP_MEDIATYPE_APPLICATION_COSE_MAC0, COAP_MEDIATYPE_APPLICATION_COSE_SIGN, COAP_MEDIATYPE_APPLICATION_COSE_SIGN1,
-    COAP_MEDIATYPE_APPLICATION_CWT, COAP_MEDIATYPE_APPLICATION_DOTS_CBOR, COAP_MEDIATYPE_APPLICATION_EXI,
-    COAP_MEDIATYPE_APPLICATION_JSON, COAP_MEDIATYPE_APPLICATION_LINK_FORMAT, COAP_MEDIATYPE_APPLICATION_OCTET_STREAM,
-    COAP_MEDIATYPE_APPLICATION_RDF_XML, COAP_MEDIATYPE_APPLICATION_SENML_CBOR, COAP_MEDIATYPE_APPLICATION_SENML_EXI,
-    COAP_MEDIATYPE_APPLICATION_SENML_JSON, COAP_MEDIATYPE_APPLICATION_SENML_XML,
-    COAP_MEDIATYPE_APPLICATION_SENSML_CBOR, COAP_MEDIATYPE_APPLICATION_SENSML_EXI,
+    COAP_MEDIATYPE_APPLICATION_ACE_CBOR, COAP_MEDIATYPE_APPLICATION_CBOR, COAP_MEDIATYPE_APPLICATION_COAP_GROUP_JSON,
+    COAP_MEDIATYPE_APPLICATION_COSE_ENCRYPT,
+    COAP_MEDIATYPE_APPLICATION_COSE_ENCRYPT0, COAP_MEDIATYPE_APPLICATION_COSE_KEY, COAP_MEDIATYPE_APPLICATION_COSE_KEY_SET, COAP_MEDIATYPE_APPLICATION_COSE_MAC,
+    COAP_MEDIATYPE_APPLICATION_COSE_MAC0, COAP_MEDIATYPE_APPLICATION_COSE_SIGN,
+    COAP_MEDIATYPE_APPLICATION_COSE_SIGN1, COAP_MEDIATYPE_APPLICATION_CWT,
+    COAP_MEDIATYPE_APPLICATION_DOTS_CBOR, COAP_MEDIATYPE_APPLICATION_EXI, COAP_MEDIATYPE_APPLICATION_JSON,
+    COAP_MEDIATYPE_APPLICATION_LINK_FORMAT, COAP_MEDIATYPE_APPLICATION_MB_CBOR_SEQ, COAP_MEDIATYPE_APPLICATION_OCTET_STREAM,
+    COAP_MEDIATYPE_APPLICATION_OSCORE, COAP_MEDIATYPE_APPLICATION_RDF_XML, COAP_MEDIATYPE_APPLICATION_SENML_CBOR,
+    COAP_MEDIATYPE_APPLICATION_SENML_EXI, COAP_MEDIATYPE_APPLICATION_SENML_JSON,
+    COAP_MEDIATYPE_APPLICATION_SENML_XML, COAP_MEDIATYPE_APPLICATION_SENSML_CBOR, COAP_MEDIATYPE_APPLICATION_SENSML_EXI,
     COAP_MEDIATYPE_APPLICATION_SENSML_JSON, COAP_MEDIATYPE_APPLICATION_SENSML_XML, COAP_MEDIATYPE_APPLICATION_XML,
-    COAP_MEDIATYPE_TEXT_PLAIN, COAP_OPTION_ACCEPT, COAP_OPTION_BLOCK1, COAP_OPTION_BLOCK2, COAP_OPTION_CONTENT_FORMAT,
-    COAP_OPTION_ETAG, COAP_OPTION_HOP_LIMIT, COAP_OPTION_IF_MATCH, COAP_OPTION_IF_NONE_MATCH,
-    COAP_OPTION_LOCATION_PATH, COAP_OPTION_LOCATION_QUERY, COAP_OPTION_MAXAGE, COAP_OPTION_NORESPONSE,
-    COAP_OPTION_OBSERVE, COAP_OPTION_PROXY_SCHEME, COAP_OPTION_PROXY_URI, COAP_OPTION_SIZE1, COAP_OPTION_SIZE2,
-    COAP_OPTION_URI_HOST, COAP_OPTION_URI_PATH, COAP_OPTION_URI_PORT, COAP_OPTION_URI_QUERY,
+    COAP_MEDIATYPE_TEXT_PLAIN, COAP_OPTION_ACCEPT,
+    COAP_OPTION_BLOCK1, COAP_OPTION_BLOCK2,
+    COAP_OPTION_CONTENT_FORMAT, COAP_OPTION_ECHO, COAP_OPTION_ETAG,
+    COAP_OPTION_HOP_LIMIT, COAP_OPTION_IF_MATCH, COAP_OPTION_IF_NONE_MATCH, COAP_OPTION_LOCATION_PATH, COAP_OPTION_LOCATION_QUERY,
+    COAP_OPTION_MAXAGE, COAP_OPTION_NORESPONSE, coap_option_num_t, COAP_OPTION_OBSERVE,
+    COAP_OPTION_OSCORE, COAP_OPTION_PROXY_SCHEME, COAP_OPTION_PROXY_URI, COAP_OPTION_Q_BLOCK1,
+    COAP_OPTION_Q_BLOCK2, COAP_OPTION_RTAG, COAP_OPTION_SIZE1, COAP_OPTION_SIZE2, COAP_OPTION_URI_HOST,
+    COAP_OPTION_URI_PATH, COAP_OPTION_URI_PORT, COAP_OPTION_URI_QUERY, coap_pdu_code_t, coap_pdu_type_t,
+    coap_pdu_type_t::{COAP_MESSAGE_ACK, COAP_MESSAGE_CON, COAP_MESSAGE_NON, COAP_MESSAGE_RST}, coap_request_t, coap_response_phrase,
 };
 
 use crate::error::{MessageCodeError, UnknownOptionError};
@@ -55,6 +58,10 @@ pub type Block = u32;
 pub type HopLimit = u16;
 pub type NoResponse = u8;
 pub type Observe = u32;
+// TODO actually parse this option (for OSCORE support)
+pub type Oscore = Box<[u8]>;
+pub type Echo = Box<[u8]>;
+pub type RequestTag = Box<[u8]>;
 
 pub type CoapOptionNum = coap_option_num_t;
 pub type CoapToken = Box<[u8]>;
@@ -87,10 +94,14 @@ pub enum CoapOptionType {
     ETag = COAP_OPTION_ETAG as u16,
     /// If-None-Match option ([RFC 7252, Section 5.10.8.2](https://datatracker.ietf.org/doc/html/rfc7252#section-5.10.8.2)).
     IfNoneMatch = COAP_OPTION_IF_NONE_MATCH as u16,
+    /// Observe option ([RFC 7641, Section 2](https://datatracker.ietf.org/doc/html/rfc7641#section-2)).
+    Observe = COAP_OPTION_OBSERVE as u16,
     /// Uri-Port option ([RFC 7252, Section 5.10.1](https://datatracker.ietf.org/doc/html/rfc7252#section-5.10.1)).
     UriPort = COAP_OPTION_URI_PORT as u16,
     /// Location-Path option ([RFC 7252, Section 5.10.7](https://datatracker.ietf.org/doc/html/rfc7252#section-5.10.7)).
     LocationPath = COAP_OPTION_LOCATION_PATH as u16,
+    /// OSCORE option ([RFC 8613, Section 2](https://datatracker.ietf.org/doc/html/rfc8613#section-2).
+    Oscore = COAP_OPTION_OSCORE as u16,
     /// Uri-Path option ([RFC 7252, Section 5.10.1](https://datatracker.ietf.org/doc/html/rfc7252#section-5.10.1)).
     UriPath = COAP_OPTION_URI_PATH as u16,
     /// Content-Format option ([RFC 7252, Section 5.10.3](https://datatracker.ietf.org/doc/html/rfc7252#section-5.10.3)).
@@ -99,30 +110,34 @@ pub enum CoapOptionType {
     MaxAge = COAP_OPTION_MAXAGE as u16,
     /// Uri-Query option ([RFC 7252, Section 5.10.1](https://datatracker.ietf.org/doc/html/rfc7252#section-5.10.1)).
     UriQuery = COAP_OPTION_URI_QUERY as u16,
+    /// Hop-Limit option ([RFC 8768, Section 3](https://datatracker.ietf.org/doc/html/rfc8768#section-3)).
+    HopLimit = COAP_OPTION_HOP_LIMIT as u16,
     /// Accept option ([RFC 7252, Section 5.10.4](https://datatracker.ietf.org/doc/html/rfc7252#section-5.10.4)).
     Accept = COAP_OPTION_ACCEPT as u16,
+    /// Q-Block1 option ([RFC 9177, Section 4](https://datatracker.ietf.org/doc/html/rfc9177#section-4)).
+    QBlock1 = COAP_OPTION_Q_BLOCK1 as u16,
     /// Location-Query option ([RFC 7252, Section 5.10.7](https://datatracker.ietf.org/doc/html/rfc7252#section-5.10.7)).
     LocationQuery = COAP_OPTION_LOCATION_QUERY as u16,
+    /// Block2 option ([RFC 7959, Section 2.1](https://datatracker.ietf.org/doc/html/rfc7959#section-2.1)).
+    Block2 = COAP_OPTION_BLOCK2 as u16,
+    /// Block1 option ([RFC 7959, Section 2.1](https://datatracker.ietf.org/doc/html/rfc7959#section-2.1)).
+    Block1 = COAP_OPTION_BLOCK1 as u16,
+    /// Size2 option ([RFC 7959, Section 4](https://datatracker.ietf.org/doc/html/rfc7959#section-4)).
+    Size2 = COAP_OPTION_SIZE2 as u16,
+    /// Q-Block2 option ([RFC 9177, Section 4](https://datatracker.ietf.org/doc/html/rfc9177#section-4)).
+    QBlock2 = COAP_OPTION_Q_BLOCK2 as u16,
     /// Proxy-Uri option ([RFC 7252, Section 5.10.2](https://datatracker.ietf.org/doc/html/rfc7252#section-5.10.2)).
     ProxyUri = COAP_OPTION_PROXY_URI as u16,
     /// Proxy-Scheme option ([RFC 7252, Section 5.10.2](https://datatracker.ietf.org/doc/html/rfc7252#section-5.10.2)).
     ProxyScheme = COAP_OPTION_PROXY_SCHEME as u16,
     /// Size1 option ([RFC 7959, Section 4](https://datatracker.ietf.org/doc/html/rfc7959#section-4)).
     Size1 = COAP_OPTION_SIZE1 as u16,
-    /// Size2 option ([RFC 7959, Section 4](https://datatracker.ietf.org/doc/html/rfc7959#section-4)).
-    Size2 = COAP_OPTION_SIZE2 as u16,
-    /// Block1 option ([RFC 7959, Section 2.1](https://datatracker.ietf.org/doc/html/rfc7959#section-2.1)).
-    Block1 = COAP_OPTION_BLOCK1 as u16,
-    /// Block2 option ([RFC 7959, Section 2.1](https://datatracker.ietf.org/doc/html/rfc7959#section-2.1)).
-    Block2 = COAP_OPTION_BLOCK2 as u16,
-    /// Hop-Limit option ([RFC 8768, Section 3](https://datatracker.ietf.org/doc/html/rfc8768#section-3)).
-    HopLimit = COAP_OPTION_HOP_LIMIT as u16,
+    /// Echo option ([RFC 9175, Section 2.2](https://datatracker.ietf.org/doc/html/rfc9175#section-2.2)).
+    Echo = COAP_OPTION_ECHO as u16,
     /// No-Response option ([RFC 7967, Section 2](https://datatracker.ietf.org/doc/html/rfc7967#section-2)).
     NoResponse = COAP_OPTION_NORESPONSE as u16,
-    /// Observe option ([RFC 7641, Section 2](https://datatracker.ietf.org/doc/html/rfc7641#section-2)).
-    Observe = COAP_OPTION_OBSERVE as u16,
-    // TODO
-    //OsCore = COAP_OPTION_OSCORE as u16,
+    /// Request-Tag option ([RFC 9175, Section 3.2](https://datatracker.ietf.org/doc/html/rfc9175#section-3.2)).
+    RTag = COAP_OPTION_RTAG as u16,
 }
 
 impl CoapOptionType {
@@ -150,12 +165,16 @@ impl CoapOptionType {
             CoapOptionType::ProxyScheme => 255,
             CoapOptionType::Size1 => 4,
             CoapOptionType::Size2 => 4,
-            //CoapOptionType::OsCore => 3,
             CoapOptionType::Block1 => 3,
             CoapOptionType::Block2 => 3,
             CoapOptionType::HopLimit => 1,
             CoapOptionType::NoResponse => 1,
             CoapOptionType::Observe => 3,
+            CoapOptionType::Oscore => 255,
+            CoapOptionType::Echo => 40,
+            CoapOptionType::RTag => 8,
+            CoapOptionType::QBlock1 => 3,
+            CoapOptionType::QBlock2 => 3,
         }
     }
 
@@ -178,12 +197,16 @@ impl CoapOptionType {
             CoapOptionType::ProxyScheme => 1,
             CoapOptionType::Size1 => 0,
             CoapOptionType::Size2 => 0,
-            //CoapOptionType::OsCore => {},
             CoapOptionType::Block1 => 0,
             CoapOptionType::Block2 => 0,
             CoapOptionType::HopLimit => 1,
             CoapOptionType::NoResponse => 0,
             CoapOptionType::Observe => 0,
+            CoapOptionType::Oscore => 0,
+            CoapOptionType::Echo => 1,
+            CoapOptionType::RTag => 0,
+            CoapOptionType::QBlock1 => 0,
+            CoapOptionType::QBlock2 => 0,
         }
     }
 }
@@ -206,7 +229,6 @@ impl TryFrom<coap_option_num_t> for CoapOptionType {
 #[derive(Copy, Clone, FromPrimitive, Eq, PartialEq, Hash, Debug)]
 #[non_exhaustive]
 pub enum CoapContentFormat {
-    Any = COAP_MEDIATYPE_ANY as u16,
     Cbor = COAP_MEDIATYPE_APPLICATION_CBOR as u16,
     DotsCbor = COAP_MEDIATYPE_APPLICATION_DOTS_CBOR as u16,
     SenMlCbor = COAP_MEDIATYPE_APPLICATION_SENML_CBOR as u16,
@@ -233,6 +255,10 @@ pub enum CoapContentFormat {
     SensMlXml = COAP_MEDIATYPE_APPLICATION_SENSML_XML as u16,
     ApplicationXml = COAP_MEDIATYPE_APPLICATION_XML as u16,
     TextPlain = COAP_MEDIATYPE_TEXT_PLAIN as u16,
+    AceCbor = COAP_MEDIATYPE_APPLICATION_ACE_CBOR as u16,
+    CoapGroupJson = COAP_MEDIATYPE_APPLICATION_COAP_GROUP_JSON as u16,
+    MbCborSeq = COAP_MEDIATYPE_APPLICATION_MB_CBOR_SEQ as u16,
+    Oscore = COAP_MEDIATYPE_APPLICATION_OSCORE as u16,
     Other,
 }
 
@@ -310,7 +336,7 @@ pub enum CoapRequestCode {
 }
 
 impl CoapRequestCode {
-    /// Returns the [coap_request_t](libcoap_sys::coap_request_t) corresponding to this request code.
+    /// Returns the [coap_request_t](coap_request_t) corresponding to this request code.
     ///
     /// Note that this is *not* the code that should be set inside of a [coap_pdu_t](libcoap_sys::coap_pdu_t),
     /// but a value used internally by the libcoap C library. See [to_raw_pdu_code()](CoapRequestCode::to_raw_pdu_code())
@@ -327,7 +353,7 @@ impl CoapRequestCode {
         }
     }
 
-    /// Returns the raw [coap_pdu_code_t](libcoap_sys::coap_pdu_code_t) corresponding to this
+    /// Returns the raw [coap_pdu_code_t](coap_pdu_code_t) corresponding to this
     /// request code.
     pub fn to_raw_pdu_code(self) -> coap_pdu_code_t {
         match self {
@@ -403,7 +429,7 @@ pub enum CoapResponseCode {
 }
 
 impl CoapResponseCode {
-    /// Returns the raw [coap_pdu_code_t](libcoap_sys::coap_pdu_code_t) corresponding to this
+    /// Returns the raw [coap_pdu_code_t](coap_pdu_code_t) corresponding to this
     /// request code.
     pub fn to_raw_pdu_code(self) -> coap_pdu_code_t {
         match self {
@@ -481,7 +507,7 @@ pub enum CoapMessageType {
 }
 
 impl CoapMessageType {
-    /// Returns the corresponding raw [coap_pdu_type_t](libcoap_sys::coap_pdu_type_t) instance for
+    /// Returns the corresponding raw [coap_pdu_type_t](coap_pdu_type_t) instance for
     /// this message type.
     pub fn to_raw_pdu_type(&self) -> coap_pdu_type_t {
         match self {
@@ -495,6 +521,6 @@ impl CoapMessageType {
 
 impl From<coap_pdu_type_t> for CoapMessageType {
     fn from(raw_type: coap_pdu_type_t) -> Self {
-        num_traits::FromPrimitive::from_u32(raw_type as u32).expect("unknown PDU type")
+        FromPrimitive::from_u32(raw_type as u32).expect("unknown PDU type")
     }
 }

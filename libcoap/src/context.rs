@@ -10,39 +10,41 @@
 //! Module containing context-internal types and traits.
 
 use std::{any::Any, ffi::c_void, fmt::Debug, marker::PhantomData, net::SocketAddr, ops::Sub, time::Duration};
+use std::sync::Once;
 
 use libc::c_uint;
 
 use libcoap_sys::{
-    coap_add_resource, coap_bin_const_t, coap_can_exit, coap_context_get_csm_max_message_size,
-    coap_context_get_csm_timeout, coap_context_get_max_handshake_sessions, coap_context_get_max_idle_sessions,
-    coap_context_get_session_timeout, coap_context_set_block_mode, coap_context_set_csm_max_message_size,
-    coap_context_set_csm_timeout, coap_context_set_keepalive, coap_context_set_max_handshake_sessions,
-    coap_context_set_max_idle_sessions, coap_context_set_psk2, coap_context_set_session_timeout, coap_context_t,
-    coap_dtls_spsk_info_t, coap_dtls_spsk_t, coap_event_t, coap_free_context, coap_get_app_data, coap_io_process,
-    coap_new_context, coap_proto_t, coap_register_event_handler, coap_register_response_handler, coap_set_app_data,
-    COAP_BLOCK_SINGLE_BODY, COAP_BLOCK_USE_LIBCOAP, COAP_DTLS_SPSK_SETUP_VERSION, COAP_IO_WAIT,
+    coap_add_resource, coap_bin_const_t, COAP_BLOCK_SINGLE_BODY, COAP_BLOCK_USE_LIBCOAP,
+    coap_can_exit, coap_context_get_csm_max_message_size, coap_context_get_csm_timeout,
+    coap_context_get_max_handshake_sessions, coap_context_get_max_idle_sessions, coap_context_get_session_timeout,
+    coap_context_set_block_mode, coap_context_set_csm_max_message_size, coap_context_set_csm_timeout,
+    coap_context_set_keepalive, coap_context_set_max_handshake_sessions, coap_context_set_max_idle_sessions, coap_context_set_psk2,
+    coap_context_set_session_timeout, coap_context_t, coap_dtls_spsk_info_t, COAP_DTLS_SPSK_SETUP_VERSION, coap_dtls_spsk_t, coap_event_t,
+    coap_free_context, coap_get_app_data, coap_io_process, COAP_IO_WAIT, coap_new_context,
+    coap_proto_t, coap_register_event_handler, coap_register_response_handler, coap_set_app_data, coap_startup,
 };
 
-#[cfg(feature = "dtls")]
-use crate::crypto::{dtls_server_id_callback, dtls_server_sni_callback, CoapServerCryptoProvider};
-#[cfg(feature = "dtls")]
-use crate::crypto::{CoapCryptoProviderResponse, CoapCryptoPskIdentity, CoapCryptoPskInfo};
-use crate::event::{event_handler_callback, CoapEventHandler};
-use crate::mem::{CoapLendableFfiRcCell, CoapLendableFfiWeakCell, DropInnerExclusively};
-
-use crate::session::CoapSessionCommon;
-
-use crate::session::CoapServerSession;
-use crate::session::CoapSession;
 #[cfg(feature = "dtls")]
 use crate::{
     error::{ContextCreationError, EndpointCreationError, IoProcessError},
     resource::{CoapResource, UntypedCoapResource},
     session::session_response_handler,
 };
-
+#[cfg(feature = "dtls")]
+use crate::crypto::{CoapServerCryptoProvider, dtls_server_id_callback};
+#[cfg(feature = "dtls")]
+use crate::crypto::{CoapCryptoProviderResponse, CoapCryptoPskIdentity, CoapCryptoPskInfo};
+#[cfg(not(feature = "dtls_tinydtls"))]
+use crate::crypto::dtls_server_sni_callback;
+use crate::event::{CoapEventHandler, event_handler_callback};
+use crate::mem::{CoapLendableFfiRcCell, CoapLendableFfiWeakCell, DropInnerExclusively};
+use crate::session::CoapServerSession;
+use crate::session::CoapSession;
+use crate::session::CoapSessionCommon;
 use crate::transport::CoapEndpoint;
+
+static COAP_STARTUP_ONCE: Once = Once::new();
 
 #[derive(Debug)]
 struct CoapContextInner<'a> {
@@ -94,6 +96,12 @@ impl<'a> CoapContext<'a> {
     /// Returns an error if the underlying libcoap library was unable to create a new context
     /// (probably an allocation error?).
     pub fn new() -> Result<CoapContext<'a>, ContextCreationError> {
+        // TODO this should actually be done before calling _any_ libcoap function, not just the
+        //      context initialization. Maybe we need to make sure to call this in other places too
+        //      (e.g. if a resource is initialized before a context is created).
+        COAP_STARTUP_ONCE.call_once(|| unsafe {
+            coap_startup();
+        });
         // SAFETY: Providing null here is fine, the context will just not be bound to an endpoint
         // yet.
         let raw_context = unsafe { coap_new_context(std::ptr::null()) };
@@ -102,7 +110,16 @@ impl<'a> CoapContext<'a> {
         }
         // SAFETY: We checked that raw_context is not null.
         unsafe {
-            coap_context_set_block_mode(raw_context, (COAP_BLOCK_USE_LIBCOAP | COAP_BLOCK_SINGLE_BODY) as u8);
+            coap_context_set_block_mode(
+                raw_context,
+                // In some versions of libcoap, bindgen infers COAP_BLOCK_USE_LIBCOAP and
+                // COAP_BLOCK_SINGLE_BODY to be u32, while the function parameter is u8.
+                // Therefore, we use `try_into()` to convert to the right type, and panic if this is
+                // not possible (should never happen)
+                (COAP_BLOCK_USE_LIBCOAP | COAP_BLOCK_SINGLE_BODY)
+                    .try_into()
+                    .expect("coap_context_set_block_mode() flags have invalid type for function"),
+            );
             coap_register_response_handler(raw_context, Some(session_response_handler));
         }
         let inner = CoapLendableFfiRcCell::new(CoapContextInner {
@@ -189,6 +206,23 @@ impl<'a> CoapContext<'a> {
                         panic!("server-side session event fired for non-server-side session");
                     }
                 },
+                coap_event_t::COAP_EVENT_XMIT_BLOCK_FAIL => handler.handle_xmit_block_fail(&mut session),
+                coap_event_t::COAP_EVENT_BAD_PACKET => handler.handle_bad_packet(&mut session),
+                coap_event_t::COAP_EVENT_MSG_RETRANSMITTED => handler.handle_msg_retransmitted(&mut session),
+                coap_event_t::COAP_EVENT_OSCORE_DECRYPTION_FAILURE => {
+                    handler.handle_oscore_decryption_failure(&mut session)
+                },
+                coap_event_t::COAP_EVENT_OSCORE_NOT_ENABLED => handler.handle_oscore_not_enabled(&mut session),
+                coap_event_t::COAP_EVENT_OSCORE_NO_PROTECTED_PAYLOAD => {
+                    handler.handle_oscore_no_protected_payload(&mut session)
+                },
+                coap_event_t::COAP_EVENT_OSCORE_NO_SECURITY => handler.handle_oscore_no_security(&mut session),
+                coap_event_t::COAP_EVENT_OSCORE_INTERNAL_ERROR => handler.handle_oscore_internal_error(&mut session),
+                coap_event_t::COAP_EVENT_OSCORE_DECODE_ERROR => handler.handle_oscore_decode_error(&mut session),
+                coap_event_t::COAP_EVENT_WS_PACKET_SIZE => handler.handle_ws_packet_size(&mut session),
+                coap_event_t::COAP_EVENT_WS_CONNECTED => handler.handle_ws_connected(&mut session),
+                coap_event_t::COAP_EVENT_WS_CLOSED => handler.handle_ws_closed(&mut session),
+                coap_event_t::COAP_EVENT_KEEPALIVE_FAILURE => handler.handle_keepalive_failure(&mut session),
                 _ => {
                     // TODO probably a log message is justified here.
                 },

@@ -19,7 +19,7 @@ jobs:
       fail-fast: false
       matrix:
         crate: [libcoap-sys, libcoap-rs]
-        dtls_backend: [openssl, gnutls, tinydtls]
+        dtls_backend: [openssl, gnutls, tinydtls, mbedtls]
     steps:
       - uses: actions/checkout@v3
         with:
@@ -33,9 +33,13 @@ jobs:
         with:
           packages: libgnutls28-dev libgnutls30
           version: 1.0
-      - if: matrix.crate == 'libcoap-rs'
+      - if: matrix.crate == 'libcoap-rs' && matrix.dtls_backend != 'gnutls'
+        run: cargo test -p ${{ matrix.crate }} --no-default-features --features dtls,tcp,vendored --features dtls_${{ matrix.dtls_backend }} --features dtls_${{ matrix.dtls_backend }}_vendored --no-fail-fast -- -Z unstable-options --report-time --ensure-time
+      - if: matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'gnutls'
         run: cargo test -p ${{ matrix.crate }} --no-default-features --features dtls,tcp,vendored --features dtls_${{ matrix.dtls_backend }} --no-fail-fast -- -Z unstable-options --report-time --ensure-time
-      - if: matrix.crate == 'libcoap-sys'
+      - if: matrix.crate == 'libcoap-sys' && matrix.dtls_backend != 'gnutls'
+        run: cargo test -p ${{ matrix.crate }} --features dtls,dtls_backend_${{ matrix.dtls_backend }},dtls_backend_${{ matrix.dtls_backend }}_vendored --no-fail-fast -- -Z unstable-options --report-time --ensure-time
+      - if: matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'gnutls'
         run: cargo test -p ${{ matrix.crate }} --features dtls,dtls_backend_${{ matrix.dtls_backend }} --no-fail-fast -- -Z unstable-options --report-time --ensure-time
 
   lint:

@@ -6,6 +6,7 @@
  * Copyright © 2021-2023 The NAMIB Project Developers, all rights reserved.
  * See the README as well as the LICENSE file for more information.
  */
+ #![cfg(feature = "tcp")]
 
 use libcoap_rs::session::CoapClientSession;
 use libcoap_rs::{

@@ -84,13 +84,17 @@ pub trait CoapEventHandler: Debug {
     #[allow(unused_variables)]
     fn handle_session_failed(&mut self, session: &mut CoapSession) {}
 
-    /// Handle a (Q-)Block receive error.
+    /// Handle a partially received message.
     #[allow(unused_variables)]
     fn handle_partial_block(&mut self, session: &mut CoapSession) {}
 
+    /// Handle a failure to transmit a block.
+    #[allow(unused_variables)]
+    fn handle_xmit_block_fail(&mut self, session: &mut CoapSession) {}
+
     /// Handle the creation of a new server-side session.
     ///
-    /// This event is called inside of the IO loop when a new server-side session is created.
+    /// This event is called inside the IO loop when a new server-side session is created.
     #[allow(unused_variables)]
     fn handle_server_session_new(&mut self, session: &mut CoapServerSession) {}
 
@@ -106,9 +110,63 @@ pub trait CoapEventHandler: Debug {
     ///   [CoapContext::max_idle_sessions()] and [CoapContext::set_max_idle_sessions()])
     #[allow(unused_variables)]
     fn handle_server_session_del(&mut self, session: &mut CoapServerSession) {}
+
+    /// Handle the receival of a badly formatted packet.
+    ///
+    /// Note that this only refers to packets that can't be parsed by libcoap, i.e. valid packets
+    /// that have some semantic issues and therefore can't be parsed into a request or response
+    /// object do not trigger this event.
+    #[allow(unused_variables)]
+    fn handle_bad_packet(&mut self, session: &mut CoapSession) {}
+
+    /// Handle a retransmission event.
+    #[allow(unused_variables)]
+    fn handle_msg_retransmitted(&mut self, session: &mut CoapSession) {}
+
+    /// Handle an OSCORE decryption failure event.
+    #[allow(unused_variables)]
+    fn handle_oscore_decryption_failure(&mut self, session: &mut CoapSession) {}
+
+    /// Handle an OSCORE not enabled event.
+    #[allow(unused_variables)]
+    fn handle_oscore_not_enabled(&mut self, session: &mut CoapSession) {}
+
+    /// Handle an OSCORE no protected payload provided event.
+    #[allow(unused_variables)]
+    fn handle_oscore_no_protected_payload(&mut self, session: &mut CoapSession) {}
+
+    /// Handle an OSCORE no security definition found event.
+    #[allow(unused_variables)]
+    fn handle_oscore_no_security(&mut self, session: &mut CoapSession) {}
+
+    /// Handle an OSCORE internal error.
+    #[allow(unused_variables)]
+    fn handle_oscore_internal_error(&mut self, session: &mut CoapSession) {}
+
+    /// Handle a decoding error when parsing OSCORE options.
+    #[allow(unused_variables)]
+    fn handle_oscore_decode_error(&mut self, session: &mut CoapSession) {}
+
+
+    /// Handle an oversized WebSocket packet event.
+    #[allow(unused_variables)]
+    fn handle_ws_packet_size(&mut self, session: &mut CoapSession) {}
+
+    /// Handle a WebSocket layer up event.
+    #[allow(unused_variables)]
+    fn handle_ws_connected(&mut self, session: &mut CoapSession) {}
+
+    /// Handle a WebSocket layer closed event.
+
+    #[allow(unused_variables)]
+    fn handle_ws_closed(&mut self, session: &mut CoapSession) {}
+
+    /// Handle a failure to perform a keepalive (no response to keepalive packet)
+    #[allow(unused_variables)]
+    fn handle_keepalive_failure(&mut self, session: &mut CoapSession) {}
 }
 
-// This should be fine as we don't provide this type to a FFI function, we only read from it.
+// This should be fine as we don't provide this type to an FFI function, we only read from it.
 #[allow(improper_ctypes_definitions)]
 pub(crate) unsafe extern "C" fn event_handler_callback(raw_session: *mut coap_session_t, event: coap_event_t) -> i32 {
     let raw_session_type = coap_session_get_type(raw_session);

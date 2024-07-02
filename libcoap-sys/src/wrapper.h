@@ -8,3 +8,4 @@
  */
 
 #include <coap3/coap.h>
+#include <coap_config.h>

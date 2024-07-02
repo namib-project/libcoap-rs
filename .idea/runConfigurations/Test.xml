@@ -1,14 +1,18 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="Test" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
-    <option name="command" value="test --features vendored,dtls,dtls_backend_openssl" />
+    <option name="command" value="test -p libcoap-rs --no-default-features --features vendored,dtls,dtls_mbedtls,tcp" />
     <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+    <envs>
+      <env name="MBEDTLS_INCLUDE_PATH" value="/usr/include/" />
+      <env name="MBEDTLS_LIBRARY_PATH" value="/usr/lib" />
+    </envs>
+    <option name="emulateTerminal" value="false" />
     <option name="channel" value="DEFAULT" />
     <option name="requiredFeatures" value="true" />
     <option name="allFeatures" value="false" />
-    <option name="emulateTerminal" value="false" />
     <option name="withSudo" value="false" />
+    <option name="buildTarget" value="REMOTE" />
     <option name="backtrace" value="SHORT" />
-    <envs />
     <option name="isRedirectInput" value="false" />
     <option name="redirectInputPath" value="" />
     <method v="2">

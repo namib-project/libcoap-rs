@@ -469,6 +469,9 @@ impl CoapRequest {
                         CoapOptionType::Block2,
                     ));
                 },
+                // libcoap handles blockwise transfer for us (for now).
+                CoapOption::QBlock1(_) => {},
+                CoapOption::QBlock2(_) => {},
                 CoapOption::HopLimit(value) => {
                     if hop_limit.is_some() {
                         return Err(MessageConversionError::NonRepeatableOptionRepeated(
@@ -504,6 +507,14 @@ impl CoapRequest {
                     }
                     observe = Some(*value);
                 },
+                // Handling of echo options is automatically done by libcoap (see man coap_send)
+                CoapOption::Echo(_) => {},
+                // Handling of request tag options is automatically done by libcoap (see man
+                // coap_send)
+                CoapOption::RTag(_) => {},
+                // OSCORE is currently not supported, and even if it should probably be handled by
+                // libcoap, so I'm unsure whether we have to expose this.
+                CoapOption::Oscore(_v) => {},
                 // TODO maybe we can save some copies here if we use into_iter for the options instead.
                 CoapOption::Other(n, v) => {
                     additional_opts.push(CoapOption::Other(*n, v.clone()));

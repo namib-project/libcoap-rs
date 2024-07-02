@@ -9,20 +9,19 @@
 
 #![cfg(feature = "dtls")]
 use std::fmt::Debug;
-use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
+use libcoap_rs::{
+    CoapContext,
+    message::CoapMessageCommon,
+    protocol::{CoapMessageCode, CoapResponseCode},
+    session::CoapSessionCommon,
+};
 use libcoap_rs::crypto::{
     CoapClientCryptoProvider, CoapCryptoProviderResponse, CoapCryptoPskData, CoapCryptoPskIdentity, CoapCryptoPskInfo,
     CoapServerCryptoProvider,
 };
 use libcoap_rs::session::CoapClientSession;
-use libcoap_rs::{
-    message::CoapMessageCommon,
-    protocol::{CoapMessageCode, CoapResponseCode},
-    session::CoapSessionCommon,
-    CoapContext,
-};
 
 mod common;
 
@@ -32,7 +31,7 @@ struct DummyCryptoProvider;
 impl CoapServerCryptoProvider for DummyCryptoProvider {
     fn provide_key_for_identity(
         &mut self,
-        identity: &CoapCryptoPskIdentity,
+        _identity: &CoapCryptoPskIdentity,
     ) -> CoapCryptoProviderResponse<Box<CoapCryptoPskData>> {
         CoapCryptoProviderResponse::UseCurrent
     }
