@@ -547,7 +547,6 @@ fn main() {
     bindgen_builder = bindgen_builder
         .header("src/wrapper.h")
         .default_enum_style(EnumVariation::Rust { non_exhaustive: true })
-        .rustfmt_bindings(false)
         // Causes invalid syntax for some reason, so we have to disable it.
         .generate_comments(false)
         .dynamic_link_require_all(true)
@@ -579,7 +578,7 @@ fn main() {
         // the included headers seem to come from our built version.
         // Should be fine though, as we already printed `cargo:rerun-if-changed=src/libcoap/` at the
         // start of the file.
-        bindgen_builder = bindgen_builder.parse_callbacks(Box::new(bindgen::CargoCallbacks));
+        bindgen_builder = bindgen_builder.parse_callbacks(Box::new(bindgen::CargoCallbacks::new()));
     }
     let bindings = bindgen_builder.generate().expect("unable to generate bindings");
 
