@@ -86,16 +86,22 @@
 #![allow(deref_nullptr)]
 #![allow(non_snake_case)]
 
-use libc::{fd_set, sockaddr, sockaddr_in, sockaddr_in6, socklen_t, time_t, sa_family_t};
-#[cfg(not(target_os = "espidf"))]
-use libc::{epoll_event};
+use std::ffi::c_void;
 
-// use dtls backend libraries in cases where they set our linker flags, otherwise cargo will 
+#[allow(unused_imports)]
+use libc::{fd_set, memcmp, sa_family_t, sockaddr, sockaddr_in, sockaddr_in6, socklen_t, time_t};
+#[allow(unused_imports)]
+#[cfg(not(target_os = "espidf"))]
+use libc::epoll_event;
+// use dtls backend libraries in cases where they set our linker flags, otherwise cargo will
 // optimize them out.
+#[allow(unused_imports)]
 #[cfg(feature = "dtls_backend_mbedtls_vendored")]
 use mbedtls_sys as _;
+#[allow(unused_imports)]
 #[cfg(feature = "dtls_backend_openssl")]
 use openssl_sys as _;
+#[allow(unused_imports)]
 #[cfg(feature = "dtls_backend_tinydtls")]
 use tinydtls_sys as _;
 
@@ -106,11 +112,43 @@ include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 #[inline]
 #[cfg(inlined_coap_send_rst)]
-pub unsafe fn coap_send_rst(
-    session: *mut coap_session_t,
-    request: *const coap_pdu_t,
-) -> coap_mid_t {
+pub unsafe fn coap_send_rst(session: *mut coap_session_t, request: *const coap_pdu_t) -> coap_mid_t {
     coap_send_message_type(session, request, crate::coap_pdu_type_t::COAP_MESSAGE_RST)
+}
+
+/// Compares instances of coap_str_const_t and/or coap_string_t.
+///
+/// This macro is a reimplementation of the macro defined in coap_str.h, see
+/// <https://libcoap.net/doc/reference/develop/group__string.html#ga7f43c10b486dc6d45c37fcaf987d711b>.
+#[macro_export]
+macro_rules! coap_string_equal {
+    ( $string1:expr, $string2:expr ) => {{
+        use libcoap_sys::coap_string_equal_internal;
+        let s1 = $string1;
+        let s2 = $string2;
+        coap_string_equal_internal((*s1).s, (*s1).length, (*s2).s, (*s2).length)
+    }};
+}
+
+/// Internal only function for CoAP string comparisons.
+///
+/// *DO NOT USE THIS FUNCTION DIRECTLY.* It is only public because it is used by the
+/// [coap_string_equal] macro, which is the function you probably wanted to call instead.
+///
+/// # Safety
+///
+/// This function should not be called directly, use [coap_string_equal] instead.
+pub unsafe fn coap_string_equal_internal(
+    str1_ptr: *const u8,
+    str1_len: usize,
+    str2_ptr: *const u8,
+    str2_len: usize,
+) -> bool {
+    str1_len == str2_len
+        && (str1_len == 0
+            || !str1_ptr.is_null()
+                && !str2_ptr.is_null()
+                && memcmp(str1_ptr as *const c_void, str2_ptr as *const c_void, str1_len) == 0)
 }
 
 #[cfg(all(test, not(target_os = "espidf")))]
@@ -122,15 +160,16 @@ mod tests {
         sync::{Arc, Barrier},
     };
 
-    use libc::{in6_addr, in_addr, sa_family_t, size_t, AF_INET, AF_INET6};
+    use libc::{AF_INET, AF_INET6, in6_addr, in_addr, sa_family_t, size_t};
 
-    use super::*;
     use crate::{
         coap_pdu_code_t::{COAP_REQUEST_CODE_GET, COAP_RESPONSE_CODE_CONTENT},
         coap_proto_t::COAP_PROTO_UDP,
         coap_request_t::COAP_REQUEST_GET,
         coap_response_t::COAP_RESPONSE_OK,
     };
+
+    use super::*;
 
     const COAP_TEST_RESOURCE_URI: &str = "test";
     const COAP_TEST_RESOURCE_RESPONSE: &str = "Hello World!";
@@ -286,8 +325,6 @@ mod tests {
         // This also seems to free all resources.
         unsafe {
             coap_free_context(context);
-            std::mem::drop(context);
-            std::mem::drop(test_resource);
         }
     }
 
@@ -371,8 +408,6 @@ mod tests {
         // This also seems to free all resources.
         unsafe {
             coap_free_context(context);
-            std::mem::drop(context);
-            std::mem::drop(client_session)
         }
         server_thread_handle.join().expect("Error waiting for server thread");
     }

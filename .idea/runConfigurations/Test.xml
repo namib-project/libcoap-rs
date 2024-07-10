@@ -2,10 +2,7 @@
   <configuration default="false" name="Test" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
     <option name="command" value="test -p libcoap-rs --no-default-features --features vendored,dtls,dtls_mbedtls,tcp" />
     <option name="workingDirectory" value="file://$PROJECT_DIR$" />
-    <envs>
-      <env name="MBEDTLS_INCLUDE_PATH" value="/usr/include/" />
-      <env name="MBEDTLS_LIBRARY_PATH" value="/usr/lib" />
-    </envs>
+    <envs />
     <option name="emulateTerminal" value="false" />
     <option name="channel" value="DEFAULT" />
     <option name="requiredFeatures" value="true" />

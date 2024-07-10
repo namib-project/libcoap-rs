@@ -88,7 +88,7 @@ pub unsafe fn prepare_resource_handler_data<'a, D: Any + ?Sized + Debug>(
     let resource_tmp = CoapFfiRcCell::clone_raw_weak(coap_resource_get_userdata(raw_resource));
     let resource = CoapResource::from(resource_tmp);
     let session = CoapServerSession::from_raw(raw_session);
-    let request = CoapMessage::from_raw_pdu(raw_incoming_pdu).and_then(CoapRequest::from_message);
+    let request = CoapMessage::from_raw_pdu(raw_incoming_pdu).and_then(|v| CoapRequest::from_message(v, &session));
     let response = CoapMessage::from_raw_pdu(raw_response_pdu).and_then(CoapResponse::from_message);
     match (request, response) {
         (Ok(request), Ok(response)) => Ok((resource, session, request, response)),

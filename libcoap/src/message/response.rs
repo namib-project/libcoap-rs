@@ -7,71 +7,21 @@
  * See the README as well as the LICENSE file for more information.
  */
 
-use std::fmt::Display;
-use std::fmt::Formatter;
-
 use crate::error::{MessageConversionError, MessageTypeError, OptionValueError};
-use crate::message::{CoapMessage, CoapMessageCommon, CoapOption};
+use crate::message::{CoapMessage, CoapMessageCommon, CoapOption, construct_path_string, construct_query_string};
 use crate::protocol::{
     CoapMessageCode, CoapMessageType, CoapOptionType, CoapResponseCode, ContentFormat, Echo, ETag, MaxAge, Observe,
 };
 use crate::types::CoapUri;
 
-/// Internal representation of a CoAP URI that can be used as a response location.
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub struct CoapResponseLocation(CoapUri);
-
-impl Display for CoapResponseLocation {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("Response Location: {}", self.0))
-    }
-}
-
-impl CoapResponseLocation {
-    /// Creates a new response location from the given [CoapUri], returning an [OptionValueError] if
-    /// the URI contains invalid values for response locations.
-    pub fn new_response_location(uri: CoapUri) -> Result<CoapResponseLocation, OptionValueError> {
-        if uri.scheme().is_some() || uri.host().is_some() || uri.port().is_some() {
-            return Err(OptionValueError::IllegalValue);
-        }
-        Ok(CoapResponseLocation(uri))
-    }
-
-    /// Converts this response location into a [`Vec<CoapOption>`] that can be added to a message.
-    pub fn into_options(self) -> Vec<CoapOption> {
-        let mut options = Vec::new();
-        let mut uri = self.0;
-        if let Some(path) = uri.drain_path_iter() {
-            options.extend(path.map(CoapOption::LocationPath));
-        }
-        if let Some(query) = uri.drain_query_iter() {
-            options.extend(query.map(CoapOption::LocationQuery));
-        }
-        options
-    }
-
-    /// Returns an immutable reference to the underlying URI.
-    pub fn as_uri(&self) -> &CoapUri {
-        &self.0
-    }
-}
-
-impl TryFrom<CoapUri> for CoapResponseLocation {
-    type Error = OptionValueError;
-
-    fn try_from(value: CoapUri) -> Result<Self, Self::Error> {
-        CoapResponseLocation::new_response_location(value)
-    }
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct CoapResponse {
     pdu: CoapMessage,
     content_format: Option<ContentFormat>,
     max_age: Option<MaxAge>,
     etag: Option<ETag>,
     echo: Option<Echo>,
-    location: Option<CoapResponseLocation>,
+    location: Option<CoapUri>,
     observe: Option<Observe>,
 }
 
@@ -182,7 +132,7 @@ impl CoapResponse {
     }
 
     /// Returns the "Location" option value for this request.
-    pub fn location(&self) -> Option<&CoapResponseLocation> {
+    pub fn location(&self) -> Option<&CoapUri> {
         self.location.as_ref()
     }
 
@@ -201,7 +151,7 @@ impl CoapResponse {
     pub fn set_location<U: Into<CoapUri>>(&mut self, uri: Option<U>) -> Result<(), OptionValueError> {
         let uri = uri.map(Into::into);
         if let Some(uri) = uri {
-            self.location = Some(CoapResponseLocation::new_response_location(uri)?)
+            self.location = Some(uri)
         }
         Ok(())
     }
@@ -373,16 +323,12 @@ impl CoapResponse {
             }
         }
         let location = if location_path.is_some() || location_query.is_some() {
-            Some(
-                CoapResponseLocation::new_response_location(CoapUri::new(
-                    None,
-                    None,
-                    None,
-                    location_path,
-                    location_query,
-                ))
-                .map_err(|e| MessageConversionError::InvalidOptionValue(None, e))?,
-            )
+            let path_str = location_path.map(construct_path_string);
+            let query_str = location_query.map(construct_query_string);
+            Some(CoapUri::new_relative(
+                path_str.as_ref().map(|v| v.as_bytes()),
+                query_str.as_ref().map(|v| v.as_bytes()),
+            )?)
         } else {
             None
         };
@@ -402,6 +348,7 @@ impl CoapMessageCommon for CoapResponse {
     /// Sets the message code of this response.
     ///
     /// # Panics
+    ///
     /// Panics if the provided message code is not a response code.
     fn set_code<C: Into<CoapMessageCode>>(&mut self, code: C) {
         match code.into() {

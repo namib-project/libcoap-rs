@@ -7,17 +7,17 @@
  * See the README as well as the LICENSE file for more information.
  */
 
+use std::net::{SocketAddr, UdpSocket};
+use std::rc::Rc;
+use std::sync::{Arc, Condvar, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread::JoinHandle;
+use std::time::Duration;
+
+use libcoap_rs::{CoapContext, CoapRequestHandler, CoapResource};
 use libcoap_rs::message::{CoapMessageCommon, CoapRequest, CoapResponse};
 use libcoap_rs::protocol::{CoapMessageCode, CoapMessageType, CoapRequestCode, CoapResponseCode};
 use libcoap_rs::session::CoapSessionCommon;
-use libcoap_rs::types::{CoapUri, CoapUriHost};
-use libcoap_rs::{CoapContext, CoapRequestHandler, CoapResource};
-use std::net::{SocketAddr, UdpSocket};
-use std::rc::Rc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Condvar, Mutex};
-use std::thread::JoinHandle;
-use std::time::Duration;
 
 pub(crate) fn get_unused_server_addr() -> SocketAddr {
     // This will give us a SocketAddress with a port in the local port range automatically
@@ -100,16 +100,8 @@ pub(crate) fn run_test_server<F: FnOnce(&mut CoapContext)>(context_configurator:
     context.shutdown(Some(Duration::from_secs(0))).unwrap();
 }
 
-pub(crate) fn gen_test_request(server_address: SocketAddr) -> CoapRequest {
-    let uri = CoapUri::new(
-        None,
-        Some(CoapUriHost::IpLiteral(server_address.ip())),
-        Some(server_address.port()),
-        Some(vec!["test1".to_string()]),
-        None,
-    );
+pub(crate) fn gen_test_request() -> CoapRequest {
+    let uri = "/test1".parse().expect("unable to parse request URI");
 
-    let mut request = CoapRequest::new(CoapMessageType::Con, CoapRequestCode::Get).unwrap();
-    request.set_uri(Some(uri)).unwrap();
-    request
+    CoapRequest::new(CoapMessageType::Con, CoapRequestCode::Get, uri).unwrap()
 }

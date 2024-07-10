@@ -7,8 +7,6 @@
  * See the README as well as the LICENSE file for more information.
  */
 
-use std::borrow::BorrowMut;
-use std::cell::{Ref, RefMut};
 use std::{
     any::Any,
     collections::{HashMap, VecDeque},
@@ -16,6 +14,8 @@ use std::{
     net::{SocketAddr, ToSocketAddrs},
     rc::Rc,
 };
+use std::borrow::BorrowMut;
+use std::cell::{Ref, RefMut};
 
 use rand::Rng;
 
@@ -30,22 +30,19 @@ use libcoap_sys::{
     coap_session_t, coap_session_type_t,
 };
 
-#[cfg(feature = "dtls")]
-use crate::crypto::{CoapCryptoPskData, CoapCryptoPskIdentity};
-
-use crate::message::request::CoapRequest;
-use crate::message::response::CoapResponse;
 use crate::{
     error::{MessageConversionError, SessionGetAppDataError},
     message::{CoapMessage, CoapMessageCommon},
     protocol::CoapToken,
     types::{CoapAddress, CoapMessageId, CoapProtocol, IfIndex, MaxRetransmit},
 };
+#[cfg(feature = "dtls")]
+use crate::crypto::{CoapCryptoPskData, CoapCryptoPskIdentity};
+use crate::message::request::CoapRequest;
+use crate::message::response::CoapResponse;
 
 pub use self::client::CoapClientSession;
-
-pub(self) use self::sealed::{CoapSessionCommonInternal, CoapSessionInnerProvider};
-
+use self::sealed::{CoapSessionCommonInternal, CoapSessionInnerProvider};
 pub use self::server::CoapServerSession;
 
 pub mod client;
