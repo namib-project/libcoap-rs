@@ -17,8 +17,6 @@ use std::{
 use std::borrow::BorrowMut;
 use std::cell::{Ref, RefMut};
 
-use rand::Rng;
-
 use libcoap_sys::{
     coap_context_t, coap_fixed_point_t, coap_mid_t, coap_new_message_id, coap_pdu_get_token, coap_pdu_t,
     coap_response_t, coap_send, coap_session_get_ack_random_factor, coap_session_get_ack_timeout,
@@ -272,11 +270,10 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
         unsafe { coap_session_get_state(self.inner_ref().raw_session).into() }
     }
 
-    /// Initializes the token value used by libcoap.
+    /// Initializes the initial token value used by libcoap for this session.
     ///
-    /// Note that this function does not do anything if you are not setting the token manually using
-    /// [new_token()](CoapSessionCommon::new_token), because the wrapper will use a random number
-    /// generator to set the tokens instead.
+    /// This value will be used as the token and incremented for each message sent through this
+    /// session that does not already have a token set.
     fn init_token(&self, token: &[u8; 8]) {
         // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         unsafe { coap_session_init_token(self.inner_mut().raw_session, token.len(), token.as_ptr()) }
@@ -334,9 +331,13 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     /// message.
     fn send_request(&self, mut req: CoapRequest) -> Result<CoapRequestHandle, MessageConversionError> {
         if req.token().is_none() {
-            let mut token_tmp: Vec<u8> = vec![0; 8];
-            rand::thread_rng().fill(&mut token_tmp[0..8]);
-            req.set_token(Some(token_tmp))
+            let mut token_len = libcoap_sys::COAP_TOKEN_DEFAULT_MAX as usize;
+            let mut token_tmp: Vec<u8> = vec![0; token_len];
+            // SAFETY: Provided pointer is valid, length matches.
+            unsafe {
+                coap_session_new_token(self.inner_mut().raw_session, &mut token_len, token_tmp.as_mut_ptr());
+            }
+            req.set_token(Some(Vec::from(&token_tmp[0..token_len])))
         }
         let token: Box<[u8]> = Box::from(req.token().unwrap());
         if req.mid().is_none() {
@@ -353,6 +354,7 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     /// Returns an iterator over all responses associated with the request.
     ///
     /// # Panics
+    ///
     /// Panics if the provided handle does not refer to a valid token, i.e., because it belongs to
     /// a different session.
     fn poll_handle(&self, handle: &CoapRequestHandle) -> std::collections::vec_deque::IntoIter<CoapResponse> {
@@ -505,8 +507,8 @@ impl CoapSessionInner<'_> {
     /// # Safety
     /// Provided pointer must point to a valid raw_session.
     ///
-    /// Note that the chosen lifetime for the inner session is arbitraty, so you should ensure that
-    /// the CoapSessionInner instance does not outlive the underlying session.
+    /// Note that the chosen lifetime for the inner session is arbitrarily, so you should ensure
+    /// that the CoapSessionInner instance does not outlive the underlying session.
     /// To do so, you probably want to increase the reference counter of the session by one and
     /// never provide values of this session with a lifetime that exceeds the one of the
     /// [CoapContext] this session is bound to.

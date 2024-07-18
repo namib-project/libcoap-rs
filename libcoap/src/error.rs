@@ -11,6 +11,7 @@
 
 use std::ffi::NulError;
 use std::string::FromUtf8Error;
+use std::sync::PoisonError;
 
 use thiserror::Error;
 
@@ -70,6 +71,22 @@ pub enum UnknownOptionError {
     /// Unknown error inside of libcoap
     #[error("CoAP option conversion error: unknown option")]
     Unknown,
+}
+
+#[derive(Error, Debug)]
+pub enum RngError {
+    /// Unknown error inside of libcoap
+    #[error("CoAP RNG error: unknown error in call to libcoap")]
+    Unknown,
+    /// RNG mutex is poisoned (panic in another thread while calling RNG function).
+    #[error("CoAP RNG configuration error: global RNG mutex is poisoned")]
+    GlobalMutexPoisonError,
+}
+
+impl<T> From<PoisonError<T>> for RngError {
+    fn from(_value: PoisonError<T>) -> Self {
+        RngError::GlobalMutexPoisonError
+    }
 }
 
 #[derive(Error, Debug, Clone, Eq, PartialEq)]

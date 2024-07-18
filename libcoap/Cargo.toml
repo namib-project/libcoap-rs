@@ -28,6 +28,7 @@ dtls_gnutls = ["libcoap-sys/dtls_backend_gnutls"]
 dtls_mbedtls = ["libcoap-sys/dtls_backend_mbedtls"]
 dtls_mbedtls_vendored = ["dtls_mbedtls", "libcoap-sys/dtls_backend_mbedtls_vendored"]
 tcp = ["libcoap-sys/tcp"]
+rand = ["dep:rand", "dep:rand_core"]
 nightly = []
 vendored = ["libcoap-sys/vendored"]
 
@@ -37,7 +38,8 @@ libc = { version = "^0.2.95" }
 num-derive = { version = "^0.3.3" }
 num-traits = { version = "^0.2.14" }
 url = { version = "^2.2", optional = true }
-rand = { version = "^0.8.4" }
+rand = { version = "^0.8.4", optional = true }
+rand_core = { version = "0.6.4", optional = true }
 thiserror = "^1.0"
 
 [package.metadata.docs.rs]

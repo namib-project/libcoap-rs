@@ -14,7 +14,7 @@ use libcoap_sys::{
     coap_bin_const_t, coap_dtls_cpsk_info_t, coap_dtls_cpsk_t, COAP_DTLS_SPSK_SETUP_VERSION, coap_new_client_session,
     coap_new_client_session_psk2, coap_proto_t, coap_register_event_handler, coap_session_get_app_data,
     coap_session_get_context, coap_session_get_type, coap_session_release, coap_session_set_app_data, coap_session_t,
-    coap_session_type_t,
+    coap_session_type_t, COAP_TOKEN_DEFAULT_MAX,
 };
 
 use crate::{context::CoapContext, error::SessionCreationError, types::CoapAddress};
@@ -24,6 +24,7 @@ use crate::crypto::{CoapClientCryptoProvider, CoapCryptoProviderResponse, CoapCr
 use crate::crypto::dtls_ih_callback;
 use crate::event::event_handler_callback;
 use crate::mem::{CoapFfiRcCell, DropInnerExclusively};
+use crate::prng::coap_prng_try_fill;
 
 use super::{CoapSessionCommon, CoapSessionInner, CoapSessionInnerProvider};
 
@@ -219,6 +220,14 @@ impl CoapClientSession<'_> {
         // SAFETY: raw session is valid, inner session pointer must be valid as it was just created
         // from one of Rusts smart pointers.
         coap_session_set_app_data(raw_session, inner_session.create_raw_weak());
+
+        // For insecure protocols, generate a random initial token to prevent off-path response
+        // spoofing, see https://datatracker.ietf.org/doc/html/rfc7252#section-5.3.1
+        if !client_session.proto().is_secure() {
+            let mut token = [0; COAP_TOKEN_DEFAULT_MAX as usize];
+            coap_prng_try_fill(&mut token).expect("unable to generate random initial token");
+            client_session.init_token(&token)
+        }
 
         client_session
     }

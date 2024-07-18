@@ -186,6 +186,7 @@ pub mod error;
 mod event;
 mod mem;
 pub mod message;
+pub mod prng;
 pub mod protocol;
 mod resource;
 pub mod session;
