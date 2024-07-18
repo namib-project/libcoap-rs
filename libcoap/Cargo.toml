@@ -18,7 +18,7 @@ keywords = ["coap", "libcoap"]
 resolver = "2"
 
 [features]
-default = ["dtls", "tcp", "dtls_openssl"]
+default = ["dtls", "tcp", "dtls_openssl", "vendored"]
 dtls = ["libcoap-sys/dtls"]
 dtls_tinydtls = ["libcoap-sys/dtls_backend_tinydtls"]
 dtls_tinydtls_vendored = ["dtls_tinydtls", "libcoap-sys/dtls_backend_tinydtls_vendored"]
@@ -34,11 +34,11 @@ vendored = ["libcoap-sys/vendored"]
 [dependencies]
 libcoap-sys = { version = "^0.2.2", path = "../libcoap-sys", default-features = false, features = ["client", "server"] }
 libc = { version = "^0.2.95" }
-num-derive = { version = "^0.3.3" } 
+num-derive = { version = "^0.3.3" }
 num-traits = { version = "^0.2.14" }
-url = { version = "^2.2" }
+url = { version = "^2.2", optional = true }
 rand = { version = "^0.8.4" }
 thiserror = "^1.0"
 
 [package.metadata.docs.rs]
-features = ["dtls", "dtls_openssl", "vendored"]
+features = ["dtls", "dtls_openssl", "vendored", "url"]

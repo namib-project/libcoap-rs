@@ -19,8 +19,8 @@ use libcoap_sys::{
     coap_bin_const_t, coap_context_t, coap_dtls_cpsk_info_t, coap_dtls_spsk_info_t, coap_session_t, coap_str_const_t,
 };
 
-use crate::session::CoapServerSession;
 use crate::{context::CoapContext, session::CoapClientSession};
+use crate::session::CoapServerSession;
 
 /// Representation of cryptographic information used by a server.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -132,6 +132,7 @@ pub trait CoapServerCryptoProvider: Debug {
 
 // TODO DTLS PKI/RPK
 
+// DTLS Identity Hint callback is unsupported on mbedtls
 #[cfg(feature = "dtls")]
 pub(crate) unsafe extern "C" fn dtls_ih_callback(
     hint: *mut coap_str_const_t,
@@ -142,7 +143,7 @@ pub(crate) unsafe extern "C" fn dtls_ih_callback(
     let provided_identity = std::slice::from_raw_parts((*hint).s, (*hint).length);
     session
         .provide_raw_key_for_hint(provided_identity)
-        .map(|v| v as *const coap_dtls_cpsk_info_t)
+        .map(|v| v)
         .unwrap_or(std::ptr::null())
 }
 
@@ -170,7 +171,7 @@ pub(crate) unsafe extern "C" fn dtls_server_sni_callback(
     if let Ok(sni_value) = sni_value {
         context
             .provide_raw_hint_for_sni(sni_value)
-            .map(|v| (v as *const coap_dtls_spsk_info_t))
+            .map(|v| (v))
             .unwrap_or(std::ptr::null())
     } else {
         std::ptr::null()

@@ -27,7 +27,7 @@ pub fn basic_client_server_request() {
     let mut context = CoapContext::new().unwrap();
     let session = CoapClientSession::connect_udp(&mut context, server_address).unwrap();
 
-    let request = common::gen_test_request(server_address);
+    let request = common::gen_test_request();
     let req_handle = session.send_request(request).unwrap();
     loop {
         assert!(context.do_io(Some(Duration::from_secs(10))).expect("error during IO") <= Duration::from_secs(10));

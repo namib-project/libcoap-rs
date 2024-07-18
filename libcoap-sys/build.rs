@@ -94,6 +94,7 @@ fn get_builder_espidf() -> bindgen::Builder {
     let esp_arch = env::var("CARGO_CFG_TARGET_ARCH").expect("CARGO_CFG_TARGET_ARCH is not set");
 
     // Determine compiler path
+    // SAFETY: Always safe to call in a single-threaded environment (see docs of env::set_var).
     unsafe { env::set_var("PATH", embuild_env) };
     let cmake_info = embuild::cmake::Query::new(
         &Path::new(&esp_idf_buildroot).join("build"),

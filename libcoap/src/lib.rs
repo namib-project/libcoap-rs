@@ -3,7 +3,7 @@
  * lib.rs - Main library entry point for safe libcoap bindings.
  * This file is part of the libcoap-rs crate, see the README and LICENSE files for
  * more information and terms of use.
- * Copyright © 2021-2023 The NAMIB Project Developers, all rights reserved.
+ * Copyright © 2021-2024 The NAMIB Project Developers, all rights reserved.
  * See the README as well as the LICENSE file for more information.
  */
 
@@ -56,8 +56,6 @@
 //!     types::{CoapUriScheme, CoapUri}
 //! };
 //!
-//! use url::Url;
-//!
 //! let server_address : SocketAddr = "[::1]:5683".parse().unwrap();
 //!
 //! // Create a new context.
@@ -68,11 +66,10 @@
 //!                 .expect("Failed to create client-side session");
 //!
 //! // Create a new CoAP URI to request from.
-//! let uri = CoapUri::try_from_url(Url::parse("coap://[::1]:5683/hello_world").unwrap()).unwrap();
+//! let uri = "coap://[::1]:5683/hello_world".parse().unwrap();
 //!
 //! // Create a new request of type get with the specified URI.
-//! let mut request = CoapRequest::new(CoapMessageType::Con, CoapRequestCode::Get).unwrap();
-//! request.set_uri(Some(uri)).unwrap();
+//! let mut request = CoapRequest::new(CoapMessageType::Con, CoapRequestCode::Get, uri).unwrap();
 //!
 //! // Send the request and wait for a response.
 //! let req_handle = session.send_request(request).expect("Unable to send request");
@@ -178,6 +175,10 @@
 //! Note that enabling multiple backends is not possible and doing so will result in a single
 //! backend being chosen based on the priority order (gnutls > openssl > mbedtls > tinydtls).
 
+pub use context::CoapContext;
+pub use event::CoapEventHandler;
+pub use resource::{CoapRequestHandler, CoapResource};
+
 mod context;
 #[cfg(feature = "dtls")]
 pub mod crypto;
@@ -190,7 +191,3 @@ mod resource;
 pub mod session;
 pub mod transport;
 pub mod types;
-
-pub use context::CoapContext;
-pub use event::CoapEventHandler;
-pub use resource::{CoapRequestHandler, CoapResource};

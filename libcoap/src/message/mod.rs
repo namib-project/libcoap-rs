@@ -16,6 +16,7 @@
 //! and [CoapResponse]).
 
 use std::{ffi::c_void, mem::MaybeUninit, slice::Iter};
+use std::fmt::Write;
 
 use num_traits::FromPrimitive;
 
@@ -86,7 +87,7 @@ impl CoapOption {
     /// Create a CoAP option from its raw representation in the C library.
     ///
     /// # Safety
-    /// `opt` must be a valid pointer to a well formed coap_opt_t value as returned by
+    /// `opt` must be a valid pointer to a well-formed coap_opt_t value as returned by
     /// [coap_option_next()].
     pub(crate) unsafe fn from_raw_opt(
         number: coap_option_num_t,
@@ -96,52 +97,7 @@ impl CoapOption {
             coap_opt_value(opt),
             coap_opt_length(opt) as usize,
         ));
-        match CoapOptionType::try_from(number) {
-            Ok(opt_type) => {
-                if opt_type.min_len() > value.len() {
-                    return Err(OptionValueError::TooShort);
-                } else if opt_type.max_len() < value.len() {
-                    return Err(OptionValueError::TooLong);
-                }
-                match opt_type {
-                    CoapOptionType::IfMatch => Ok(CoapOption::IfMatch(if value.is_empty() {
-                        CoapMatch::Empty
-                    } else {
-                        CoapMatch::ETag(value.into_boxed_slice())
-                    })),
-                    CoapOptionType::UriHost => Ok(CoapOption::UriHost(String::from_utf8(value)?)),
-                    CoapOptionType::ETag => Ok(CoapOption::ETag(value.into_boxed_slice())),
-                    CoapOptionType::IfNoneMatch => Ok(CoapOption::IfNoneMatch),
-                    CoapOptionType::UriPort => Ok(CoapOption::UriPort(decode_var_len_u16(value.as_slice()))),
-                    CoapOptionType::LocationPath => Ok(CoapOption::LocationPath(String::from_utf8(value)?)),
-                    CoapOptionType::UriPath => Ok(CoapOption::UriPath(String::from_utf8(value)?)),
-                    CoapOptionType::ContentFormat => {
-                        Ok(CoapOption::ContentFormat(decode_var_len_u16(value.as_slice())))
-                    },
-                    CoapOptionType::MaxAge => Ok(CoapOption::MaxAge(decode_var_len_u32(value.as_slice()))),
-                    CoapOptionType::UriQuery => Ok(CoapOption::UriQuery(String::from_utf8(value)?)),
-                    CoapOptionType::Accept => Ok(CoapOption::Accept(decode_var_len_u16(value.as_slice()))),
-                    CoapOptionType::LocationQuery => Ok(CoapOption::LocationQuery(String::from_utf8(value)?)),
-                    CoapOptionType::ProxyUri => Ok(CoapOption::ProxyUri(String::from_utf8(value)?)),
-                    CoapOptionType::ProxyScheme => Ok(CoapOption::ProxyScheme(String::from_utf8(value)?)),
-                    CoapOptionType::Size1 => Ok(CoapOption::Size1(decode_var_len_u32(value.as_slice()))),
-                    CoapOptionType::Size2 => Ok(CoapOption::Size2(decode_var_len_u32(value.as_slice()))),
-                    CoapOptionType::Block1 => Ok(CoapOption::Block1(decode_var_len_u32(value.as_slice()))),
-                    CoapOptionType::Block2 => Ok(CoapOption::Block2(decode_var_len_u32(value.as_slice()))),
-                    CoapOptionType::HopLimit => Ok(CoapOption::HopLimit(decode_var_len_u16(value.as_slice()))),
-                    CoapOptionType::NoResponse => {
-                        Ok(CoapOption::NoResponse(decode_var_len_u8(value.as_slice()) as NoResponse))
-                    },
-                    CoapOptionType::Observe => Ok(CoapOption::Observe(decode_var_len_u32(value.as_slice()))),
-                    CoapOptionType::Oscore => Ok(CoapOption::Oscore(value.into_boxed_slice())),
-                    CoapOptionType::Echo => Ok(CoapOption::Echo(value.into_boxed_slice())),
-                    CoapOptionType::RTag => Ok(CoapOption::RTag(value.into_boxed_slice())),
-                    CoapOptionType::QBlock1 => Ok(CoapOption::QBlock1(decode_var_len_u32(value.as_slice()))),
-                    CoapOptionType::QBlock2 => Ok(CoapOption::QBlock2(decode_var_len_u32(value.as_slice()))),
-                }
-            },
-            _ => Ok(CoapOption::Other(number, value.into_boxed_slice())),
-        }
+        Self::from_type_value(number, value)
     }
 
     /// Returns the option number associated with this option.
@@ -229,6 +185,94 @@ impl CoapOption {
         let value = self.into_value_bytes()?;
         Ok(unsafe { coap_new_optlist(num, value.len(), value.as_ptr()) })
     }
+
+    /// Attempts to convert a raw coap_optlist_t instance into a [CoapOption].
+    ///
+    /// # Errors
+    ///
+    /// Returns an [OptionValueError] if the provided `optlist_entry` has an invalid value.
+    ///
+    /// # Safety
+    ///
+    /// optlist_entry must be a valid coap_optlist_t instance whose `number`, `data` and `length`
+    /// fields describe a CoAP option number and the option value respectively.
+    pub(crate) unsafe fn from_optlist_entry(optlist_entry: &coap_optlist_t) -> Result<Self, OptionValueError> {
+        let value = Vec::from(std::slice::from_raw_parts(optlist_entry.data, optlist_entry.length));
+        Self::from_type_value(optlist_entry.number, value)
+    }
+
+    /// Convert coap_option_num_t and option value into a parsed [CoapOption] if possible.
+    fn from_type_value(type_: coap_option_num_t, value: Vec<u8>) -> Result<Self, OptionValueError> {
+        match CoapOptionType::try_from(type_) {
+            Ok(opt_type) => {
+                if opt_type.min_len() > value.len() {
+                    return Err(OptionValueError::TooShort);
+                } else if opt_type.max_len() < value.len() {
+                    return Err(OptionValueError::TooLong);
+                }
+                match opt_type {
+                    CoapOptionType::IfMatch => Ok(CoapOption::IfMatch(if value.is_empty() {
+                        CoapMatch::Empty
+                    } else {
+                        CoapMatch::ETag(value.into_boxed_slice())
+                    })),
+                    CoapOptionType::UriHost => Ok(CoapOption::UriHost(String::from_utf8(value)?)),
+                    CoapOptionType::ETag => Ok(CoapOption::ETag(value.into_boxed_slice())),
+                    CoapOptionType::IfNoneMatch => Ok(CoapOption::IfNoneMatch),
+                    CoapOptionType::UriPort => Ok(CoapOption::UriPort(decode_var_len_u16(value.as_slice()))),
+                    CoapOptionType::LocationPath => Ok(CoapOption::LocationPath(String::from_utf8(value)?)),
+                    CoapOptionType::UriPath => Ok(CoapOption::UriPath(String::from_utf8(value)?)),
+                    CoapOptionType::ContentFormat => {
+                        Ok(CoapOption::ContentFormat(decode_var_len_u16(value.as_slice())))
+                    },
+                    CoapOptionType::MaxAge => Ok(CoapOption::MaxAge(decode_var_len_u32(value.as_slice()))),
+                    CoapOptionType::UriQuery => Ok(CoapOption::UriQuery(String::from_utf8(value)?)),
+                    CoapOptionType::Accept => Ok(CoapOption::Accept(decode_var_len_u16(value.as_slice()))),
+                    CoapOptionType::LocationQuery => Ok(CoapOption::LocationQuery(String::from_utf8(value)?)),
+                    CoapOptionType::ProxyUri => Ok(CoapOption::ProxyUri(String::from_utf8(value)?)),
+                    CoapOptionType::ProxyScheme => Ok(CoapOption::ProxyScheme(String::from_utf8(value)?)),
+                    CoapOptionType::Size1 => Ok(CoapOption::Size1(decode_var_len_u32(value.as_slice()))),
+                    CoapOptionType::Size2 => Ok(CoapOption::Size2(decode_var_len_u32(value.as_slice()))),
+                    CoapOptionType::Block1 => Ok(CoapOption::Block1(decode_var_len_u32(value.as_slice()))),
+                    CoapOptionType::Block2 => Ok(CoapOption::Block2(decode_var_len_u32(value.as_slice()))),
+                    CoapOptionType::HopLimit => Ok(CoapOption::HopLimit(decode_var_len_u16(value.as_slice()))),
+                    CoapOptionType::NoResponse => {
+                        Ok(CoapOption::NoResponse(decode_var_len_u8(value.as_slice()) as NoResponse))
+                    },
+                    CoapOptionType::Observe => Ok(CoapOption::Observe(decode_var_len_u32(value.as_slice()))),
+                    CoapOptionType::Oscore => Ok(CoapOption::Oscore(value.into_boxed_slice())),
+                    CoapOptionType::Echo => Ok(CoapOption::Echo(value.into_boxed_slice())),
+                    CoapOptionType::RTag => Ok(CoapOption::RTag(value.into_boxed_slice())),
+                    CoapOptionType::QBlock1 => Ok(CoapOption::QBlock1(decode_var_len_u32(value.as_slice()))),
+                    CoapOptionType::QBlock2 => Ok(CoapOption::QBlock2(decode_var_len_u32(value.as_slice()))),
+                }
+            },
+            _ => Ok(CoapOption::Other(type_, value.into_boxed_slice())),
+        }
+    }
+}
+
+/// Constructs a path string from a [Vec] of strings containing the separate path components.
+pub(crate) fn construct_path_string(path_components: Vec<String>) -> String {
+    path_components.into_iter().fold(String::new(), |mut a: String, v| {
+        // Writing to a String _shouldn't_ cause an error.
+        // If it does, something is terribly wrong and we should panic.
+        write!(&mut a, "/{}", v).expect("unable to create path string");
+        a
+    })
+}
+
+/// Constructs a query string from a [Vec] of strings containing the separate query components.
+pub(crate) fn construct_query_string(query_components: Vec<String>) -> String {
+    let mut iter = query_components.iter();
+    let mut out_str = String::from("?");
+    if let Some(q) = iter.next() {
+        out_str = out_str + q
+    }
+    for q in iter {
+        out_str += format!("&{}", q).as_ref();
+    }
+    out_str
 }
 
 /// Interface for CoAP messages common between requests, responses and other messages.

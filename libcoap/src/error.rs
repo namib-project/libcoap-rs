@@ -9,6 +9,7 @@
 
 //! Error types
 
+use std::ffi::NulError;
 use std::string::FromUtf8Error;
 
 use thiserror::Error;
@@ -82,16 +83,25 @@ pub enum OptionValueError {
     /// A string value could not be converted to UTF-8.
     #[error("CoAP option has invalid value: invalid string")]
     StringConversion(#[from] FromUtf8Error),
+    /// URI encoded in message could not be parsed.
+    #[error("CoAP option has invalid value: invalid URI")]
+    UriParsing(#[from] UriParsingError),
     /// Option has an illegal value.
     #[error("CoAP option has invalid value")]
     IllegalValue,
 }
 
-#[derive(Error, Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Error, Debug, Clone, Eq, PartialEq)]
 pub enum UriParsingError {
+    /// Unknown error inside of libcoap
+    #[error("CoAP option creation error: unknown error in call to libcoap")]
+    Unknown,
     /// URI does not have a valid scheme for libcoap (coap, coaps, coap+tcp, coaps+tcp, http, https).
-    #[error("URL does not have scheme valid for libcoap")]
-    NotACoapScheme,
+    #[error("URI scheme {} is not a valid CoAP scheme known to libcoap", .0)]
+    NotACoapScheme(String),
+    /// Provided URI contains a null byte.
+    #[error("Provided URI contains a null byte")]
+    ContainsNullByte(#[from] NulError),
 }
 
 #[derive(Error, Debug, Clone, Eq, PartialEq)]
@@ -109,9 +119,6 @@ pub enum MessageConversionError {
     /// Provided URI has invalid scheme.
     #[error("CoAP message conversion error: provided uri does not have scheme valid for CoAP")]
     NotACoapUri(UriParsingError),
-    /// URI is invalid (most likely a Proxy URI cannot be parsed as a valid URL).
-    #[error("CoAP message conversion error: invalid uri (malformed proxy URL?)")]
-    InvalidUri(url::ParseError),
     /// Invalid message code.
     #[error("CoAP message conversion error: invalid message code")]
     InvalidMessageCode(#[from] MessageCodeError),
@@ -140,12 +147,6 @@ pub enum MessageConversionError {
 impl From<UriParsingError> for MessageConversionError {
     fn from(v: UriParsingError) -> Self {
         MessageConversionError::NotACoapUri(v)
-    }
-}
-
-impl From<url::ParseError> for MessageConversionError {
-    fn from(v: url::ParseError) -> Self {
-        MessageConversionError::InvalidUri(v)
     }
 }
 

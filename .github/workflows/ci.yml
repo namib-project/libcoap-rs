@@ -24,23 +24,23 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: true
-      - uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@stable
         with:
           components: rust-src
-          toolchain: nightly
+          toolchain: stable
       - if: matrix.dtls_backend == 'gnutls'
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:
           packages: libgnutls28-dev libgnutls30
           version: 1.0
       - if: matrix.crate == 'libcoap-rs' && matrix.dtls_backend != 'gnutls'
-        run: cargo test -p ${{ matrix.crate }} --no-default-features --features dtls,tcp,vendored --features dtls_${{ matrix.dtls_backend }} --features dtls_${{ matrix.dtls_backend }}_vendored --no-fail-fast -- -Z unstable-options --report-time --ensure-time
+        run: cargo test -p ${{ matrix.crate }} --no-default-features --features dtls,tcp,vendored --features dtls_${{ matrix.dtls_backend }} --features dtls_${{ matrix.dtls_backend }}_vendored --no-fail-fast
       - if: matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'gnutls'
-        run: cargo test -p ${{ matrix.crate }} --no-default-features --features dtls,tcp,vendored --features dtls_${{ matrix.dtls_backend }} --no-fail-fast -- -Z unstable-options --report-time --ensure-time
+        run: cargo test -p ${{ matrix.crate }} --no-default-features --features dtls,tcp,vendored --features dtls_${{ matrix.dtls_backend }} --no-fail-fast
       - if: matrix.crate == 'libcoap-sys' && matrix.dtls_backend != 'gnutls'
-        run: cargo test -p ${{ matrix.crate }} --features dtls,dtls_backend_${{ matrix.dtls_backend }},dtls_backend_${{ matrix.dtls_backend }}_vendored --no-fail-fast -- -Z unstable-options --report-time --ensure-time
+        run: cargo test -p ${{ matrix.crate }} --features dtls,dtls_backend_${{ matrix.dtls_backend }},dtls_backend_${{ matrix.dtls_backend }}_vendored --no-fail-fast
       - if: matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'gnutls'
-        run: cargo test -p ${{ matrix.crate }} --features dtls,dtls_backend_${{ matrix.dtls_backend }} --no-fail-fast -- -Z unstable-options --report-time --ensure-time
+        run: cargo test -p ${{ matrix.crate }} --features dtls,dtls_backend_${{ matrix.dtls_backend }} --no-fail-fast
 
   lint:
     runs-on: ubuntu-latest
