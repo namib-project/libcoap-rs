@@ -846,6 +846,15 @@ pub enum CoapProtocol {
     Tls = COAP_PROTO_TLS as u32,
 }
 
+impl CoapProtocol {
+    pub fn is_secure(&self) -> bool {
+        match self {
+            CoapProtocol::None | CoapProtocol::Udp | CoapProtocol::Tcp => false,
+            CoapProtocol::Dtls | CoapProtocol::Tls => true,
+        }
+    }
+}
+
 #[doc(hidden)]
 impl From<coap_proto_t> for CoapProtocol {
     fn from(raw_proto: coap_proto_t) -> Self {

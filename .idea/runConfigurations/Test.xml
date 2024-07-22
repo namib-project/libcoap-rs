@@ -1,6 +1,6 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="Test" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
-    <option name="command" value="test -p libcoap-rs --no-default-features --features vendored,dtls,dtls_mbedtls,tcp" />
+    <option name="command" value="test -p libcoap-rs --no-default-features --features vendored,dtls,dtls_mbedtls,tcp,rand" />
     <option name="workingDirectory" value="file://$PROJECT_DIR$" />
     <envs />
     <option name="emulateTerminal" value="false" />
