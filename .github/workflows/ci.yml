@@ -51,8 +51,6 @@ jobs:
     strategy:
       matrix:
         crate: [ libcoap-sys, libcoap-rs ]
-    outputs:
-      report: ${{steps.lint-report.outputs.report}}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -67,36 +65,10 @@ jobs:
           level: warning
           fail_on_error: true
           tool_name: clippy (${{ matrix.crate }})
-      - if: success()
-        id: lint-report
-        name: "Generate linting report (success)"
-        run: |
-          # Snippet taken from https://github.com/marocchino/sticky-pull-request-comment#append-after-comment-every-time-it-runs
-          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
-          echo "report<<$EOF" >> "$GITHUB_OUTPUT"
-          echo "### Linting Report" >> "$GITHUB_OUTPUT"
-          echo "" >> "$GITHUB_OUTPUT"
-          echo "Clippy execution completed without error." >> "$GITHUB_OUTPUT"
-          echo "$EOF" >> "$GITHUB_OUTPUT"
-      - if: failure()
-        id: lint-report
-        name: "Generate linting report (failure)"
-        run: |
-          # Snippet taken from https://github.com/marocchino/sticky-pull-request-comment#append-after-comment-every-time-it-runs
-          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
-          echo "report<<$EOF" >> "$GITHUB_OUTPUT"
-          echo "### Linting Report" >> "$GITHUB_OUTPUT"
-          echo "" >> "$GITHUB_OUTPUT"
-          echo "Clippy execution completed with errors." >> "$GITHUB_OUTPUT"
-          echo "$EOF" >> "$GITHUB_OUTPUT"
 
   coverage:
     name: test-coverage
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        crate: [ libcoap-rs ]
     outputs:
       report: ${{steps.cov-report.outputs.summary}}
     steps:
@@ -128,7 +100,7 @@ jobs:
     if: ${{ github.event_name == 'pull_request' }}
     needs: [ lint, coverage ]
     env:
-      LINT_OUTPUT: ${{needs.lint.outputs.report}}
+      LINT_OUTPUT: ${{needs.lint.result}}
       COV_OUTPUT: ${{needs.coverage.outputs.report}}
     steps:
       - name: "Generate Markdown Report"
@@ -141,7 +113,11 @@ jobs:
           echo "" >> "$GITHUB_ENV"
           echo "[![CI Status](https://github.com/namib-project/libcoap-rs/actions/workflows/ci.yml/badge.svg?branch=${GITHUB_REF})](https://github.com/namib-project/libcoap-rs/actions/workflows/ci.yml?query=branch%3A${GITHUB_REF})" >> "$GITHUB_ENV"
           echo "" >> "$GITHUB_ENV"
-          echo $LINT_OUTPUT >> "$GITHUB_ENV"
+          echo "### Linting Report" >> "$GITHUB_ENV"
+          echo "" >> "$GITHUB_OUTPUT"
+          echo "Clippy check result: $LINT_OUTPUT" >> "$GITHUB_ENV"
+          echo "" >> "$GITHUB_ENV"
+          echo "Refer to [the \"Files Changed\" tab](./files/) for identified issues." >> "$GITHUB_ENV"
           echo "" >> "$GITHUB_ENV"
           echo $COV_OUTPUT >> "$GITHUB_ENV"
           echo "$EOF" >> "$GITHUB_ENV"
