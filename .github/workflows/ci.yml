@@ -67,10 +67,10 @@ jobs:
           tool_name: clippy (${{ matrix.crate }})
 
   coverage:
-    name: test-coverage
+    name: coverage
     runs-on: ubuntu-latest
     outputs:
-      report: ${{steps.cov-report.outputs.summary}}
+      report: ${{ steps.cov-report.outputs.summary }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -84,13 +84,13 @@ jobs:
       - run: cargo tarpaulin --no-fail-fast --workspace --verbose --features dtls,tcp,vendored --exclude-files libcoap-sys/tests,libcoap/tests --timeout 120 --out Xml
       - id: cov-report
         name: Produce the coverage report
-        uses: insightsengineering/coverage-action@v2
+        uses: pulsastrix/coverage-action@always_generate_comment_body
         with:
           path: ./cobertura.xml
           threshold: 80.0
           fail: false
           publish: false
-          diff: false
+          diff: true
           togglable-report: true
           coverage-summary-title: "### Code Coverage Report"
 
@@ -100,8 +100,8 @@ jobs:
     if: ${{ github.event_name == 'pull_request' }}
     needs: [ lint, coverage ]
     env:
-      LINT_OUTPUT: ${{needs.lint.result}}
-      COV_OUTPUT: ${{needs.coverage.outputs.report}}
+      LINT_OUTPUT: ${{ needs.lint.result }}
+      COV_OUTPUT: ${{ needs.coverage.outputs.report }}
     steps:
       - name: "Generate Markdown Report"
         run: |
@@ -111,7 +111,7 @@ jobs:
           echo "## Workflow Status Report" >> "$GITHUB_ENV"
           echo "Generated for commit ${{ github.sha }} on `date -u`.\n" >> "$GITHUB_ENV"
           echo "" >> "$GITHUB_ENV"
-          echo "[![CI Status](https://github.com/namib-project/libcoap-rs/actions/workflows/ci.yml/badge.svg?branch=${GITHUB_REF})](https://github.com/namib-project/libcoap-rs/actions/workflows/ci.yml?query=branch%3A${GITHUB_REF})" >> "$GITHUB_ENV"
+          echo "[![CI Status](https://github.com/namib-project/libcoap-rs/actions/workflows/ci.yml/badge.svg?branch=${GITHUB_HEAD_REF})](https://github.com/namib-project/libcoap-rs/actions/workflows/ci.yml?query=branch%3A${GITHUB_HEAD_REF})" >> "$GITHUB_ENV"
           echo "" >> "$GITHUB_ENV"
           echo "### Linting Report" >> "$GITHUB_ENV"
           echo "" >> "$GITHUB_OUTPUT"
