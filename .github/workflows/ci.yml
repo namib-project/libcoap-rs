@@ -71,7 +71,7 @@ jobs:
           EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
           echo "report<<$EOF" >> "$GITHUB_OUTPUT"
           echo "### Linting Report" >> "$GITHUB_OUTPUT"
-          echo "[![clippy](https://github.com/namib-project/libcoap-rs/workflows/checks/badge.svg?branch=${{ GITHUB_REF }})]" >> "$GITHUB_OUTPUT"
+          echo "[![clippy](https://github.com/namib-project/libcoap-rs/workflows/checks/badge.svg?branch=${GITHUB_REF})]" >> "$GITHUB_OUTPUT"
           echo "$EOF" >> "$GITHUB_OUTPUT"
 
   coverage:
