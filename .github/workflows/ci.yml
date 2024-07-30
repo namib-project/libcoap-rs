@@ -16,7 +16,7 @@ env:
 
 jobs:
   test:
-    name: tests
+    name: test
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -51,6 +51,8 @@ jobs:
     strategy:
       matrix:
         crate: [ libcoap-sys, libcoap-rs ]
+    outputs:
+      report: ${{steps.lint-report.outputs.report}}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -66,6 +68,8 @@ jobs:
           fail_on_error: true
           tool_name: clippy (${{ matrix.crate }})
       - if: always()
+        id: lint-report
+        name: "Generate linting report"
         run: |
           # Snippet taken from https://github.com/marocchino/sticky-pull-request-comment#append-after-comment-every-time-it-runs
           EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
@@ -81,6 +85,8 @@ jobs:
       fail-fast: false
       matrix:
         crate: [ libcoap-rs ]
+    outputs:
+      report: ${{steps.cov-report.outputs.summary}}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -88,11 +94,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
-      - uses: baptiste0928/cargo-install@v2
+      - uses: baptiste0928/cargo-install@v3
         with:
           crate: cargo-tarpaulin
       - run: cargo tarpaulin --no-fail-fast --workspace --verbose --features dtls,tcp,vendored --exclude-files libcoap-sys/tests,libcoap/tests --timeout 120 --out Xml
-      - name: Produce the coverage report
+      - id: cov-report
+        name: Produce the coverage report
         uses: insightsengineering/coverage-action@v2
         with:
           path: ./cobertura.xml
@@ -104,15 +111,16 @@ jobs:
           coverage-summary-title: "### Code Coverage Report"
 
   pr-comment:
-    name: test-coverage
+    name: pr-comment
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'pull_request' }}
     needs: [ lint, coverage ]
     env:
       LINT_OUTPUT: ${{needs.lint.outputs.report}}
-      COV_OUTPUT: ${{needs.coverage.outputs.summary}}
+      COV_OUTPUT: ${{needs.coverage.outputs.report}}
     steps:
-      - run: |
+      - name: "Generate Markdown Report"
+        run: |
           # Snippet taken from https://github.com/marocchino/sticky-pull-request-comment#append-after-comment-every-time-it-runs
           EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
           echo "report<<$EOF" >> "$GITHUB_ENV"
