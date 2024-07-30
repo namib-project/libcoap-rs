@@ -1,3 +1,5 @@
+name: CI Status
+
 on:
   push:
     branches:
@@ -14,14 +16,15 @@ env:
 
 jobs:
   test:
+    name: test
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        crate: [libcoap-sys, libcoap-rs]
-        dtls_backend: [openssl, gnutls, tinydtls, mbedtls]
+        crate: [ libcoap-sys, libcoap-rs ]
+        dtls_backend: [ openssl, gnutls, tinydtls, mbedtls ]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: true
       - uses: dtolnay/rust-toolchain@stable
@@ -43,12 +46,13 @@ jobs:
         run: cargo test -p ${{ matrix.crate }} --features dtls,dtls_backend_${{ matrix.dtls_backend }} --no-fail-fast
 
   lint:
+    name: lint
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        crate: [libcoap-sys, libcoap-rs]
+        crate: [ libcoap-sys, libcoap-rs ]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: true
       - uses: dtolnay/rust-toolchain@stable
@@ -56,48 +60,68 @@ jobs:
           components: clippy, rustfmt
       - uses: giraffate/clippy-action@main
         with:
-          reporter: 'github-pr-check'
+          reporter: 'github-check'
           clippy_flags: -p ${{ matrix.crate }} --no-deps
           level: warning
+          fail_on_error: true
           tool_name: clippy (${{ matrix.crate }})
 
   coverage:
+    name: coverage
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        crate: [libcoap-rs]
+    outputs:
+      report: ${{ steps.cov-report.outputs.summary }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: true
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
-      - uses: baptiste0928/cargo-install@v2
+      - uses: baptiste0928/cargo-install@v3
         with:
           crate: cargo-tarpaulin
       - run: cargo tarpaulin --no-fail-fast --workspace --verbose --features dtls,tcp,vendored --exclude-files libcoap-sys/tests,libcoap/tests --timeout 120 --out Xml
-      - uses: irongut/CodeCoverageSummary@v1.3.0
+      - id: cov-report
+        name: Produce the coverage report
+        uses: pulsastrix/coverage-action@always_generate_comment_body
         with:
-          filename: ./cobertura.xml
-          badge: true
-          fail_below_min: false
-          format: markdown
-          hide_branch_rate: false
-          hide_complexity: true
-          indicators: true
-          output: file
-      - run: |
+          path: ./cobertura.xml
+          threshold: 80.0
+          fail: false
+          publish: false
+          diff: true
+          togglable-report: true
+          coverage-summary-title: "Code Coverage Report"
+
+  pr-comment:
+    name: pr-comment
+    runs-on: ubuntu-latest
+    if: ${{ always() && github.event_name == 'pull_request' }}
+    needs: [ lint, coverage ]
+    env:
+      LINT_OUTPUT: ${{ needs.lint.result }}
+      COV_OUTPUT: ${{ needs.coverage.outputs.report }}
+    steps:
+      - name: "Generate Markdown Report"
+        run: |
           # Snippet taken from https://github.com/marocchino/sticky-pull-request-comment#append-after-comment-every-time-it-runs
           EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
-          echo "coverage_report<<$EOF" >> "$GITHUB_ENV"
-          echo "### Code Coverage Report" >> "$GITHUB_ENV"
+          echo "report<<$EOF" >> "$GITHUB_ENV"
+          echo "# Workflow Status Report" >> "$GITHUB_ENV"
           echo "Generated for commit ${{ github.sha }} on `date -u`." >> "$GITHUB_ENV"
-          cat code-coverage-results.md >> "$GITHUB_ENV"
+          echo "" >> "$GITHUB_ENV"
+          echo "[![CI Status](https://github.com/namib-project/libcoap-rs/actions/workflows/ci.yml/badge.svg?branch=${GITHUB_HEAD_REF})](https://github.com/namib-project/libcoap-rs/actions/workflows/ci.yml?query=branch%3A${GITHUB_HEAD_REF})" >> "$GITHUB_ENV"
+          echo "" >> "$GITHUB_ENV"
+          echo "## Linting Report" >> "$GITHUB_ENV"
+          echo "" >> "$GITHUB_OUTPUT"
+          echo "Clippy check result: $LINT_OUTPUT" >> "$GITHUB_ENV"
+          echo "" >> "$GITHUB_ENV"
+          echo "Refer to [the \"Files Changed\" tab](./${{ github.event.number }}/files/) for identified issues." >> "$GITHUB_ENV"
+          echo "" >> "$GITHUB_ENV"
+          echo "$COV_OUTPUT" >> "$GITHUB_ENV"
           echo "$EOF" >> "$GITHUB_ENV"
       - if: github.event_name == 'pull_request'
         uses: marocchino/sticky-pull-request-comment@v2
         with:
-          message: ${{ env.coverage_report }}
-      - run: cat code-coverage-results.md >> $GITHUB_STEP_SUMMARY
+          message: ${{ env.report }}
