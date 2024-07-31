@@ -18,7 +18,7 @@ use std::{
 };
 use std::ffi::CString;
 use std::fmt::{Display, Formatter};
-use std::marker::PhantomPinned;
+use std::marker::{PhantomData, PhantomPinned};
 use std::ops::{Deref, DerefMut};
 use std::pin::Pin;
 
@@ -31,7 +31,7 @@ use url::Url;
 use libcoap_sys::{
     coap_address_t, coap_delete_optlist, coap_mid_t, coap_proto_t,
     coap_proto_t::{COAP_PROTO_DTLS, COAP_PROTO_NONE, COAP_PROTO_TCP, COAP_PROTO_TLS, COAP_PROTO_UDP},
-    coap_split_proxy_uri, coap_split_uri, coap_str_const_t, coap_string_equal, coap_uri_into_options,
+    coap_split_proxy_uri, coap_split_uri, coap_str_const_t, coap_string_equal, coap_string_t, coap_uri_into_options,
     COAP_URI_SCHEME_SECURE_MASK,
     coap_uri_scheme_t,
     coap_uri_scheme_t::{
@@ -325,21 +325,21 @@ impl From<CoapProtocol> for CoapUriScheme {
 pub struct CoapUri {
     is_proxy: bool,
     raw_uri: coap_uri_t,
-    uri_str: Pin<CoapUriInner>,
+    uri_str: Pin<Box<PinWrapper<CString>>>,
 }
 
 #[derive(Debug)]
-struct CoapUriInner(CString, PhantomPinned);
+struct PinWrapper<T>(T, PhantomPinned);
 
-impl Deref for CoapUriInner {
-    type Target = CString;
+impl<T> Deref for PinWrapper<T> {
+    type Target = T;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl DerefMut for CoapUriInner {
+impl<T> DerefMut for PinWrapper<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
@@ -695,7 +695,6 @@ impl CoapUri {
     /// Create an instance of [CoapUri] with the given `uri_str`, but don't parse the value, i.e.
     /// the resulting `raw_uri` is not set correctly.
     fn create_unparsed_uri(uri_str: CString, is_proxy: bool) -> Self {
-        let uri_str = Pin::new(CoapUriInner(uri_str, PhantomPinned));
         CoapUri {
             raw_uri: coap_uri_t {
                 host: coap_str_const_t {
@@ -713,7 +712,7 @@ impl CoapUri {
                 },
                 scheme: coap_uri_scheme_t::COAP_URI_SCHEME_COAP,
             },
-            uri_str,
+            uri_str: Box::pin(PinWrapper(uri_str, PhantomPinned)),
             is_proxy,
         }
     }
@@ -872,6 +871,36 @@ impl Display for CoapProtocol {
             CoapProtocol::Tls => "tls",
         })
     }
+}
+
+pub struct CoapStringConst {}
+
+pub struct CoapStringMut {}
+
+pub struct CoapStr<'a> {
+    raw_str: coap_str_const_t,
+    _lifetime_marker: PhantomData<&'a coap_str_const_t>,
+}
+
+pub struct CoapStrMut<'a> {
+    raw_str: coap_string_t,
+    _lifetime_marker: PhantomData<&'a mut coap_string_t>,
+}
+
+// Implementations possible for:
+// - Any reference to an AsRef<[u8]> with lifetime of reference
+// - Types that prevent mutation of underlying [u8] (with lifetime of this guarantee, maybe add a
+//   wrapper struct that does this)
+pub unsafe trait ToCoapStr<'a> {
+    fn to_coap_str(&self) -> CoapStr<'a>;
+}
+
+// Implementations possible for:
+// - Any reference to an AsMut<[u8]> with lifetime of reference
+// - Types that prevent concurrent mutation of underlying [u8] (with lifetime of this guarantee,
+//   maybe add a wrapper struct that does this)
+pub unsafe trait ToCoapStrMut<'a> {
+    fn to_coap_str_mut(&mut self) -> CoapStrMut<'a>;
 }
 
 fn convert_to_fixed_size_slice(n: usize, val: &[u8]) -> Box<[u8]> {
