@@ -109,7 +109,7 @@ jobs:
           EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
           echo "report<<$EOF" >> "$GITHUB_ENV"
           echo "# Workflow Status Report" >> "$GITHUB_ENV"
-          echo "Generated for commit ${{ github.sha }} on `date -u`.\n" >> "$GITHUB_ENV"
+          echo "Generated for commit ${{ github.sha }} on `date -u`." >> "$GITHUB_ENV"
           echo "" >> "$GITHUB_ENV"
           echo "[![CI Status](https://github.com/namib-project/libcoap-rs/actions/workflows/ci.yml/badge.svg?branch=${GITHUB_HEAD_REF})](https://github.com/namib-project/libcoap-rs/actions/workflows/ci.yml?query=branch%3A${GITHUB_HEAD_REF})" >> "$GITHUB_ENV"
           echo "" >> "$GITHUB_ENV"
@@ -117,7 +117,7 @@ jobs:
           echo "" >> "$GITHUB_OUTPUT"
           echo "Clippy check result: $LINT_OUTPUT" >> "$GITHUB_ENV"
           echo "" >> "$GITHUB_ENV"
-          echo "Refer to [the \"Files Changed\" tab](./files/) for identified issues." >> "$GITHUB_ENV"
+          echo "Refer to [the \"Files Changed\" tab](./${{ github.event.number }}/files/) for identified issues." >> "$GITHUB_ENV"
           echo "" >> "$GITHUB_ENV"
           echo "$COV_OUTPUT" >> "$GITHUB_ENV"
           echo "$EOF" >> "$GITHUB_ENV"
