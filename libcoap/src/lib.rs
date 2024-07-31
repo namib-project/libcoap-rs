@@ -13,13 +13,13 @@
 //!
 //! This wrapper allows for safe and idiomatic usage of the libcoap C library in Rust.
 //!
-//! # Protocol support
+//! # Feature support
 //! libcoap-rs currently supports the following subset of the libcoap feature set:
 //! - [x] Basic CoAP client
 //! - [x] Basic CoAP server
 //! - [ ] Transports:
 //!     - [x] UDP
-//!     - [-] DTLS
+//!     - [x] DTLS
 //!         - [x] DTLS using PSK
 //!         - [ ] DTLS using PKI/RPK
 //!     - [ ] TCP
@@ -28,18 +28,62 @@
 //!     - [ ] WebSockets
 //! - [ ] Blockwise Transfer
 //!     - [x] Receiving large messages
-//!         - Note: Handled by libcoap by setting `COAP_BLOCK_USE_LIBCOAP|COAP_BLOCK_SINGLE_BODY`
+//!         - Note: Handled in libcoap by setting `COAP_BLOCK_USE_LIBCOAP|COAP_BLOCK_SINGLE_BODY`.
+//!                 Manually constructing and managing blockwise transfers is currently not in scope
+//!                 for this library.
 //!     - [x] sending client-side large messages
 //!     - [ ] sending server-side large messages
 //! - [ ] Resource observation
 //!     - [ ] Observing resources as a client
 //!     - [x] Notifying observers as a server
 //!
+//! # Building
+//! libcoap-rs can be linked to either an included version of libcoap or to a version provided by
+//! the environment.
+//! By default, it will use the vendored version, which can be disabled by disabling the default 
+//! feature `vendored`.
+//! 
+//! In order to use DTLS, a DTLS library must be chosen, see the later section on using 
+//! cryptography for more information.
+//!
+//! Some (but not all) of the available DTLS libraries may also be vendored using the 
+//! `dtls_[LIBRARY]_vendored` feature.
+//!
+//! ## Building on the ESP32
+//!
+//! libcoap-rs and libcoap-sys support building for the ESP32.
+//! This is done by using the version of libcoap provided by the ESP-IDF as a managed component
+//! and generating bindings for it.
+//!
+//! In order to build for the ESP, ensure that the following preconditions are met:
+//!
+//! - The version of `esp-idf-sys` used by your crate matches the one used by `libcoap-sys`.
+//! - Ensure that your `sdkconfig.defaults` enables the features required by your chosen 
+//!   feature set of `libcoap-rs`
+//! - Ensure that the ESP-IDF version you link against is supported. `libcoap-rs` _should_
+//!   compile on at least ESP-IDF 5.1.3 and 5.3. 
+//!   If it does not (or you require support for newer versions of ESP-IDF), please open an issue 
+//!   in the [`libcoap-rs` issue tracker](https://github.com/namib-project/libcoap-rs/issues).
+//!
+//! An example for a typical excerpt from `sdkconfig.defaults` can be found here:
+//! ```ini
+//! # libcoap base functionality (client and server)
+//! CONFIG_COAP_SERVER_SUPPORT=y
+//! CONFIG_COAP_CLIENT_SUPPORT=y
+//! 
+//! # enable DTLS in libcoap
+//! CONFIG_COAP_MBEDTLS_PSK=y
+//! CONFIG_COAP_MBEDTLS_PKI=y
+//! CONFIG_MBEDTLS_SSL_PROTO_DTLS=y
+//! CONFIG_MBEDTLS_PSK_MODES=y
+//! CONFIG_MBEDTLS_KEY_EXCHANGE_PSK=y
+//! ```
+//!
 //! # Examples
 //!
 //! ## Client
 //! This example runs a simple CoAP client which makes a request to `coap://[::1]:5683/hello_world`
-//! and checks whether the result has the code 2.00 (Content) and the paylaod `Hello World!`.
+//! and checks whether the result has the code 2.00 (Content) and the payload `Hello World!`.
 //!
 //! ```no_run
 //! use std::{
@@ -61,7 +105,7 @@
 //! // Create a new context.
 //! let mut context = CoapContext::new().expect("Failed to create CoAP context");
 //!
-//! // Connect to the server at the specified address over UDP (plaintext CoAP)//!
+//! // Connect to the server at the specified address over UDP (no encryption)
 //! let session = CoapClientSession::connect_udp(&mut context, server_address)
 //!                 .expect("Failed to create client-side session");
 //!
@@ -169,7 +213,7 @@
 //!
 //! libcoap requires a DTLS library to be selected for DTLS functionality. By default, libcoap-rs
 //! will use `openssl` for this purpose. If you wish to use one of the other supported DTLS
-//! libraries (GnuTLS, MBedTLS, TinyDTLS), disable the `dtls_openssl` feature and replace it with
+//! libraries (GnuTLS, MbedTLS, TinyDTLS), disable the `dtls_openssl` feature and replace it with
 //! the feature for the library of your choice.
 //!
 //! Note that enabling multiple backends is not possible and doing so will result in a single
