@@ -93,6 +93,7 @@ jobs:
           diff: true
           togglable-report: true
           coverage-summary-title: "### Code Coverage Report"
+      - run: echo ${{ steps.cov-report.outputs.summary }}
 
   pr-comment:
     name: pr-comment
@@ -106,6 +107,7 @@ jobs:
       - name: "Generate Markdown Report"
         run: |
           # Snippet taken from https://github.com/marocchino/sticky-pull-request-comment#append-after-comment-every-time-it-runs
+          echo $COV_OUTPUT
           EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
           echo "report<<$EOF" >> "$GITHUB_ENV"
           echo "## Workflow Status Report" >> "$GITHUB_ENV"
