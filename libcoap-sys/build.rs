@@ -155,9 +155,13 @@ fn get_builder_espidf() -> bindgen::Builder {
         .clang_arg("-DESP_PLATFORM")
         .clang_arg("-DLWIP_IPV4=1")
         .clang_arg("-DLWIP_IPV6=1")
+        .clang_arg(format!("-I{}/components/newlib/platform_include", esp_idf_path))
+        .clang_arg(format!("-I{}/components/lwip/port/include", esp_idf_path))
+        .clang_arg(format!("-I{}/components/lwip/port/esp32xx/include", esp_idf_path))
         .clang_arg(format!("-I{}/components/lwip/lwip/src/include", esp_idf_path))
         .clang_arg(format!("-I{}/components/lwip/port/freertos/include", esp_idf_path))
         .clang_arg(format!("-I{}/components/esp_system/include", esp_idf_path))
+        .clang_arg(format!("-I{}/components/freertos/config/include/freertos", esp_idf_path))
         .clang_arg(format!("-I{}/components/freertos/esp_additions/include", esp_idf_path))
         .clang_arg(format!(
             "-I{}/components/freertos/esp_additions/include/freertos",
@@ -172,6 +176,9 @@ fn get_builder_espidf() -> bindgen::Builder {
             esp_idf_path, short_target
         )) // for newer espidf
         .clang_arg(format!("-I{}/components/{}/include", esp_idf_path, short_target))
+        .clang_arg(format!("-I{}/components/{}/{}/include", esp_idf_path, short_target, target_mcu))
+        .clang_arg(format!("-I{}/components/esp_hw_support/include", esp_idf_path))
+        .clang_arg(format!("-I{}/components/esp_common/include", esp_idf_path))
         .clang_arg(format!(
             "-I{}/components/freertos/FreeRTOS-Kernel-SMP/include",
             esp_idf_path
@@ -183,6 +190,10 @@ fn get_builder_espidf() -> bindgen::Builder {
         .clang_arg(format!("-I{}/components/soc/{}/include", esp_idf_path, target_mcu))
         .clang_arg(format!("-I{}/components/heap/include", esp_idf_path))
         .clang_arg(format!("-I{}/components/esp_rom/include", esp_idf_path))
+        .clang_arg(format!(
+            "-I{}/managed_components/espressif__coap/port/include",
+            esp_idf_buildroot
+        ))
         .clang_arg(format!(
             "-I{}/managed_components/espressif__coap/libcoap/include",
             esp_idf_buildroot
