@@ -93,12 +93,12 @@ jobs:
           diff: true
           togglable-report: true
           coverage-summary-title: "### Code Coverage Report"
-      - run: echo ${{ steps.cov-report.outputs.summary }}
+      - run: echo '${{ steps.cov-report.outputs.summary }}'
 
   pr-comment:
     name: pr-comment
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'pull_request' }}
+    if: ${{ always() && github.event_name == 'pull_request' }}
     needs: [ lint, coverage ]
     env:
       LINT_OUTPUT: ${{ needs.lint.result }}
