@@ -15,21 +15,160 @@ use std::{
     process::Command,
 };
 use std::cell::RefCell;
-use std::ffi::OsString;
+use std::collections::BTreeSet;
+use std::ffi::{OsStr, OsString};
 use std::fmt::{Debug, Display};
+use std::rc::Rc;
 
 use bindgen::callbacks::{IntKind, ParseCallbacks};
 use bindgen::EnumVariation;
 use pkg_config::probe_library;
 use version_compare::{Cmp, Version};
 
-#[derive(Debug, Default)]
-pub struct CoapConfigMacroParser {
-    version: RefCell<String>,
+/// Features whose availability can be checked during compile time based on defines.
+const COMPILE_TIME_FEATURE_CHECKS: [&str; 16] = [
+    "af-unix",
+    "async",
+    "client",
+    "small-stack",
+    "tcp",
+    "epoll",
+    "ipv4",
+    "ipv6",
+    "oscore",
+    "q-block",
+    "server",
+    "thread-recursive-lock-detection",
+    "thread-safe",
+    "dtls",
+    "observe-persist",
+    "websockets",
+];
+
+/// Data structure describing meta-information about the used version of libcoap.
+#[derive(Debug)]
+struct LibcoapMetadata {
+    package_version: String,
+    version: i64,
+    feature_defines_available: bool,
+    feature_defines: BTreeSet<String>,
+    dtls_backend: Option<DtlsBackend>,
 }
 
-impl ParseCallbacks for CoapConfigMacroParser {
-    fn int_macro(&self, _name: &str, _value: i64) -> Option<IntKind> {
+impl Default for LibcoapMetadata {
+    fn default() -> Self {
+        Self {
+            package_version: Default::default(),
+            version: 0,
+            feature_defines_available: false,
+            // COAP_DISABLE_TCP is set if TCP is _not_ supported, assume it is supported otherwise.
+            feature_defines: BTreeSet::from(["tcp".to_string()]),
+            dtls_backend: None,
+        }
+    }
+}
+
+/// Implementation of bindgen's [ParseCallbacks] that allow reading some metainformation about the
+/// used libcoap version from its defines (package version, supported features, ...)
+#[derive(Debug, Default)]
+struct CoapDefineParser {
+    defines: Rc<RefCell<LibcoapMetadata>>,
+}
+
+impl ParseCallbacks for CoapDefineParser {
+    fn int_macro(&self, name: &str, value: i64) -> Option<IntKind> {
+        match name {
+            "LIBCOAP_VERSION" => {
+                self.defines.borrow_mut().version = value;
+            },
+            "COAP_AF_UNIX_SUPPORT" => {
+                self.defines.borrow_mut().feature_defines.insert("af-unix".to_string());
+            },
+            "COAP_ASYNC_SUPPORT" => {
+                self.defines.borrow_mut().feature_defines.insert("async".to_string());
+            },
+            "COAP_CLIENT_SUPPORT" => {
+                self.defines.borrow_mut().feature_defines.insert("client".to_string());
+            },
+            "COAP_CONSTRAINED_STACK" => {
+                self.defines
+                    .borrow_mut()
+                    .feature_defines
+                    .insert("small-stack".to_string());
+            },
+            "COAP_DISABLE_TCP" => {
+                if value == 1 {
+                    self.defines.borrow_mut().feature_defines.remove("tcp");
+                }
+            },
+            "COAP_EPOLL_SUPPORT" => {
+                self.defines.borrow_mut().feature_defines.insert("epoll".to_string());
+            },
+            "COAP_IPV4_SUPPORT" => {
+                self.defines.borrow_mut().feature_defines.insert("ipv4".to_string());
+            },
+            "COAP_IPV6_SUPPORT" => {
+                self.defines.borrow_mut().feature_defines.insert("ipv6".to_string());
+            },
+            "COAP_OSCORE_SUPPORT" => {
+                self.defines.borrow_mut().feature_defines.insert("oscore".to_string());
+            },
+            "COAP_Q_BLOCK_SUPPORT" => {
+                self.defines.borrow_mut().feature_defines.insert("q-block".to_string());
+            },
+            "COAP_SERVER_SUPPORT" => {
+                self.defines.borrow_mut().feature_defines.insert("server".to_string());
+            },
+            "COAP_THREAD_RECURSIVE_CHECK" => {
+                self.defines
+                    .borrow_mut()
+                    .feature_defines
+                    .insert("thread-recursive-lock-detection".to_string());
+            },
+            "COAP_THREAD_SAFE" => {
+                self.defines
+                    .borrow_mut()
+                    .feature_defines
+                    .insert("thread-safe".to_string());
+            },
+            "COAP_WITH_LIBGNUTLS" => {
+                self.defines.borrow_mut().dtls_backend = Some(DtlsBackend::GnuTls);
+                self.defines.borrow_mut().feature_defines.insert("dtls".to_string());
+            },
+            "COAP_WITH_LIBMBEDTLS" => {
+                self.defines.borrow_mut().dtls_backend = Some(DtlsBackend::MbedTls);
+                self.defines.borrow_mut().feature_defines.insert("dtls".to_string());
+            },
+            "COAP_WITH_LIBOPENSSL" => {
+                self.defines.borrow_mut().dtls_backend = Some(DtlsBackend::OpenSsl);
+                self.defines.borrow_mut().feature_defines.insert("dtls".to_string());
+            },
+            "COAP_WITH_LIBTINYDTLS" => {
+                self.defines.borrow_mut().dtls_backend = Some(DtlsBackend::TinyDtls);
+                self.defines.borrow_mut().feature_defines.insert("dtls".to_string());
+            },
+            // TODO as soon as we have wolfSSL support in libcoap-sys
+            /*"COAP_WITH_LIBWOLFSSL" => {
+                self.defines.borrow_mut().dtls_backend = Some(DtlsBackend::WolfSsl);
+                self.defines
+                    .borrow_mut()
+                    .feature_defines
+                    .insert("dtls".to_string());
+            },*/
+            "COAP_WITH_OBSERVE_PERSIST" => {
+                self.defines
+                    .borrow_mut()
+                    .feature_defines
+                    .insert("observe-persist".to_string());
+            },
+            "COAP_WS_SUPPORT" => {
+                self.defines
+                    .borrow_mut()
+                    .feature_defines
+                    .insert("websockets".to_string());
+            },
+            _ => {},
+        }
         None
     }
 
@@ -37,17 +176,25 @@ impl ParseCallbacks for CoapConfigMacroParser {
         // Will allow this here, as we might want to add additional cfg flags later on.
         #[allow(clippy::single_match)]
         match name {
-            "PACKAGE_VERSION" => {
+            "LIBCOAP_PACKAGE_VERSION" => {
                 let version_str = String::from_utf8_lossy(value);
                 println!("cargo:rustc-cfg=libcoap_version=\"{}\"", version_str.as_ref());
+                println!("cargo:libcoap_version={}", version_str.as_ref());
                 let version = Version::from(version_str.as_ref()).expect("invalid libcoap version");
                 match version.compare(Version::from("4.3.4").unwrap()) {
                     Cmp::Lt | Cmp::Eq => println!("cargo:rustc-cfg=inlined_coap_send_rst"),
                     _ => {},
                 }
-                self.version.replace(version.to_string());
+                self.defines.borrow_mut().package_version = version.to_string();
             },
             _ => {},
+        }
+    }
+
+    fn include_file(&self, filename: &str) {
+        let header_path = Path::new(filename);
+        if header_path.file_name().eq(&Some(OsStr::new("coap_defines.h"))) {
+            self.defines.borrow_mut().feature_defines_available = true;
         }
     }
 }
@@ -375,9 +522,7 @@ fn build_vendored_library(
         // Disable tests and examples as well as test coverage
         .disable("tests", None)
         .disable("examples", None)
-        .disable("gcov", None)
-        // TODO allow multithreaded access
-        .disable("thread-safe", None);
+        .disable("gcov", None);
 
     // Enable debug symbols if enabled in Rust
     match env::var_os("DEBUG")
@@ -392,20 +537,46 @@ fn build_vendored_library(
     }
     // Enable dependency features based on selected cargo features.
     build_config
-        .enable("async", Some(if cfg!(feature = "async") { "yes" } else { "no" }))
+        .enable("oscore", Some(if cfg!(feature = "oscore") { "yes" } else { "no" }))
+        .enable("ipv4-support", Some(if cfg!(feature = "ipv4") { "yes" } else { "no" }))
+        .enable("ipv6-support", Some(if cfg!(feature = "ipv6") { "yes" } else { "no" }))
+        .enable(
+            "af-unix-support",
+            Some(if cfg!(feature = "af-unix") { "yes" } else { "no" }),
+        )
         .enable("tcp", Some(if cfg!(feature = "tcp") { "yes" } else { "no" }))
+        .enable(
+            "websockets",
+            Some(if cfg!(feature = "websockets") { "yes" } else { "no" }),
+        )
+        .enable("async", Some(if cfg!(feature = "async") { "yes" } else { "no" }))
+        .enable(
+            "observe-persist",
+            Some(if cfg!(feature = "observe-persist") { "yes" } else { "no" }),
+        )
+        .enable("q-block", Some(if cfg!(feature = "q-block") { "yes" } else { "no" }))
+        .enable(
+            "thread-safe",
+            Some(if cfg!(feature = "thread-safe") { "yes" } else { "no" }),
+        )
+        .enable(
+            "thread-recursive-lock-detection",
+            Some(if cfg!(feature = "thread-recursive-lock-detection") {
+                "yes"
+            } else {
+                "no"
+            }),
+        )
+        .enable(
+            "small-stack",
+            Some(if cfg!(feature = "small-stack") { "yes" } else { "no" }),
+        )
         .enable("server-mode", Some(if cfg!(feature = "server") { "yes" } else { "no" }))
         .enable("client-mode", Some(if cfg!(feature = "client") { "yes" } else { "no" }))
         .with("epoll", Some(if cfg!(feature = "epoll") { "yes" } else { "no" }));
 
     // Run build
     let dst = build_config.build();
-
-    std::fs::copy(
-        dst.join("build").join("coap_config.h"),
-        dst.join("include").join("coap_config.h"),
-    )
-    .expect("unable to copy coap_config.h from build to include directory");
 
     // Add the built library to the search path
     println!(
@@ -438,6 +609,8 @@ fn build_vendored_library(
 }
 
 fn main() {
+    println!("cargo::rustc-check-cfg=cfg(feature_checks_available)");
+    println!("cargo::rustc-check-cfg=cfg(inlined_coap_send_rst)");
     println!("cargo:rerun-if-changed=src/libcoap/");
     println!("cargo:rerun-if-changed=src/wrapper.h");
     // Read required environment variables.
@@ -554,7 +727,11 @@ fn main() {
         }
     }
 
-    let cfg_info = Box::new(CoapConfigMacroParser::default());
+    let libcoap_defines = Rc::new(RefCell::new(LibcoapMetadata::default()));
+
+    let cfg_info = Box::new(CoapDefineParser {
+        defines: Rc::clone(&libcoap_defines),
+    });
 
     bindgen_builder = bindgen_builder
         .header("src/wrapper.h")
@@ -567,8 +744,7 @@ fn main() {
         .allowlist_var("(oscore|coap)_.*")
         .allowlist_function("(OSCORE|COAP)_.*")
         .allowlist_type("(OSCORE|COAP)_.*")
-        .allowlist_var("(OSCORE|COAP)_.*")
-        .allowlist_file(r".*\/coap_config.h")
+        .allowlist_var("(OSCORE|COAP|LIBCOAP)_.*")
         // We use the definitions made by the libc crate instead
         .blocklist_type("sockaddr(_in|_in6)?")
         .blocklist_type("in6?_(addr|port)(_t)?")
@@ -593,6 +769,28 @@ fn main() {
         bindgen_builder = bindgen_builder.parse_callbacks(Box::new(bindgen::CargoCallbacks::new()));
     }
     let bindings = bindgen_builder.generate().expect("unable to generate bindings");
+
+    // Check if required features are available in libcoap.
+    let libcoap_defines = libcoap_defines.take();
+    if libcoap_defines.feature_defines_available {
+        println!("cargo:rustc-cfg=feature_checks_available");
+        println!(
+            "cargo:warning=Available features: {:?}",
+            libcoap_defines.feature_defines
+        );
+        for feature in COMPILE_TIME_FEATURE_CHECKS {
+            let feature_env_var_name = "CARGO_FEATURE_".to_string() + &feature.replace('-', "_").to_uppercase();
+            if env::var(&feature_env_var_name).is_ok() && !libcoap_defines.feature_defines.contains(feature) {
+                panic!("Required feature {feature} is not available in the used version of libcoap!");
+            }
+        }
+        if dtls_backend != libcoap_defines.dtls_backend {
+            // Should be fine, as applications should expect that the DTLS library could differ.
+            println!("cargo:warning=DTLS library used by libcoap does not match chosen one. This might lead to issues.")
+        }
+    } else {
+        println!("cargo:warning=The used version of libcoap does not provide a coap_defines.h file, either because it is too old (<4.3.5) or because this file is somehow not included. Compile-time feature checks are not available, and the availability of some features (small-stack, IPv4/IPv6,) can not be asserted at all!");
+    }
 
     let out_path = PathBuf::from(out_dir);
     bindings
