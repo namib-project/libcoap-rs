@@ -151,6 +151,50 @@ pub unsafe fn coap_string_equal_internal(
                 && memcmp(str1_ptr as *const c_void, str2_ptr as *const c_void, str1_len) == 0)
 }
 
+/// Initialize the CoAP library and additionally perform runtime checks to ensure that required
+/// features (as enabled in `Cargo.toml`) are available.
+///
+/// Either this or [coap_startup] must be run once before any libcoap function is called.
+///
+/// If you are absolutely 100% certain that all features you require are always available (or are
+/// prepared to deal with error return values on your own if they aren't), you may use
+/// [coap_startup] instead.
+pub fn coap_startup_with_feature_checks(panic_on_unchecked_feature: bool) {
+    // TODO only compile checks if they are available for the given libcoap version.
+    if cfg!(feature = "async") && !unsafe { coap_async_is_supported() == 1 } {
+        panic!("Required feature \"async\" is not supported by libcoap")
+    }
+    if cfg!(feature = "dtls") && !unsafe { coap_dtls_is_supported() == 1 } {
+        panic!("Required feature \"dtls\" is not supported by libcoap")
+    }
+    // TODO checks for PSK/PKI/PKCS/RPK
+    if cfg!(feature = "epoll") && !unsafe { coap_epoll_is_supported() == 1 } {
+        panic!("Required feature \"epoll\" is not supported by libcoap")
+    }
+    if cfg!(feature = "oscore") && !unsafe { coap_oscore_is_supported() == 1 } {
+        panic!("Required feature \"oscore\" is not supported by libcoap")
+    }
+    if cfg!(feature = "q-block") && !unsafe { coap_q_block_is_supported() == 1 } {
+        panic!("Required feature \"q-block\" is not supported by libcoap")
+    }
+    if cfg!(feature = "tcp") && !unsafe { coap_tcp_is_supported() == 1 } {
+        panic!("Required feature \"tcp\" is not supported by libcoap")
+    }
+    if cfg!(feature = "thread-safe") && !unsafe { coap_threadsafe_is_supported() == 1 } {
+        panic!("Required feature \"thread-safe\" is not supported by libcoap")
+    }
+    if cfg!(feature = "tls") && !unsafe { coap_tls_is_supported() == 1 } {
+        panic!("Required feature \"tls\" is not supported by libcoap")
+    }
+    if cfg!(feature = "websockets") && !unsafe { coap_ws_is_supported() == 1 } {
+        panic!("Required feature \"websockets\" is not supported by libcoap")
+    }
+    // TODO a check for secure WebSockets (coap_wss_is_supported)?
+    // TODO some warning or error if we weren't able to check all features for availability (either
+    //      during compile-time or runtime).
+    unsafe { coap_startup() }
+}
+
 #[cfg(all(test, not(target_os = "espidf")))]
 mod tests {
     use std::{
