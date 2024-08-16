@@ -137,7 +137,10 @@ impl From<SocketAddr> for CoapAddress {
 
                     *coap_addr.addr.sin.as_mut() = sockaddr_in {
                         #[cfg(any(
-                            bsd,
+                            target_os = "freebsd",
+                            target_os = "dragonfly",
+                            target_os = "openbsd",
+                            target_os = "netbsd",
                             target_os = "aix",
                             target_os = "haiku",
                             target_os = "hurd",
@@ -166,7 +169,10 @@ impl From<SocketAddr> for CoapAddress {
 
                     *coap_addr.addr.sin6.as_mut() = sockaddr_in6 {
                         #[cfg(any(
-                            bsd,
+                            target_os = "freebsd",
+                            target_os = "dragonfly",
+                            target_os = "openbsd",
+                            target_os = "netbsd",
                             target_os = "aix",
                             target_os = "haiku",
                             target_os = "hurd",

@@ -337,7 +337,13 @@ impl CoapContext<'_> {
                     inner_ref.raw_context,
                     Box::into_raw(Box::new(coap_dtls_spsk_t {
                         version: COAP_DTLS_SPSK_SETUP_VERSION as u8,
+                        #[cfg(not(dtls_ec_jpake_support))]
                         reserved: [0; 7],
+                        #[cfg(dtls_ec_jpake_support)]
+                        reserved: [0; 6],
+                        #[cfg(dtls_ec_jpake_support)]
+                        // TODO allow enabling this?
+                        ec_jpake: 0,
                         validate_id_call_back: Some(dtls_server_id_callback),
                         id_call_back_arg: inner_ref.raw_context as *mut c_void,
                         validate_sni_call_back: {
