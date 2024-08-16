@@ -39,6 +39,7 @@ use crate::{
     session::CoapSessionCommon,
     types::CoapMessageId,
 };
+use crate::context::ensure_coap_started;
 use crate::protocol::{Echo, Oscore, RequestTag};
 use crate::types::{
     decode_var_len_u16, decode_var_len_u32, decode_var_len_u8, encode_var_len_u16, encode_var_len_u32,
@@ -373,6 +374,7 @@ pub struct CoapMessage {
 impl CoapMessage {
     /// Creates a new CoAP message with the given type and code.
     pub fn new(type_: CoapMessageType, code: CoapMessageCode) -> CoapMessage {
+        ensure_coap_started();
         CoapMessage {
             type_,
             code,
@@ -388,6 +390,7 @@ impl CoapMessage {
     /// # Safety
     /// raw_pdu must point to a valid instance of coap_pdu_t.
     pub unsafe fn from_raw_pdu(raw_pdu: *const coap_pdu_t) -> Result<CoapMessage, MessageConversionError> {
+        ensure_coap_started();
         let mut option_iter = MaybeUninit::zeroed();
         coap_option_iterator_init(raw_pdu, option_iter.as_mut_ptr(), std::ptr::null());
         let mut option_iter = option_iter.assume_init();

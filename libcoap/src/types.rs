@@ -41,6 +41,7 @@ use libcoap_sys::{
 };
 use libcoap_sys::coap_uri_scheme_t::{COAP_URI_SCHEME_COAP_WS, COAP_URI_SCHEME_COAPS_WS};
 
+use crate::context::ensure_coap_started;
 use crate::error::UriParsingError;
 use crate::message::CoapOption;
 use crate::protocol::UriPort;
@@ -736,6 +737,7 @@ impl CoapUri {
     ) -> Result<CoapUri, UriParsingError> {
         let mut uri = Self::create_unparsed_uri(uri_str, is_proxy);
 
+        ensure_coap_started();
         // SAFETY: The provided pointers to raw_uri and uri_str are valid.
         // Because uri_str is pinned (and its type is not Unpin), the pointer locations are always
         // valid while this object lives, therefore the resulting coap_uri_t remains valid for the
