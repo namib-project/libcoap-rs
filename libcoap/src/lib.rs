@@ -7,8 +7,6 @@
  * See the README as well as the LICENSE file for more information.
  */
 
-#![cfg_attr(feature = "nightly", feature(trait_upcasting))]
-
 //! A safe wrapper around the libcoap C library.
 //!
 //! This wrapper allows for safe and idiomatic usage of the libcoap C library in Rust.
@@ -40,13 +38,13 @@
 //! # Building
 //! libcoap-rs can be linked to either an included version of libcoap or to a version provided by
 //! the environment.
-//! By default, it will use the vendored version, which can be disabled by disabling the default 
+//! By default, it will use the vendored version, which can be disabled by disabling the default
 //! feature `vendored`.
-//! 
-//! In order to use DTLS, a DTLS library must be chosen, see the later section on using 
+//!
+//! In order to use DTLS, a DTLS library must be chosen, see the later section on using
 //! cryptography for more information.
 //!
-//! Some (but not all) of the available DTLS libraries may also be vendored using the 
+//! Some (but not all) of the available DTLS libraries may also be vendored using the
 //! `dtls_[LIBRARY]_vendored` feature.
 //!
 //! ## Building on the ESP32
@@ -58,11 +56,11 @@
 //! In order to build for the ESP, ensure that the following preconditions are met:
 //!
 //! - The version of `esp-idf-sys` used by your crate matches the one used by `libcoap-sys`.
-//! - Ensure that your `sdkconfig.defaults` enables the features required by your chosen 
+//! - Ensure that your `sdkconfig.defaults` enables the features required by your chosen
 //!   feature set of `libcoap-rs`
 //! - Ensure that the ESP-IDF version you link against is supported. `libcoap-rs` _should_
-//!   compile on at least ESP-IDF 5.1.3 and 5.3. 
-//!   If it does not (or you require support for newer versions of ESP-IDF), please open an issue 
+//!   compile on at least ESP-IDF 5.1.3 and 5.3.
+//!   If it does not (or you require support for newer versions of ESP-IDF), please open an issue
 //!   in the [`libcoap-rs` issue tracker](https://github.com/namib-project/libcoap-rs/issues).
 //!
 //! An example for a typical excerpt from `sdkconfig.defaults` can be found here:
@@ -70,7 +68,7 @@
 //! # libcoap base functionality (client and server)
 //! CONFIG_COAP_SERVER_SUPPORT=y
 //! CONFIG_COAP_CLIENT_SUPPORT=y
-//! 
+//!
 //! # enable DTLS in libcoap
 //! CONFIG_COAP_MBEDTLS_PSK=y
 //! CONFIG_COAP_MBEDTLS_PKI=y

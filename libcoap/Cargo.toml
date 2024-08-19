@@ -30,7 +30,6 @@ dtls_mbedtls_vendored = ["dtls_mbedtls", "libcoap-sys/dtls_backend_mbedtls_vendo
 tcp = ["libcoap-sys/tcp"]
 tls = ["libcoap-sys/tls"]
 rand = ["dep:rand", "dep:rand_core"]
-nightly = []
 vendored = ["libcoap-sys/vendored"]
 
 [dependencies]

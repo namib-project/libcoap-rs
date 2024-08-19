@@ -34,6 +34,7 @@ pub struct CoapServerSession<'a> {
     /// A weak version of this reference is stored inside of the user/app data pointer in the
     /// raw session struct so that it can be passed through the FFI barrier.
     inner: CoapFfiRcCell<CoapServerSessionInner<'a>>,
+    ref_counted: bool,
 }
 
 #[derive(Debug)]
@@ -80,7 +81,10 @@ impl CoapServerSession<'_> {
         // Increase libcoap-internal reference counter for raw session so that it doesn't get freed
         // as long as this CoapServerSession instance exists.
         coap_session_reference(raw_session);
-        CoapServerSession { inner: session_ref }
+        CoapServerSession {
+            inner: session_ref,
+            ref_counted: true,
+        }
     }
 
     /// Restores a [CoapServerSession] from its raw counterpart.
@@ -99,6 +103,37 @@ impl CoapServerSession<'_> {
     /// # Safety
     /// The provided pointer must be valid for the entire lifetime of this struct.
     pub(crate) unsafe fn from_raw<'a>(raw_session: *mut coap_session_t) -> CoapServerSession<'a> {
+        let mut session = Self::from_raw_without_refcount(raw_session);
+        coap_session_reference(raw_session);
+        session.ref_counted = true;
+        session
+    }
+
+    /// Restores a [CoapServerSession] from its raw counterpart without increasing its reference
+    /// counter (useful if acquiring libcoap's global lock is undesired).
+    ///
+    /// Make sure that this struct cannot outlive the [CoapContext] its session originates from, as
+    /// the lifetime cannot be inferred by the compiler and dropping the context will panic/abort if
+    /// the inner session is still referenced anywhere else.
+    ///
+    /// In addition to the above, you must also ensure that the session will not be cleaned up by
+    /// libcoap in the meantime, as the reference counter is not increased while constructing the
+    /// instance.
+    ///
+    /// This function will increment the libcoap-internal reference counter for the session by one.
+    /// Dropping the CoapServerSession will then decrement it again.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the provided raw session pointer or its app_data field is null or the raw session
+    /// is not a server-side session.
+    ///
+    /// # Safety
+    /// The provided pointer must be valid for the entire lifetime of this struct.
+    ///
+    /// This also implies that libcoap *must not* clean up this session during the lifetime of this
+    /// struct, which could happen at any time if the libcoap context is not locked.
+    pub(crate) unsafe fn from_raw_without_refcount<'a>(raw_session: *mut coap_session_t) -> CoapServerSession<'a> {
         assert!(!raw_session.is_null(), "provided raw session was null");
         let raw_session_type = coap_session_get_type(raw_session);
         match raw_session_type {
@@ -106,11 +141,9 @@ impl CoapServerSession<'_> {
             coap_session_type_t::COAP_SESSION_TYPE_SERVER | coap_session_type_t::COAP_SESSION_TYPE_HELLO => {
                 let raw_app_data_ptr = coap_session_get_app_data(raw_session);
                 assert!(!raw_app_data_ptr.is_null(), "provided raw session has no app data");
-                // Increase libcoap-internal reference counter for raw session so that it doesn't get freed
-                // as long as this CoapServerSession instance exists.
-                coap_session_reference(raw_session);
                 CoapServerSession {
                     inner: CoapFfiRcCell::clone_raw_rc(raw_app_data_ptr),
+                    ref_counted: false,
                 }
             },
             coap_session_type_t::COAP_SESSION_TYPE_CLIENT => {
@@ -124,9 +157,13 @@ impl CoapServerSession<'_> {
 impl<'a> Drop for CoapServerSession<'a> {
     fn drop(&mut self) {
         let raw_session = self.inner.borrow_mut().inner.raw_session;
-        // Decrease libcoap-internal reference counter for raw session so that we don't leak memory.
-        unsafe {
-            coap_session_release(raw_session);
+        // Decrease libcoap-internal reference counter for raw session so that we don't leak memory
+        // if we previously incremented the reference count.
+        if self.ref_counted {
+            // SAFETY: raw_session is always valid for the lifetime of this object.
+            unsafe {
+                coap_session_release(raw_session);
+            }
         }
     }
 }

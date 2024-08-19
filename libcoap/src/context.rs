@@ -49,9 +49,7 @@ static COAP_STARTUP_ONCE: Once = Once::new();
 
 #[inline(always)]
 pub(crate) fn ensure_coap_started() {
-    COAP_STARTUP_ONCE.call_once(|| unsafe {
-        coap_startup_with_feature_checks();
-    });
+    COAP_STARTUP_ONCE.call_once(coap_startup_with_feature_checks);
 }
 
 #[derive(Debug)]
@@ -345,7 +343,7 @@ impl CoapContext<'_> {
                         #[cfg(dtls_ec_jpake_support)]
                         reserved: [0; 6],
                         #[cfg(dtls_ec_jpake_support)]
-                        // TODO allow enabling this?
+                        // TODO(#30) allow enabling this
                         ec_jpake: 0,
                         validate_id_call_back: Some(dtls_server_id_callback),
                         id_call_back_arg: inner_ref.raw_context as *mut c_void,

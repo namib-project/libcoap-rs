@@ -147,7 +147,7 @@ impl ParseCallbacks for CoapDefineParser {
                 self.defines.borrow_mut().dtls_backend = Some(DtlsBackend::TinyDtls);
                 self.defines.borrow_mut().feature_defines.insert("dtls".to_string());
             },
-            // TODO as soon as we have wolfSSL support in libcoap-sys
+            // TODO(#29): as soon as we have wolfSSL support in libcoap-sys
             /*"COAP_WITH_LIBWOLFSSL" => {
                 self.defines.borrow_mut().dtls_backend = Some(DtlsBackend::WolfSsl);
                 self.defines
@@ -781,10 +781,6 @@ fn main() {
     let libcoap_defines = libcoap_defines.take();
     if libcoap_defines.feature_defines_available {
         println!("cargo:rustc-cfg=feature_checks_available");
-        println!(
-            "cargo:warning=Available features: {:?}",
-            libcoap_defines.feature_defines
-        );
         for feature in COMPILE_TIME_FEATURE_CHECKS {
             let feature_env_var_name = "CARGO_FEATURE_".to_string() + &feature.replace('-', "_").to_uppercase();
             if env::var(&feature_env_var_name).is_ok() && !libcoap_defines.feature_defines.contains(feature) {

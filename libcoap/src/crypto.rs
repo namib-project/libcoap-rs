@@ -155,7 +155,13 @@ pub(crate) unsafe extern "C" fn dtls_server_id_callback(
 ) -> *const coap_bin_const_t {
     let context = CoapContext::from_raw(userdata as *mut coap_context_t);
     let provided_identity = std::slice::from_raw_parts((*identity).s, (*identity).length);
-    let session = CoapServerSession::from_raw(session);
+    // We must not increase the refcount here, as doing so would require locking the global context,
+    // which is not possible during a DTLS callback.
+    // SAFETY: While we are in this callback, libcoap's context is locked by our current thread.
+    //         therefore, it is impossible that the reference counter would be decreased by any
+    //         other means, and constructing the server side session without increasing the refcount
+    //         is fine.
+    let session = CoapServerSession::from_raw_without_refcount(session);
     let key = context.provide_raw_key_for_identity(provided_identity, &session);
     key.unwrap_or(std::ptr::null())
 }
