@@ -8,4 +8,6 @@
  */
 
 #include <coap3/coap.h>
+#if __has_include(<coap3/coap_defines.h>)
 #include <coap3/coap_defines.h>
+#endif

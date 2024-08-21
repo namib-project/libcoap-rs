@@ -8,20 +8,22 @@
  */
 
 use std::{
+    cell::RefCell,
+    collections::BTreeSet,
     default::Default,
     env,
+    ffi::{OsStr, OsString},
+    fmt::{Debug, Display},
     io::ErrorKind,
     path::{Path, PathBuf},
     process::Command,
+    rc::Rc,
 };
-use std::cell::RefCell;
-use std::collections::BTreeSet;
-use std::ffi::{OsStr, OsString};
-use std::fmt::{Debug, Display};
-use std::rc::Rc;
 
-use bindgen::callbacks::{IntKind, ParseCallbacks};
-use bindgen::EnumVariation;
+use bindgen::{
+    callbacks::{IntKind, ParseCallbacks},
+    EnumVariation,
+};
 use pkg_config::probe_library;
 use version_compare::{Cmp, Version};
 
@@ -182,7 +184,7 @@ impl ParseCallbacks for CoapDefineParser {
                 println!("cargo:libcoap_version={}", version_str.as_ref());
                 let version = Version::from(version_str.as_ref()).expect("invalid libcoap version");
                 match version.compare(Version::from("4.3.4").unwrap()) {
-                    Cmp::Lt | Cmp::Eq => println!("cargo:rustc-cfg=inlined_coap_send_rst"),
+                    Cmp::Gt => println!("cargo:rustc-cfg=non_inlined_coap_send_rst"),
                     _ => {},
                 }
                 self.defines.borrow_mut().package_version = version.to_string();
@@ -617,7 +619,7 @@ fn build_vendored_library(
 
 fn main() {
     println!("cargo::rustc-check-cfg=cfg(feature_checks_available)");
-    println!("cargo::rustc-check-cfg=cfg(inlined_coap_send_rst)");
+    println!("cargo::rustc-check-cfg=cfg(non_inlined_coap_send_rst)");
     println!("cargo:rerun-if-changed=src/libcoap/");
     println!("cargo:rerun-if-changed=src/wrapper.h");
     // Read required environment variables.

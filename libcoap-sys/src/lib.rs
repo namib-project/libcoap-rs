@@ -111,7 +111,7 @@ include!(concat!(env!("OUT_DIR"), "\\bindings.rs"));
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 #[inline]
-#[cfg(inlined_coap_send_rst)]
+#[cfg(not(non_inlined_coap_send_rst))]
 pub unsafe fn coap_send_rst(session: *mut coap_session_t, request: *const coap_pdu_t) -> coap_mid_t {
     coap_send_message_type(session, request, crate::coap_pdu_type_t::COAP_MESSAGE_RST)
 }
