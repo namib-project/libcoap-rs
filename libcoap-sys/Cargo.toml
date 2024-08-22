@@ -2,7 +2,7 @@
 # Cargo.toml for libcoap-sys
 # This file is part of the libcoap-sys crate, see the README and LICENSE files for
 # more information and terms of use.
-# Copyright © 2021-2023 The NAMIB Project Developers, all rights reserved.
+# Copyright © 2021-2024 The NAMIB Project Developers, all rights reserved.
 
 [package]
 name = "libcoap-sys"
@@ -22,7 +22,7 @@ resolver = "2"
 [features]
 # The default features match those of libcoaps configure script, except for dtls, which is disabled here because it
 # requires a backend to be set manually.
-default = ["server", "client", "tcp", "async", "epoll", "vendored", "static"]
+default = ["oscore", "ipv4", "ipv6", "af-unix", "tcp", "websockets", "async", "observe-persist", "q-block", "thread-safe", "thread-recursive-lock-detection", "server", "client", "epoll", "vendored", "static"]
 # While not specified here due to limitations in Cargo's syntax, the DTLS feature depends on one of the DTLS backends
 # being enabled.
 # If you are developing a library based on libcoap-sys and do not care about the DTLS backend, enable the dtls feature
@@ -34,12 +34,17 @@ default = ["server", "client", "tcp", "async", "epoll", "vendored", "static"]
 # exclusive features. If multiple backends are enabled (e.g. because multiple dependencies use libcoap-sys and use
 # different backends), we select one based on the auto-detection order specified in
 # https://github.com/obgm/libcoap/blob/develop/configure.ac#L494 (gnutls > openssl > mbedtls > tinydtls).
-dtls = []
+
+
+# Corresponding libcoap configure flag: --with-openssl
 dtls_backend_openssl = ["dtls", "dep:openssl-sys"]
 dtls_backend_openssl_vendored = ["dtls_backend_openssl", "openssl-sys/vendored"]
+# Corresponding libcoap configure flag: --with-gnutls
 dtls_backend_gnutls = ["dtls"]
+# Corresponding libcoap configure flag: --with-mbedtls
 dtls_backend_mbedtls = ["dtls"] # can't use mbedtls-sys-auto to generate linker flags here, as the crate doesn't support mbedtls >= 3.0.0
 dtls_backend_mbedtls_vendored = ["dep:mbedtls-sys-auto", "dtls_backend_mbedtls"]
+# Corresponding libcoap configure flags: --with-tinydtls --without-submodule-tinydtls
 dtls_backend_tinydtls = ["dtls", "dep:tinydtls-sys", "tinydtls-sys/ecc", "tinydtls-sys/psk"]
 dtls_backend_tinydtls_vendored = ["dtls_backend_tinydtls", "tinydtls-sys/vendored"]
 # Enabling this feature will force libcoap-sys to be built with and statically linked to a vendored version of libcoap,
@@ -51,18 +56,81 @@ static = []
 # --- FEATURE FLAGS ---
 # Note that setting the feature flags currently has no effect on the generated Rust code, because the libcoap headers do
 # not use these feature flags. They only affect the features built into the vendored C library (if enabled).
-# Enable this feature to support CoAP over TCP
+
+# Enable this feature to enable/require CoAP over DTLS support in the C library.
+# Important: also read the section on DTLS backends before enabling this feature.
+# Corresponding libcoap configure flag: --enable-dtls
+dtls = []
+# Enable this feature to enable/require TLS support in addition to DTLS support.
+# Note: Will also enable the TCP and DTLS features, so consider the above section regarding DTLS backends before +
+# enabling this.
+tls = ["dtls", "tcp"]
+# Enable this feature to enable/require OSCORE functionality in the C library.
+# Corresponding libcoap configure flag: --enable-oscore
+oscore = []
+# Enable this feature to enable/require IPv4 support in the C library.
+# Corresponding libcoap configure flag: --enable-ipv4-support
+ipv4 = []
+# Enable this feature to enable/require IPv6 support in the C library.
+# Corresponding libcoap configure flag: --enable-ipv6-support
+ipv6 = []
+# Enable this feature to enable/require support for Unix sockets in the C library.
+# Corresponding libcoap configure flag: --enable-af-unix-support
+af-unix = []
+# Enable this feature to enable/require support for CoAP over TCP in the C library.
+# Corresponding libcoap configure flag: --enable-tcp
 tcp = []
-# Enable this feature to enable async functionality in libcoap.
-# Note that this does not generate async-functions as they are used in Rust, just the necessary functions in the C
-# library to make asynchronous requests.
+# Enable this feature to enable/require CoAP over WebSockets in the C library.
+# Corresponding libcoap configure flag: --enable-websockets
+websockets = []
+# Enable this feature to enable/require async functionality in the C library.
+# Note that this does not generate async-functions as they are used in Rust, it allows for CoAP separate responses as
+# specified in RFC 7252, Section 5.2.2.
+# Corresponding libcoap configure flag: --enable-async
 async = []
-# Enable this feature for server functionality.
+# Enable this feature to enable/require support for persisting observes over a server restart in the C library.
+# Corresponding libcoap configure flag: --enable-observe-persist
+observe-persist = []
+# Enable this feature to enable/require Q-Block support in the C library.
+# Corresponding libcoap configure flag: --enable-q-block
+q-block = []
+# Enable this feature to enable/require the thread-safety facilities in the C library to be enabled.
+# Corresponding libcoap configure flag: --enable-thread-safe
+thread-safe = []
+# Enable this feature to enable/require recursive lock detection in the C library.
+# Will also implicitly enable the `thread-safe` feature.
+# Corresponding libcoap configure flag: --enable-thread-recursive-lock-detection
+thread-recursive-lock-detection = ["thread-safe"]
+# Enable this feature to set/require the small stack flag in the C library.
+# Corresponding libcoap configure flag: --enable-small-stack
+small-stack = []
+# Enable this feature to enable/require server functionality in the C library.
+# Corresponding libcoap configure flag: --enable-server-mode
 server = []
-# Enable this feature for client functionality.
+# Enable this feature to enable/require client functionality in the C library.
+# Corresponding libcoap configure flag: --enable-client-mode
 client = []
-# Enable this feature to enable epoll usage in the C library.
+# Enable this feature to enable/require epoll usage in the C library.
+# Corresponding libcoap configure flag: --with-epoll
 epoll = []
+# Enable this feature to require support for CoAP over WebSockets using TLS in the C library.
+# Whether this feature is supported by the C library depends on the used DTLS library.
+secure-websockets = ["tls", "websockets"]
+# Enable this feature to require support for CIDs in DTLS in the C library.
+# Whether this feature is supported by the C library depends on the used DTLS library.
+dtls-cid = ["dtls"]
+# Enabling this feature to require support for DTLS-PSK in the C library.
+# Whether this feature is supported by the C library depends on the used DTLS library.
+dtls-psk = ["dtls"]
+# Enabling this feature to require support for DTLS-PKI in the C library.
+# Whether this feature is supported by the C library depends on the used DTLS library.
+dtls-pki = ["dtls"]
+# Enabling this feature to require support for DTLS-PKCS11 in the C library.
+# Whether this feature is supported by the C library depends on the used DTLS library.
+dtls-pkcs11 = ["dtls"]
+# Enabling this feature to require support for DTLS-RPK in the C library.
+# Whether this feature is supported by the C library depends on the used DTLS library.
+dtls-rpk = ["dtls"]
 
 [dependencies]
 openssl-sys = { version = "^0.9.74", optional = true }

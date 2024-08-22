@@ -27,6 +27,7 @@ use libcoap_sys::{
 };
 
 use crate::{error::MessageConversionError, message::CoapMessage, protocol::CoapRequestCode};
+use crate::context::ensure_coap_started;
 use crate::mem::{CoapFfiRcCell, DropInnerExclusively};
 use crate::message::CoapMessageCommon;
 use crate::message::request::CoapRequest;
@@ -240,6 +241,7 @@ impl<D: Any + ?Sized + Debug> CoapResource<D> {
     /// The `notify_con` parameter specifies whether observe notifications originating from this
     /// resource are sent as confirmable or non-confirmable.
     pub fn new<C: Into<Box<D>>>(uri_path: &str, user_data: C, notify_con: bool) -> CoapResource<D> {
+        ensure_coap_started();
         let inner = unsafe {
             let uri_path = coap_new_str_const(uri_path.as_ptr(), uri_path.len());
             let raw_resource = coap_resource_init(
@@ -491,6 +493,7 @@ impl<D: 'static + ?Sized + Debug> CoapRequestHandler<D> {
             response_pdu: *mut coap_pdu_t,
         ),
     ) -> CoapRequestHandler<D> {
+        ensure_coap_started();
         let handler_fn: Option<Box<dyn FnMut(&CoapResource<D>, &mut CoapServerSession, &CoapRequest, CoapResponse)>> =
             None;
         CoapRequestHandler {

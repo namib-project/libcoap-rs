@@ -41,6 +41,7 @@ use libcoap_sys::{
 };
 use libcoap_sys::coap_uri_scheme_t::{COAP_URI_SCHEME_COAP_WS, COAP_URI_SCHEME_COAPS_WS};
 
+use crate::context::ensure_coap_started;
 use crate::error::UriParsingError;
 use crate::message::CoapOption;
 use crate::protocol::UriPort;
@@ -137,7 +138,10 @@ impl From<SocketAddr> for CoapAddress {
 
                     *coap_addr.addr.sin.as_mut() = sockaddr_in {
                         #[cfg(any(
-                            bsd,
+                            target_os = "freebsd",
+                            target_os = "dragonfly",
+                            target_os = "openbsd",
+                            target_os = "netbsd",
                             target_os = "aix",
                             target_os = "haiku",
                             target_os = "hurd",
@@ -166,7 +170,10 @@ impl From<SocketAddr> for CoapAddress {
 
                     *coap_addr.addr.sin6.as_mut() = sockaddr_in6 {
                         #[cfg(any(
-                            bsd,
+                            target_os = "freebsd",
+                            target_os = "dragonfly",
+                            target_os = "openbsd",
+                            target_os = "netbsd",
                             target_os = "aix",
                             target_os = "haiku",
                             target_os = "hurd",
@@ -728,6 +735,7 @@ impl CoapUri {
         parsing_fn: unsafe extern "C" fn(*const u8, usize, *mut coap_uri_t) -> c_int,
         is_proxy: bool,
     ) -> Result<CoapUri, UriParsingError> {
+        ensure_coap_started();
         let mut uri = Self::create_unparsed_uri(uri_str, is_proxy);
 
         // SAFETY: The provided pointers to raw_uri and uri_str are valid.

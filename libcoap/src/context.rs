@@ -22,7 +22,8 @@ use libcoap_sys::{
     coap_context_set_keepalive, coap_context_set_max_handshake_sessions, coap_context_set_max_idle_sessions, coap_context_set_psk2,
     coap_context_set_session_timeout, coap_context_t, coap_dtls_spsk_info_t, COAP_DTLS_SPSK_SETUP_VERSION, coap_dtls_spsk_t, coap_event_t,
     coap_free_context, coap_get_app_data, coap_io_process, COAP_IO_WAIT, coap_new_context,
-    coap_proto_t, coap_register_event_handler, coap_register_response_handler, coap_set_app_data, coap_startup,
+    coap_proto_t, coap_register_event_handler, coap_register_response_handler, coap_set_app_data,
+    coap_startup_with_feature_checks,
 };
 
 #[cfg(feature = "dtls")]
@@ -45,6 +46,11 @@ use crate::session::CoapSessionCommon;
 use crate::transport::CoapEndpoint;
 
 static COAP_STARTUP_ONCE: Once = Once::new();
+
+#[inline(always)]
+pub(crate) fn ensure_coap_started() {
+    COAP_STARTUP_ONCE.call_once(coap_startup_with_feature_checks);
+}
 
 #[derive(Debug)]
 struct CoapContextInner<'a> {
@@ -96,12 +102,7 @@ impl<'a> CoapContext<'a> {
     /// Returns an error if the underlying libcoap library was unable to create a new context
     /// (probably an allocation error?).
     pub fn new() -> Result<CoapContext<'a>, ContextCreationError> {
-        // TODO this should actually be done before calling _any_ libcoap function, not just the
-        //      context initialization. Maybe we need to make sure to call this in other places too
-        //      (e.g. if a resource is initialized before a context is created).
-        COAP_STARTUP_ONCE.call_once(|| unsafe {
-            coap_startup();
-        });
+        ensure_coap_started();
         // SAFETY: Providing null here is fine, the context will just not be bound to an endpoint
         // yet.
         let raw_context = unsafe { coap_new_context(std::ptr::null()) };
@@ -337,7 +338,13 @@ impl CoapContext<'_> {
                     inner_ref.raw_context,
                     Box::into_raw(Box::new(coap_dtls_spsk_t {
                         version: COAP_DTLS_SPSK_SETUP_VERSION as u8,
+                        #[cfg(not(dtls_ec_jpake_support))]
                         reserved: [0; 7],
+                        #[cfg(dtls_ec_jpake_support)]
+                        reserved: [0; 6],
+                        #[cfg(dtls_ec_jpake_support)]
+                        // TODO(#30) allow enabling this
+                        ec_jpake: 0,
                         validate_id_call_back: Some(dtls_server_id_callback),
                         id_call_back_arg: inner_ref.raw_context as *mut c_void,
                         validate_sni_call_back: {

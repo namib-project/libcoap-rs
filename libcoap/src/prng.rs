@@ -15,15 +15,21 @@
 //! [rand] crate that allow using the libcoap PRNG as a [rand::Rng] or setting the libcoap PRNG to
 //! an existing [rand::Rng].
 
-use std::ffi::{c_int, c_uint, c_void};
+use std::ffi::{c_uint, c_void};
+#[cfg(feature = "rand")]
+use std::ffi::c_int;
 use std::sync::Mutex;
 
+#[cfg(feature = "rand")]
 use libc::size_t;
 #[cfg(feature = "rand")]
 use rand::{CryptoRng, RngCore};
 
-use libcoap_sys::{coap_prng, coap_prng_init, coap_set_prng};
+use libcoap_sys::{coap_prng, coap_prng_init};
+#[cfg(feature = "rand")]
+use libcoap_sys::coap_set_prng;
 
+use crate::context::ensure_coap_started;
 use crate::error::RngError;
 
 // TODO If we can assert that libcoap's own thread-safety features are enabled at some point, we
@@ -53,6 +59,7 @@ static COAP_RNG_ACCESS_MUTEX: Mutex<()> = Mutex::new(());
 /// # Result::<(), RngError>::Ok(())
 /// ```
 pub fn coap_prng_try_fill(dest: &mut [u8]) -> Result<(), RngError> {
+    ensure_coap_started();
     let _acc_mutex = COAP_RNG_ACCESS_MUTEX.lock()?;
     // SAFETY: Supplied pointer and length describe the provided slice.
     match unsafe { coap_prng(dest.as_mut_ptr() as *mut c_void, dest.len()) } {
@@ -100,6 +107,7 @@ impl RngCore for CoapRng {
 /// May return an error if the mutex for seeding the PRNG is poisoned, i.e. there was some panic
 /// in a previous attempt of seeding the PRNG.
 pub fn seed_coap_prng(seed: c_uint) -> Result<(), RngError> {
+    ensure_coap_started();
     let guard = COAP_RNG_SEED_MUTEX.lock()?;
     unsafe {
         coap_prng_init(seed);
@@ -160,6 +168,7 @@ pub fn seed_coap_prng(seed: c_uint) -> Result<(), RngError> {
 /// ```
 #[cfg(feature = "rand")]
 pub fn set_coap_prng<RNG: RngCore + CryptoRng + Send + Sync + 'static>(rng: RNG) -> Result<(), RngError> {
+    ensure_coap_started();
     let mut guard = COAP_RNG_FN_MUTEX.lock()?;
     *guard = Some(Box::new(rng));
     // SAFETY: Pointer is valid and pointed to function does what libcoap expects.

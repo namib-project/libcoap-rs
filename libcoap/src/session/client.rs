@@ -67,7 +67,18 @@ impl CoapClientSession<'_> {
         let id = crypto_provider.provide_default_info();
         let client_setup_data = Box::into_raw(Box::new(coap_dtls_cpsk_t {
             version: COAP_DTLS_SPSK_SETUP_VERSION as u8,
+            #[cfg(not(any(dtls_ec_jpake_support, dtls_cid_support)))]
             reserved: [0; 7],
+            #[cfg(all(any(dtls_ec_jpake_support, dtls_cid_support), not(all(dtls_ec_jpake_support, dtls_cid_support))))]
+            reserved: [0; 6],
+            #[cfg(all(dtls_ec_jpake_support, dtls_cid_support))]
+            reserved: [0; 5],
+            #[cfg(dtls_ec_jpake_support)]
+            // TODO allow enabling this?
+            ec_jpake: 0,
+            // TODO allow enabling this?
+            #[cfg(dtls_cid_support)]
+            use_cid: 0,
             validate_ih_call_back: {
                 // Unsupported by MbedTLS
                 #[cfg(not(feature = "dtls_mbedtls"))]
