@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: BSD-2-CLAUSE
+
 use version_compare::{Cmp, Version};
 
 fn main() {

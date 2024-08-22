@@ -735,9 +735,9 @@ impl CoapUri {
         parsing_fn: unsafe extern "C" fn(*const u8, usize, *mut coap_uri_t) -> c_int,
         is_proxy: bool,
     ) -> Result<CoapUri, UriParsingError> {
+        ensure_coap_started();
         let mut uri = Self::create_unparsed_uri(uri_str, is_proxy);
 
-        ensure_coap_started();
         // SAFETY: The provided pointers to raw_uri and uri_str are valid.
         // Because uri_str is pinned (and its type is not Unpin), the pointer locations are always
         // valid while this object lives, therefore the resulting coap_uri_t remains valid for the

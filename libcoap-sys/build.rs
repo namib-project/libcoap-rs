@@ -27,7 +27,7 @@ use bindgen::{
 use pkg_config::probe_library;
 use version_compare::{Cmp, Version};
 
-/// Features whose availability can be checked during compile time based on defines.
+/// Features whose availability can be checked during compile time based on `#define` directives.
 const COMPILE_TIME_FEATURE_CHECKS: [&str; 16] = [
     "af-unix",
     "async",
@@ -63,14 +63,14 @@ impl Default for LibcoapMetadata {
             package_version: Default::default(),
             version: 0,
             feature_defines_available: false,
-            // COAP_DISABLE_TCP is set if TCP is _not_ supported, assume it is supported otherwise.
+            // By default, TCP is assumed to be supported if COAP_DISABLE_TCP is unset.
             feature_defines: BTreeSet::from(["tcp".to_string()]),
             dtls_backend: None,
         }
     }
 }
 
-/// Implementation of bindgen's [ParseCallbacks] that allow reading some metainformation about the
+/// Implementation of bindgen's [ParseCallbacks] that allow reading some meta-information about the
 /// used libcoap version from its defines (package version, supported features, ...)
 #[derive(Debug, Default)]
 struct CoapDefineParser {
@@ -794,7 +794,7 @@ fn main() {
             println!("cargo:warning=DTLS library used by libcoap does not match chosen one. This might lead to issues.")
         }
     } else {
-        println!("cargo:warning=The used version of libcoap does not provide a coap_defines.h file, either because it is too old (<4.3.5) or because this file is somehow not included. Compile-time feature checks are not available, and the availability of some features (small-stack, IPv4/IPv6,) can not be asserted at all!");
+        println!("cargo:warning=The used version of libcoap does not provide a coap_defines.h file, either because it is too old (<4.3.5) or because this file is somehow not included. Compile-time feature checks are not available, and the availability of some features (small-stack, IPv4/IPv6,) cannot be asserted at all!");
     }
 
     let out_path = PathBuf::from(out_dir);

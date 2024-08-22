@@ -62,8 +62,9 @@ static = []
 # Corresponding libcoap configure flag: --enable-dtls
 dtls = []
 # Enable this feature to enable/require TLS support in addition to DTLS support.
-# Note: Will also enable the DTLS feature, so consider the above section regarding DTLS backends before enabling this.
-tls = ["dtls"]
+# Note: Will also enable the TCP and DTLS features, so consider the above section regarding DTLS backends before +
+# enabling this.
+tls = ["dtls", "tcp"]
 # Enable this feature to enable/require OSCORE functionality in the C library.
 # Corresponding libcoap configure flag: --enable-oscore
 oscore = []
@@ -97,6 +98,7 @@ q-block = []
 # Corresponding libcoap configure flag: --enable-thread-safe
 thread-safe = []
 # Enable this feature to enable/require recursive lock detection in the C library.
+# Will also implicitly enable the `thread-safe` feature.
 # Corresponding libcoap configure flag: --enable-thread-recursive-lock-detection
 thread-recursive-lock-detection = ["thread-safe"]
 # Enable this feature to set/require the small stack flag in the C library.
@@ -114,7 +116,7 @@ epoll = []
 # Enable this feature to require support for CoAP over WebSockets using TLS in the C library.
 # Whether this feature is supported by the C library depends on the used DTLS library.
 secure-websockets = ["tls", "websockets"]
-# Enabling this feature to require support for CIDs in DTLS in the C library.
+# Enable this feature to require support for CIDs in DTLS in the C library.
 # Whether this feature is supported by the C library depends on the used DTLS library.
 dtls-cid = ["dtls"]
 # Enabling this feature to require support for DTLS-PSK in the C library.
