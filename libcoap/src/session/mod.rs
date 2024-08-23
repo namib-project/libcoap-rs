@@ -7,6 +7,8 @@
  * See the README as well as the LICENSE file for more information.
  */
 
+use std::borrow::BorrowMut;
+use std::cell::{Ref, RefMut};
 use std::{
     any::Any,
     collections::{HashMap, VecDeque},
@@ -14,8 +16,6 @@ use std::{
     net::{SocketAddr, ToSocketAddrs},
     rc::Rc,
 };
-use std::borrow::BorrowMut;
-use std::cell::{Ref, RefMut};
 
 use libcoap_sys::{
     coap_context_t, coap_fixed_point_t, coap_mid_t, coap_new_message_id, coap_pdu_get_token, coap_pdu_t,
@@ -28,16 +28,14 @@ use libcoap_sys::{
     coap_session_t, coap_session_type_t,
 };
 
+use crate::message::request::CoapRequest;
+use crate::message::response::CoapResponse;
 use crate::{
     error::{MessageConversionError, SessionGetAppDataError},
     message::{CoapMessage, CoapMessageCommon},
     protocol::CoapToken,
     types::{CoapAddress, CoapMessageId, CoapProtocol, IfIndex, MaxRetransmit},
 };
-#[cfg(feature = "dtls")]
-use crate::crypto::{CoapCryptoPskData, CoapCryptoPskIdentity};
-use crate::message::request::CoapRequest;
-use crate::message::response::CoapResponse;
 
 pub use self::client::CoapClientSession;
 use self::sealed::{CoapSessionCommonInternal, CoapSessionInnerProvider};
@@ -233,7 +231,7 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
 
     /// Returns the current PSK hint for this session.
     #[cfg(feature = "dtls")]
-    fn psk_hint(&self) -> Option<Box<CoapCryptoPskIdentity>> {
+    fn psk_hint(&self) -> Option<Box<[u8]>> {
         // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         unsafe {
             coap_session_get_psk_hint(self.inner_ref().raw_session)
@@ -244,7 +242,7 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
 
     /// Returns the current PSK identity for this session.
     #[cfg(feature = "dtls")]
-    fn psk_identity(&self) -> Option<Box<CoapCryptoPskIdentity>> {
+    fn psk_identity(&self) -> Option<Box<[u8]>> {
         // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         unsafe {
             coap_session_get_psk_identity(self.inner_ref().raw_session)
@@ -255,7 +253,7 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
 
     /// Returns the current PSK key for this session.
     #[cfg(feature = "dtls")]
-    fn psk_key(&self) -> Option<Box<CoapCryptoPskData>> {
+    fn psk_key(&self) -> Option<Box<[u8]>> {
         // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         unsafe {
             coap_session_get_psk_key(self.inner_ref().raw_session)

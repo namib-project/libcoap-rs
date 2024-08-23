@@ -8,69 +8,33 @@
  */
 
 #![cfg(feature = "dtls")]
-use std::fmt::Debug;
 use std::time::Duration;
 
+use libcoap_rs::crypto::psk::{ClientPskContextBuilder, PskKey, ServerPskContextBuilder};
+use libcoap_rs::session::CoapClientSession;
 use libcoap_rs::{
-    CoapContext,
     message::CoapMessageCommon,
     protocol::{CoapMessageCode, CoapResponseCode},
     session::CoapSessionCommon,
+    CoapContext,
 };
-use libcoap_rs::crypto::{
-    CoapClientCryptoProvider, CoapCryptoProviderResponse, CoapCryptoPskData, CoapCryptoPskIdentity, CoapCryptoPskInfo,
-    CoapServerCryptoProvider,
-};
-use libcoap_rs::session::CoapClientSession;
 
 mod common;
-
-#[derive(Debug)]
-struct DummyCryptoProvider;
-
-impl CoapServerCryptoProvider for DummyCryptoProvider {
-    fn provide_key_for_identity(
-        &mut self,
-        _identity: &CoapCryptoPskIdentity,
-    ) -> CoapCryptoProviderResponse<Box<CoapCryptoPskData>> {
-        CoapCryptoProviderResponse::UseCurrent
-    }
-
-    fn provide_default_info(&mut self) -> CoapCryptoPskInfo {
-        CoapCryptoPskInfo {
-            identity: String::from("dtls_test_identity").into_boxed_str().into(),
-            key: String::from("dtls_test_key___").into_boxed_str().into(),
-        }
-    }
-}
-
-impl CoapClientCryptoProvider for DummyCryptoProvider {
-    fn provide_key_for_hint(
-        &mut self,
-        _hint: &CoapCryptoPskIdentity,
-    ) -> CoapCryptoProviderResponse<Box<CoapCryptoPskData>> {
-        CoapCryptoProviderResponse::UseCurrent
-    }
-
-    fn provide_default_info(&mut self) -> CoapCryptoPskInfo {
-        CoapCryptoPskInfo {
-            identity: String::from("dtls_test_identity").into_boxed_str().into(),
-            key: String::from("dtls_test_key___").into_boxed_str().into(),
-        }
-    }
-}
 
 #[test]
 pub fn dtls_client_server_request() {
     let server_address = common::get_unused_server_addr();
+    let dummy_key = PskKey::new(Some("dtls_test_id"), "dtls_test_key___");
+    let client_psk_context = ClientPskContextBuilder::new(dummy_key.clone()).build();
 
     let server_handle = common::spawn_test_server(move |context| {
-        context.set_server_crypto_provider(Some(Box::new(DummyCryptoProvider {})));
+        let server_psk_context = ServerPskContextBuilder::new(dummy_key.clone()).build();
+        context.set_psk_context(server_psk_context);
         context.add_endpoint_dtls(server_address).unwrap();
     });
 
     let mut context = CoapContext::new().unwrap();
-    let session = CoapClientSession::connect_dtls(&mut context, server_address, DummyCryptoProvider {}).unwrap();
+    let session = CoapClientSession::connect_dtls(&mut context, server_address, client_psk_context).unwrap();
 
     let request = common::gen_test_request();
     let req_handle = session.send_request(request).unwrap();
