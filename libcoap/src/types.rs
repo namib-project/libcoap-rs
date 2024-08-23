@@ -28,18 +28,18 @@ use num_traits::FromPrimitive;
 #[cfg(feature = "url")]
 use url::Url;
 
+use libcoap_sys::coap_uri_scheme_t::{COAP_URI_SCHEME_COAPS_WS, COAP_URI_SCHEME_COAP_WS};
 use libcoap_sys::{
     coap_address_t, coap_delete_optlist, coap_mid_t, coap_proto_t,
     coap_proto_t::{COAP_PROTO_DTLS, COAP_PROTO_NONE, COAP_PROTO_TCP, COAP_PROTO_TLS, COAP_PROTO_UDP},
     coap_split_proxy_uri, coap_split_uri, coap_str_const_t, coap_string_equal, coap_uri_into_options,
-    COAP_URI_SCHEME_SECURE_MASK,
     coap_uri_scheme_t,
     coap_uri_scheme_t::{
-        COAP_URI_SCHEME_COAP, COAP_URI_SCHEME_COAP_TCP, COAP_URI_SCHEME_COAPS, COAP_URI_SCHEME_COAPS_TCP,
+        COAP_URI_SCHEME_COAP, COAP_URI_SCHEME_COAPS, COAP_URI_SCHEME_COAPS_TCP, COAP_URI_SCHEME_COAP_TCP,
         COAP_URI_SCHEME_HTTP, COAP_URI_SCHEME_HTTPS,
-    }, coap_uri_t,
+    },
+    coap_uri_t, COAP_URI_SCHEME_SECURE_MASK,
 };
-use libcoap_sys::coap_uri_scheme_t::{COAP_URI_SCHEME_COAP_WS, COAP_URI_SCHEME_COAPS_WS};
 
 use crate::context::ensure_coap_started;
 use crate::error::UriParsingError;
@@ -322,12 +322,14 @@ impl From<CoapProtocol> for CoapUriScheme {
 /// # Note on URI Length Limits
 ///
 /// Due to [the specified limits](https://datatracker.ietf.org/doc/html/rfc7252#section-5.10)
-/// of CoAP option lengths, URI path components for a request/location URI must not exceed 255
-/// bytes each, i.e. a full path with more than 255 bytes is fine, but each individual path segment
-/// must be smaller than 255 bytes.
+/// of CoAP option lengths, the URI path components, query components, and hostnames for a URI must not
+/// exceed 255 bytes each, i.e. a full path with more than 255 bytes is fine, but each individual
+/// path segment must be smaller than 255 bytes.
 ///
-/// For proxy URIs, there is a length limit of 255 bytes for the scheme and 1034 bytes for the
-/// remainder of the URI (not for each segment separately).
+/// For proxy URIs, there is a length limit of 255 bytes for the scheme.
+/// As we use the Uri-* options for encoding proxy URIs instead of the Proxy-Uri option (as
+/// specified in [RFC 7252, section 5.10.2](https://datatracker.ietf.org/doc/html/rfc7252#section-5.10.2)),
+/// the above limits regarding path and query components also apply here.
 #[derive(Debug)]
 pub struct CoapUri {
     is_proxy: bool,
@@ -601,7 +603,33 @@ impl CoapUri {
     pub fn into_options(self) -> Vec<CoapOption> {
         // TODO this is a lot of copying around, however, fixing that would require an entire
         //      rewrite of the option handling code, so it's better kept for a separate PR.
-        let mut buf = vec![0u8; self.path().map(|v| v.len()).unwrap_or(0) + self.query().map(|v| v.len()).unwrap_or(0)];
+
+        // Set size of temporary buffer for option storage.
+        // TODO remove when updating minimum libcoap version to 4.3.5, as this buffer is no longer
+        //      used there.
+        #[cfg(coap_uri_buf_unused)]
+        let mut buf = [];
+        #[cfg(not(coap_uri_buf_unused))]
+        let mut buf = {
+            let buf_len =
+                // Length of UriHost option (length of host + max. 5 bytes of option header)
+                self.host().map(|v| v.len()+5).unwrap_or(0)
+                // Length of UriPort option (max. 2 bytes for the port number + max. 5 bytes of
+                // option header)
+                + self.port().map(|v| 7).unwrap_or(0)
+                // Length of path segment
+                + self.path().map(|v| v.len()).unwrap_or(0)
+                // Length of option headers for path segments.
+                // Each path segment has its own header, which can be up to 5 bytes in size.
+                + self.path().map(|v| (v.iter().filter(|c| **c as char == '/').count()+1)*5).unwrap_or(0)
+                // Length of query segment
+                + self.query().map(|v| v.len()).unwrap_or(0)
+                // Length of option headers for query segments.
+                // Each query segment has its own header, which can be up to 5 bytes in size.
+                + self.query().map(|v| (v.iter().filter(|c| **c as char == '?' || **c as char == '&').count()+1)*5).unwrap_or(0);
+            vec![0u8; buf_len]
+        };
+
         let mut optlist = std::ptr::null_mut();
         // SAFETY: self.raw_uri is always valid after construction. The destination may be a null
         //         pointer, optlist may be a null pointer at the start (it will be set to a valid
