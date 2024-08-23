@@ -428,7 +428,7 @@ impl CoapRequest {
     /// Converts this request into a [CoapMessage] that can be sent over a [CoapSession](crate::session::CoapSession).
     pub fn into_message(mut self) -> CoapMessage {
         if self.uri.is_proxy() {
-            self.pdu.add_option(CoapOption::ProxyUri(
+            self.pdu.add_option(CoapOption::ProxyScheme(
                 self.uri.scheme().expect("Parsed CoAP URI must have scheme").to_string(),
             ))
         }
