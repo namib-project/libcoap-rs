@@ -18,7 +18,7 @@ keywords = ["coap", "libcoap"]
 resolver = "2"
 
 [features]
-default = ["dtls", "tcp", "dtls_openssl", "vendored", "libcoap-sys/default"]
+default = ["dtls", "dtls-psk", "tcp", "dtls_openssl", "vendored", "libcoap-sys/default"]
 dtls = ["libcoap-sys/dtls"]
 dtls_tinydtls = ["libcoap-sys/dtls_backend_tinydtls"]
 dtls_tinydtls_vendored = ["dtls_tinydtls", "libcoap-sys/dtls_backend_tinydtls_vendored"]
@@ -27,6 +27,9 @@ dtls_openssl_vendored = ["dtls_openssl", "libcoap-sys/dtls_backend_openssl_vendo
 dtls_gnutls = ["libcoap-sys/dtls_backend_gnutls"]
 dtls_mbedtls = ["libcoap-sys/dtls_backend_mbedtls"]
 dtls_mbedtls_vendored = ["dtls_mbedtls", "libcoap-sys/dtls_backend_mbedtls_vendored"]
+dtls-psk = ["dtls", "libcoap-sys/dtls-psk"]
+dtls-pki = ["dtls", "libcoap-sys/dtls-pki"]
+dtls-rpk = ["dtls", "libcoap-sys/dtls-rpk"]
 tcp = ["libcoap-sys/tcp"]
 tls = ["libcoap-sys/tls"]
 rand = ["dep:rand", "dep:rand_core"]
