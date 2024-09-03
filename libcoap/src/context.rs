@@ -24,6 +24,8 @@ use libcoap_sys::{
     coap_set_app_data, coap_startup_with_feature_checks, COAP_BLOCK_SINGLE_BODY, COAP_BLOCK_USE_LIBCOAP, COAP_IO_WAIT,
 };
 
+#[cfg(any(feature = "dtls-pki", feature = "dtls-rpk"))]
+use crate::crypto::pki_rpk::ServerPkiRpkCryptoContext;
 #[cfg(feature = "dtls-psk")]
 use crate::crypto::psk::ServerPskContext;
 use crate::event::{event_handler_callback, CoapEventHandler};
@@ -58,8 +60,10 @@ struct CoapContextInner<'a> {
     event_handler: Option<Box<dyn CoapEventHandler>>,
     /// PSK context for encrypted server-side sessions.
     #[cfg(feature = "dtls-psk")]
-    psk_context: Option<ServerPskContext>,
-    _context_lifetime_marker: PhantomData<&'a coap_context_t>,
+    psk_context: Option<ServerPskContext<'a>>,
+    /// PKI context for encrypted server-side sessions.
+    #[cfg(any(feature = "dtls-pki", feature = "dtls-rpk"))]
+    pki_rpk_context: Option<ServerPkiRpkCryptoContext<'a>>,
 }
 
 /// A CoAP Context — container for general state and configuration information relating to CoAP
@@ -106,7 +110,8 @@ impl<'a> CoapContext<'a> {
             event_handler: None,
             #[cfg(feature = "dtls-psk")]
             psk_context: None,
-            _context_lifetime_marker: Default::default(),
+            #[cfg(feature = "dtls-pki")]
+            pki_rpk_context: None,
         });
 
         // SAFETY: We checked that the raw context is not null, the provided function is valid and
@@ -203,6 +208,48 @@ impl<'a> CoapContext<'a> {
             }
         }
     }
+
+    /// Sets the server-side cryptography information provider.
+    #[cfg(feature = "dtls-psk")]
+    pub fn set_psk_context(&mut self, psk_context: ServerPskContext<'a>) {
+        // SAFETY: raw context is valid.
+        let mut inner = self.inner.borrow_mut();
+        // TODO there is probably a prettier way to do this instead of panicking.
+        //      It would probably be easier to have a CoapContextBuilder that sets this, or to
+        //      provide this in the constructor.
+        if inner.psk_context.is_some() {
+            panic!("PSK context has already been set.")
+        }
+        inner.psk_context = Some(psk_context);
+        unsafe {
+            inner
+                .psk_context
+                .as_ref()
+                .unwrap()
+                .apply_to_context(NonNull::new(inner.raw_context).unwrap())
+        }
+    }
+
+    /// Sets the server-side cryptography information provider.
+    #[cfg(any(feature = "dtls-pki", feature = "dtls-rpk"))]
+    pub fn set_pki_rpk_context(&mut self, pki_context: ServerPkiRpkCryptoContext<'a>) {
+        // SAFETY: raw context is valid.
+        let mut inner = self.inner.borrow_mut();
+        // TODO there is probably a prettier way to do this instead of panicking.
+        //      It would probably be easier to have a CoapContextBuilder that sets this, or to
+        //      provide this in the constructor.
+        if inner.pki_rpk_context.is_some() {
+            panic!("PKI context has already been set.")
+        }
+        inner.pki_rpk_context = Some(pki_context);
+        unsafe {
+            inner
+                .pki_rpk_context
+                .as_ref()
+                .unwrap()
+                .apply_to_context(NonNull::new(inner.raw_context).unwrap())
+        }
+    }
 }
 
 impl CoapContext<'_> {
@@ -269,27 +316,6 @@ impl CoapContext<'_> {
                 inner_ref.resources.last_mut().unwrap().raw_resource(),
             );
         };
-    }
-
-    /// Sets the server-side cryptography information provider.
-    #[cfg(feature = "dtls")]
-    pub fn set_psk_context(&mut self, psk_context: ServerPskContext) {
-        // SAFETY: raw context is valid.
-        let mut inner = self.inner.borrow_mut();
-        // TODO there is probably a prettier way to do this instead of panicking.
-        //      It would probably be easier to have a CoapContextBuilder that sets this, or to
-        //      provide this in the constructor.
-        if inner.psk_context.is_some() {
-            panic!("PSK context has already been set.")
-        }
-        inner.psk_context = Some(psk_context);
-        unsafe {
-            inner
-                .psk_context
-                .as_ref()
-                .unwrap()
-                .apply_to_context(NonNull::new(inner.raw_context).unwrap())
-        }
     }
 
     /// Performs currently outstanding IO operations, waiting for a maximum duration of `timeout`.

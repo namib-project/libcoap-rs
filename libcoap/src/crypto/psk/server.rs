@@ -1,4 +1,4 @@
-use crate::crypto::psk::PskKey;
+use crate::crypto::psk::key::PskKey;
 use crate::session::CoapServerSession;
 use libcoap_sys::{
     coap_bin_const_t, coap_context_set_psk2, coap_context_t, coap_dtls_spsk_info_t, coap_dtls_spsk_t, coap_session_t,
@@ -15,12 +15,12 @@ use std::ptr::NonNull;
 use std::rc::{Rc, Weak};
 
 #[derive(Debug)]
-pub struct ServerPskContextBuilder {
-    ctx: ServerPskContextInner,
+pub struct ServerPskContextBuilder<'a> {
+    ctx: ServerPskContextInner<'a>,
 }
 
-impl ServerPskContextBuilder {
-    pub fn new(psk: PskKey) -> Self {
+impl<'a> ServerPskContextBuilder<'a> {
+    pub fn new(psk: PskKey<'a>) -> Self {
         Self {
             ctx: ServerPskContextInner {
                 id_key_provider: None,
@@ -41,25 +41,19 @@ impl ServerPskContextBuilder {
         }
     }
 
-    #[cfg(dtls_ec_jpake_support)]
-    pub fn ec_jpake(mut self, ec_jpake: bool) -> Self {
-        self.ctx.raw_cfg.ec_jpake = ec_jpake.then_some(1).unwrap_or(0);
-        self
-    }
-
-    pub fn id_key_provider(mut self, id_key_provider: Box<dyn ServerPskIdentityKeyProvider>) -> Self {
+    pub fn id_key_provider(mut self, id_key_provider: Box<dyn ServerPskIdentityKeyProvider<'a>>) -> Self {
         self.ctx.id_key_provider = Some(id_key_provider);
         self.ctx.raw_cfg.validate_id_call_back = Some(dtls_psk_server_id_callback);
         self
     }
 
-    pub fn sni_key_provider(mut self, sni_key_provider: Box<dyn ServerPskSniKeyProvider>) -> Self {
+    pub fn sni_key_provider(mut self, sni_key_provider: Box<dyn ServerPskSniKeyProvider<'a>>) -> Self {
         self.ctx.sni_key_provider = Some(sni_key_provider);
         self.ctx.raw_cfg.validate_sni_call_back = Some(dtls_psk_server_sni_callback);
         self
     }
 
-    pub fn build(self) -> ServerPskContext {
+    pub fn build(self) -> ServerPskContext<'a> {
         let ctx = Rc::new(RefCell::new(self.ctx));
         {
             let mut ctx_borrow = ctx.borrow_mut();
@@ -74,10 +68,19 @@ impl ServerPskContextBuilder {
     }
 }
 
+impl ServerPskContextBuilder<'_> {
+
+    #[cfg(dtls_ec_jpake_support)]
+    pub fn ec_jpake(mut self, ec_jpake: bool) -> Self {
+        self.ctx.raw_cfg.ec_jpake = ec_jpake.then_some(1).unwrap_or(0);
+        self
+    }
+}
+
 #[derive(Debug)]
-struct ServerPskContextInner {
-    sni_key_provider: Option<Box<dyn ServerPskSniKeyProvider>>,
-    id_key_provider: Option<Box<dyn ServerPskIdentityKeyProvider>>,
+struct ServerPskContextInner<'a> {
+    sni_key_provider: Option<Box<dyn ServerPskSniKeyProvider<'a>>>,
+    id_key_provider: Option<Box<dyn ServerPskIdentityKeyProvider<'a>>>,
     /// Store for `coap_dtls_spsk_info_t` instances that we provided in previous SNI or ID
     /// callback invocations.
     ///
@@ -90,7 +93,7 @@ struct ServerPskContextInner {
     raw_cfg: Box<coap_dtls_spsk_t>,
 }
 
-impl Drop for ServerPskContextInner {
+impl Drop for ServerPskContextInner<'_> {
     fn drop(&mut self) {
         for provided_key in std::mem::take(&mut self.provided_keys).into_iter() {
             // SAFETY: Vector has only ever been filled by instances created from to_raw_spsk_info.
@@ -121,11 +124,11 @@ impl Drop for ServerPskContextInner {
 }
 
 #[derive(Clone, Debug)]
-pub struct ServerPskContext {
-    inner: Rc<RefCell<ServerPskContextInner>>,
+pub struct ServerPskContext<'a> {
+    inner: Rc<RefCell<ServerPskContextInner<'a>>>,
 }
 
-impl ServerPskContext {
+impl ServerPskContext<'_> {
     /// Returns a pointer to the PSK key data to use for a given `identity` and `session`, or
     /// [`std::ptr::null()`] if the provided identity hint and/or session are unacceptable.
     ///
@@ -168,7 +171,7 @@ impl ServerPskContext {
     ///
     /// After the underlying [`ServerPskContextInner`] is dropped, the returned pointer will no
     /// longer be valid and should no longer be dereferenced.
-    fn sni_callback(&self, sni: &[u8], session: &CoapServerSession<'_>) -> *const coap_dtls_spsk_info_t {
+    fn sni_callback(&self, sni: &CStr, session: &CoapServerSession<'_>) -> *const coap_dtls_spsk_info_t {
         let mut inner = (*self.inner).borrow_mut();
         let key = inner.sni_key_provider.as_ref().unwrap().key_for_sni(sni, session);
 
@@ -183,6 +186,8 @@ impl ServerPskContext {
         }
     }
 
+    /// SAFETY: This [ServerPskContext] must outlive the provided CoAP context, the provided
+    /// pointer must be valid.
     pub(crate) unsafe fn apply_to_context(&self, mut ctx: NonNull<coap_context_t>) {
         let mut inner = self.inner.borrow_mut();
         // TODO error handling
@@ -192,7 +197,9 @@ impl ServerPskContext {
             coap_context_set_psk2(ctx.as_mut(), inner.raw_cfg.as_mut());
         }
     }
+}
 
+impl<'a> ServerPskContext<'a> {
     /// Restores a [`ServerPskContext`] from a pointer to its inner structure (i.e. from the
     /// user-provided pointer given to DTLS callbacks).
     ///
@@ -202,7 +209,7 @@ impl ServerPskContext {
     ///
     /// # Safety
     /// The provided pointer must be a valid reference to a [`coap_dtls_spsk_t`] instance.
-    unsafe fn from_raw(raw_ctx: *const RefCell<ServerPskContextInner>) -> Self {
+    unsafe fn from_raw(raw_ctx: *const RefCell<ServerPskContextInner<'a>>) -> Self {
         assert!(!raw_ctx.is_null(), "provided raw DTLS PSK server context was null");
         let inner_weak = Weak::from_raw(raw_ctx);
         let inner = inner_weak
@@ -213,53 +220,53 @@ impl ServerPskContext {
     }
 }
 
-pub trait ServerPskIdentityKeyProvider: Debug {
-    fn key_for_identity(&self, identity: &[u8], session: &CoapServerSession<'_>) -> Option<PskKey>;
+pub trait ServerPskIdentityKeyProvider<'a>: Debug {
+    fn key_for_identity(&self, identity: &[u8], session: &CoapServerSession<'_>) -> Option<PskKey<'a>>;
 }
 
-impl<T: Debug> ServerPskIdentityKeyProvider for T
+impl<'a, T: Debug> ServerPskIdentityKeyProvider<'a> for T
 where
-    T: AsRef<[PskKey]>,
+    T: AsRef<[PskKey<'a>]>,
 {
     /// Returns the first key whose identity is equal to the one requested.
     /// If not found, returns the first key that has no key ID set.
-    fn key_for_identity(&self, identity: &[u8], _session: &CoapServerSession<'_>) -> Option<PskKey> {
+    fn key_for_identity(&self, identity: &[u8], _session: &CoapServerSession<'_>) -> Option<PskKey<'a>> {
         let keys = self.as_ref();
         keys.iter()
-            .find(|k| k.identity.as_deref().is_some_and(|kid| kid == identity))
-            .or_else(|| keys.iter().find(|k| k.identity.is_none()))
+            .find(|k| k.identity().as_deref().is_some_and(|kid| kid == identity))
+            .or_else(|| keys.iter().find(|k| k.identity().is_none()))
             .cloned()
     }
 }
 
-pub trait ServerPskSniKeyProvider: Debug {
-    fn key_for_sni(&self, sni: &[u8], session: &CoapServerSession<'_>) -> Option<PskKey>;
+pub trait ServerPskSniKeyProvider<'a>: Debug {
+    fn key_for_sni(&self, sni: &CStr, session: &CoapServerSession<'_>) -> Option<PskKey<'a>>;
 }
 
-impl<T: AsRef<[u8]> + Debug, U: AsRef<PskKey> + Debug> ServerPskSniKeyProvider for Vec<(T, U)> {
-    fn key_for_sni(&self, sni: &[u8], _session: &CoapServerSession<'_>) -> Option<PskKey> {
+impl<'a, T: AsRef<[u8]> + Debug, U: AsRef<PskKey<'a>> + Debug> ServerPskSniKeyProvider<'a> for Vec<(T, U)> {
+    fn key_for_sni(&self, sni: &CStr, _session: &CoapServerSession<'_>) -> Option<PskKey<'a>> {
         self.iter()
-            .find_map(|(key_sni, key)| (key_sni.as_ref() == sni).then_some(key.as_ref().clone()))
+            .find_map(|(key_sni, key)| (key_sni.as_ref() == sni.to_bytes()).then_some(key.as_ref().clone()))
     }
 }
 
-impl<T: AsRef<[u8]> + Debug, U: AsRef<PskKey> + Debug> ServerPskSniKeyProvider for [(T, U)] {
-    fn key_for_sni(&self, sni: &[u8], _session: &CoapServerSession<'_>) -> Option<PskKey> {
+impl<'a, T: AsRef<[u8]> + Debug, U: AsRef<PskKey<'a>> + Debug> ServerPskSniKeyProvider<'a> for [(T, U)] {
+    fn key_for_sni(&self, sni: &CStr, _session: &CoapServerSession<'_>) -> Option<PskKey<'a>> {
         let keys = self.as_ref();
         keys.iter()
-            .find_map(|(key_sni, key)| (key_sni.as_ref() == sni).then_some(key.as_ref().clone()))
+            .find_map(|(key_sni, key)| (key_sni.as_ref() == sni.to_bytes()).then_some(key.as_ref().clone()))
     }
 }
 
-impl<T: Borrow<[u8]> + Debug + Eq + Hash, U: AsRef<PskKey> + Debug> ServerPskSniKeyProvider for HashMap<T, U> {
-    fn key_for_sni(&self, sni: &[u8], _session: &CoapServerSession<'_>) -> Option<PskKey> {
-        self.get(sni).map(|v| v.as_ref()).cloned()
+impl<'a, T: Borrow<[u8]> + Debug + Eq + Hash, U: AsRef<PskKey<'a>> + Debug> ServerPskSniKeyProvider<'a> for HashMap<T, U> {
+    fn key_for_sni(&self, sni: &CStr, _session: &CoapServerSession<'_>) -> Option<PskKey<'a>> {
+        self.get(sni.to_bytes()).map(|v| v.as_ref()).cloned()
     }
 }
 
-impl<T: Borrow<[u8]> + Debug + Ord, U: AsRef<PskKey> + Debug> ServerPskSniKeyProvider for BTreeMap<T, U> {
-    fn key_for_sni(&self, sni: &[u8], _session: &CoapServerSession<'_>) -> Option<PskKey> {
-        self.get(sni).map(|v| v.as_ref()).cloned()
+impl<'a, T: Borrow<[u8]> + Debug + Ord, U: AsRef<PskKey<'a>> + Debug> ServerPskSniKeyProvider<'a> for BTreeMap<T, U> {
+    fn key_for_sni(&self, sni: &CStr, _session: &CoapServerSession<'_>) -> Option<PskKey<'a>> {
+        self.get(sni.to_bytes()).map(|v| v.as_ref()).cloned()
     }
 }
 
@@ -285,7 +292,7 @@ pub(crate) unsafe extern "C" fn dtls_psk_server_sni_callback(
     session: *mut coap_session_t,
     userdata: *mut c_void,
 ) -> *const coap_dtls_spsk_info_t {
-    let sni = CStr::from_ptr(sni).to_bytes();
+    let sni = CStr::from_ptr(sni);
     // We must not increase the refcount here, as doing so would require locking the global context,
     // which is not possible during a DTLS callback.
     // SAFETY: While we are in this callback, libcoap's context is locked by our current thread.
