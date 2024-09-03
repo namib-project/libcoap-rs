@@ -200,27 +200,27 @@ pub fn coap_startup_with_feature_checks() {
         #[cfg(feature = "dtls-cid")]
         // SAFETY: Function is always safe to call.
         if unsafe { coap_dtls_cid_is_supported() != 1 } {
-            panic!("Required feature \"dtls\" is not supported by libcoap")
+            panic!("Required feature \"dtls-cid\" is not supported by libcoap")
         }
         #[cfg(feature = "dtls-psk")]
         // SAFETY: Function is always safe to call.
         if unsafe { coap_dtls_psk_is_supported() != 1 } {
-            panic!("Required feature \"dtls\" is not supported by libcoap")
+            panic!("Required feature \"dtls-psk\" is not supported by libcoap")
         }
         #[cfg(feature = "dtls-pki")]
         // SAFETY: Function is always safe to call.
         if unsafe { coap_dtls_pki_is_supported() != 1 } {
-            panic!("Required feature \"dtls\" is not supported by libcoap")
+            panic!("Required feature \"dtls-pki\" is not supported by libcoap")
         }
         #[cfg(feature = "dtls-pkcs11")]
         // SAFETY: Function is always safe to call.
         if !unsafe { coap_dtls_pkcs11_is_supported() == 1 } {
-            panic!("Required feature \"dtls\" is not supported by libcoap")
+            panic!("Required feature \"dtls-pkcs11\" is not supported by libcoap")
         }
         #[cfg(feature = "dtls-rpk")]
         // SAFETY: Function is always safe to call.
         if unsafe { coap_dtls_rpk_is_supported() != 1 } {
-            panic!("Required feature \"dtls\" is not supported by libcoap")
+            panic!("Required feature \"dtls-rpk\" is not supported by libcoap")
         }
         #[cfg(feature = "epoll")]
         // SAFETY: Function is always safe to call.

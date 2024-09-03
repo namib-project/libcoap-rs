@@ -1,4 +1,4 @@
-use crate::crypto::psk::PskKey;
+use crate::crypto::psk::key::PskKey;
 use crate::error::SessionCreationError;
 use crate::session::CoapClientSession;
 use crate::types::CoapAddress;
@@ -14,12 +14,12 @@ use std::ptr::NonNull;
 use std::rc::{Rc, Weak};
 
 #[derive(Debug)]
-pub struct ClientPskContextBuilder {
-    ctx: ClientPskContextInner,
+pub struct ClientPskContextBuilder<'a> {
+    ctx: ClientPskContextInner<'a>,
 }
 
-impl ClientPskContextBuilder {
-    pub fn new(psk: PskKey) -> Self {
+impl<'a> ClientPskContextBuilder<'a> {
+    pub fn new(psk: PskKey<'a>) -> Self {
         Self {
             ctx: ClientPskContextInner {
                 raw_cfg: Box::new(coap_dtls_cpsk_t {
@@ -41,6 +41,24 @@ impl ClientPskContextBuilder {
         }
     }
 
+    pub fn key_provider(mut self, key_provider: Box<dyn ClientPskHintKeyProvider<'a>>) -> Self {
+        self.ctx.key_provider = Some(key_provider);
+        self.ctx.raw_cfg.validate_ih_call_back = Some(dtls_psk_client_ih_callback);
+        self
+    }
+
+    pub fn build(self) -> ClientPskContext<'a> {
+        let ctx = Rc::new(RefCell::new(self.ctx));
+        {
+            let mut ctx_borrow = ctx.borrow_mut();
+            if ctx_borrow.raw_cfg.validate_ih_call_back.is_some() {
+                ctx_borrow.raw_cfg.ih_call_back_arg = Rc::downgrade(&ctx).into_raw() as *mut c_void;
+            }
+        }
+        ClientPskContext { inner: ctx }
+    }
+}
+impl ClientPskContextBuilder<'_> {
     #[cfg(dtls_ec_jpake_support)]
     pub fn ec_jpake(mut self, ec_jpake: bool) -> Self {
         self.ctx.raw_cfg.ec_jpake = ec_jpake.then_some(1).unwrap_or(0);
@@ -65,31 +83,14 @@ impl ClientPskContextBuilder {
         self.ctx.raw_cfg.client_sni = self.ctx.client_sni.as_mut().unwrap().as_mut_ptr() as *mut c_char;
         Ok(self)
     }
-
-    pub fn key_provider(mut self, key_provider: Box<dyn ClientPskHintKeyProvider>) -> Self {
-        self.ctx.key_provider = Some(key_provider);
-        self.ctx.raw_cfg.validate_ih_call_back = Some(dtls_psk_client_ih_callback);
-        self
-    }
-
-    pub fn build(self) -> ClientPskContext {
-        let ctx = Rc::new(RefCell::new(self.ctx));
-        {
-            let mut ctx_borrow = ctx.borrow_mut();
-            if ctx_borrow.raw_cfg.validate_ih_call_back.is_some() {
-                ctx_borrow.raw_cfg.ih_call_back_arg = Rc::downgrade(&ctx).into_raw() as *mut c_void;
-            }
-        }
-        ClientPskContext { inner: ctx }
-    }
 }
 
 #[derive(Clone, Debug)]
-pub struct ClientPskContext {
-    inner: Rc<RefCell<ClientPskContextInner>>,
+pub struct ClientPskContext<'a> {
+    inner: Rc<RefCell<ClientPskContextInner<'a>>>,
 }
 
-impl ClientPskContext {
+impl ClientPskContext<'_> {
     /// Returns a pointer to the PSK to use for a given `identity_hint` and `session`, or
     /// [`std::ptr::null()`] if the provided identity hint and/or session are unacceptable.
     ///
@@ -124,14 +125,15 @@ impl ClientPskContext {
         }
     }
 
-    pub(crate) fn create_raw_session(
+    /// SAFETY: This ClientPskContext must outlive the returned coap_session_t.
+    pub(crate) unsafe fn create_raw_session(
         &self,
         ctx: &mut CoapContext<'_>,
         addr: &CoapAddress,
         proto: coap_proto_t,
     ) -> Result<NonNull<coap_session_t>, SessionCreationError> {
         // SAFETY: self.raw_context is guaranteed to be valid, local_if can be null,
-        // coap_dtls_cpsk_t is of valid format (as constructed by the builder).
+        // raw_cfg is of valid format (as constructed by the builder).
         {
             let mut inner = (*self.inner).borrow_mut();
             NonNull::new(unsafe {
@@ -146,7 +148,9 @@ impl ClientPskContext {
             .ok_or(SessionCreationError::Unknown)
         }
     }
+}
 
+impl<'a> ClientPskContext<'a> {
     /// Restores a [`ClientPskContext`] from a pointer to its inner structure (i.e. from the
     /// user-provided pointer given to DTLS callbacks).
     ///
@@ -155,8 +159,9 @@ impl ClientPskContext {
     /// Panics if the given pointer is a null pointer or the inner structure was already dropped.
     ///
     /// # Safety
-    /// The provided pointer must be a valid reference to a [`coap_dtls_cpsk_t`] instance.
-    unsafe fn from_raw(raw_ctx: *const RefCell<ClientPskContextInner>) -> Self {
+    /// The provided pointer must be a valid reference to a [`RefCell<ClientPskContextInner>`]
+    /// instance created from a call to [`Weak::into_raw()`].
+    unsafe fn from_raw(raw_ctx: *const RefCell<ClientPskContextInner<'a>>) -> Self {
         assert!(!raw_ctx.is_null(), "provided raw DTLS PSK client context was null");
         let inner_weak = Weak::from_raw(raw_ctx);
         let inner = inner_weak
@@ -168,8 +173,8 @@ impl ClientPskContext {
 }
 
 #[derive(Debug)]
-struct ClientPskContextInner {
-    key_provider: Option<Box<dyn ClientPskHintKeyProvider>>,
+struct ClientPskContextInner<'a> {
+    key_provider: Option<Box<dyn ClientPskHintKeyProvider<'a>>>,
     raw_cfg: Box<coap_dtls_cpsk_t>,
     /// Store for `coap_dtls_cpsk_info_t` instances that we provided in previous identity hint
     /// callback invocations.
@@ -183,7 +188,7 @@ struct ClientPskContextInner {
     client_sni: Option<Box<[u8]>>,
 }
 
-impl Drop for ClientPskContextInner {
+impl Drop for ClientPskContextInner<'_> {
     fn drop(&mut self) {
         for provided_key in std::mem::take(&mut self.provided_keys).into_iter() {
             // SAFETY: Vector has only ever been filled by instances created from to_raw_cpsk_info.
@@ -195,7 +200,7 @@ impl Drop for ClientPskContextInner {
             // SAFETY: If we set this, it must have been a call to Weak::into_raw with the correct
             //         type.
             unsafe {
-                Weak::from_raw(self.raw_cfg.ih_call_back_arg as *mut Self);
+                Weak::from_raw(self.raw_cfg.ih_call_back_arg as *mut RefCell<Self>);
             }
         }
         unsafe {
@@ -206,17 +211,17 @@ impl Drop for ClientPskContextInner {
     }
 }
 
-pub trait ClientPskHintKeyProvider: Debug {
-    fn key_for_identity_hint(&self, identity_hint: Option<&[u8]>, session: &CoapClientSession<'_>) -> Option<PskKey>;
+pub trait ClientPskHintKeyProvider<'a>: Debug {
+    fn key_for_identity_hint(&self, identity_hint: Option<&[u8]>, session: &CoapClientSession<'_>) -> Option<PskKey<'a>>;
 }
 
-impl<'a, T: Debug> ClientPskHintKeyProvider for T
+impl<'a, T: Debug> ClientPskHintKeyProvider<'a> for T
 where
-    T: AsRef<PskKey>,
+    T: AsRef<PskKey<'a>>,
 {
-    fn key_for_identity_hint(&self, identity_hint: Option<&[u8]>, _session: &CoapClientSession<'_>) -> Option<PskKey> {
+    fn key_for_identity_hint(&self, identity_hint: Option<&[u8]>, _session: &CoapClientSession<'_>) -> Option<PskKey<'a>> {
         let key = self.as_ref();
-        if identity_hint.is_none() || key.identity.as_deref() == identity_hint {
+        if identity_hint.is_none() || key.identity().as_deref() == identity_hint {
             Some(key.clone())
         } else {
             None

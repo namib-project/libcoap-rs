@@ -9,22 +9,39 @@
 
 //! Cryptography provider interfaces and types
 
-pub(crate) mod pki_rpk;
+#[cfg(any(feature = "dtls-rpk", feature = "dtls-pki"))]
+pub mod pki_rpk;
+#[cfg(feature = "dtls-psk")]
 pub mod psk;
 
 use std::fmt::Debug;
 
-use psk::ClientPskContext;
-
 #[derive(Clone, Debug)]
-pub enum ClientCryptoContext {
+pub enum ClientCryptoContext<'a> {
     #[cfg(feature = "dtls-psk")]
-    Psk(ClientPskContext),
+    Psk(psk::ClientPskContext<'a>),
+    #[cfg(feature = "dtls-pki")]
+    Pki(pki_rpk::PkiRpkContext<'a, pki_rpk::Pki>),
+    #[cfg(feature = "dtls-rpk")]
+    Rpk(pki_rpk::PkiRpkContext<'a, pki_rpk::Rpk>),
 }
 
-#[cfg(feature = "dtls-psk")]
-impl From<ClientPskContext> for ClientCryptoContext {
-    fn from(value: ClientPskContext) -> Self {
+impl<'a> From<psk::ClientPskContext<'a>> for ClientCryptoContext<'a> {
+    fn from(value: psk::ClientPskContext<'a>) -> Self {
         ClientCryptoContext::Psk(value)
+    }
+}
+
+#[cfg(feature = "dtls-pki")]
+impl<'a> From<pki_rpk::PkiRpkContext<'a, pki_rpk::Pki>> for ClientCryptoContext<'a> {
+    fn from(value: pki_rpk::PkiRpkContext<'a, pki_rpk::Pki>) -> Self {
+        ClientCryptoContext::Pki(value)
+    }
+}
+
+#[cfg(feature = "dtls-rpk")]
+impl<'a> From<pki_rpk::PkiRpkContext<'a, pki_rpk::Rpk>> for ClientCryptoContext<'a> {
+    fn from(value: pki_rpk::PkiRpkContext<'a, pki_rpk::Rpk>) -> Self {
+        ClientCryptoContext::Rpk(value)
     }
 }

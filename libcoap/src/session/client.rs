@@ -22,6 +22,7 @@ use crate::mem::{CoapFfiRcCell, DropInnerExclusively};
 use crate::prng::coap_prng_try_fill;
 use crate::{context::CoapContext, error::SessionCreationError, types::CoapAddress};
 
+use crate::crypto::psk::ClientPskContext;
 #[cfg(feature = "dtls")]
 use crate::crypto::ClientCryptoContext;
 
@@ -31,7 +32,7 @@ struct CoapClientSessionInner<'a> {
     #[cfg(feature = "dtls")]
     // This field is actually referred to be libcoap, so it isn't actually unused.
     #[allow(unused)]
-    crypto_ctx: Option<ClientCryptoContext>,
+    crypto_ctx: Option<ClientCryptoContext<'a>>,
 }
 
 impl<'a> CoapClientSessionInner<'a> {
@@ -72,7 +73,7 @@ impl<'a> CoapClientSessionInner<'a> {
     #[cfg(feature = "dtls")]
     unsafe fn new_with_crypto_ctx(
         raw_session: *mut coap_session_t,
-        crypto_ctx: ClientCryptoContext,
+        crypto_ctx: ClientCryptoContext<'a>,
     ) -> CoapFfiRcCell<CoapClientSessionInner<'a>> {
         let inner_session = CoapFfiRcCell::new(CoapClientSessionInner {
             inner: CoapSessionInner::new(raw_session),
@@ -94,26 +95,37 @@ pub struct CoapClientSession<'a> {
 }
 
 impl CoapClientSession<'_> {
-    /// Create a new DTLS encrypted session with the given peer.
-    ///
-    /// To supply cryptographic information (like PSK hints or key data), you have to provide a
-    /// struct implementing [CoapClientCryptoProvider].
+    /// Create a new DTLS encrypted session with the given peer `addr` using the given `crypto_ctx`.
     ///
     /// # Errors
     /// Will return a [SessionCreationError] if libcoap was unable to create a session (most likely
     /// because it was not possible to bind to a port).
-    #[cfg(feature = "dtls")]
+    #[cfg(feature = "dtls-psk")]
     pub fn connect_dtls<'a>(
         ctx: &mut CoapContext<'a>,
         addr: SocketAddr,
-        crypto_ctx: impl Into<ClientCryptoContext>,
+        crypto_ctx: ClientPskContext<'a>,
     ) -> Result<CoapClientSession<'a>, SessionCreationError> {
         let crypto_ctx = crypto_ctx.into();
-        let raw_session = match &crypto_ctx {
-            #[cfg(feature = "dtls-psk")]
-            ClientCryptoContext::Psk(psk_ctx) => {
-                psk_ctx.create_raw_session(ctx, &addr.into(), coap_proto_t::COAP_PROTO_DTLS)?
-            },
+        // SAFETY: The returned raw session lives for as long as the constructed
+        // CoapClientSessionInner does, which is limited to the lifetime of crypto_ctx.
+        // When the CoapClientSessionInner instance is dropped, the session is dropped before the
+        // crypto context is.
+        let raw_session = unsafe {
+            match &crypto_ctx {
+                #[cfg(feature = "dtls-psk")]
+                ClientCryptoContext::Psk(psk_ctx) => {
+                    psk_ctx.create_raw_session(ctx, &addr.into(), coap_proto_t::COAP_PROTO_DTLS)?
+                },
+                #[cfg(feature = "dtls-pki")]
+                ClientCryptoContext::Pki(pki_ctx) => {
+                    pki_ctx.create_raw_session(ctx, &addr.into(), coap_proto_t::COAP_PROTO_DTLS)?
+                },
+                #[cfg(feature = "dtls-rpk")]
+                ClientCryptoContext::Rpk(rpk_ctx) => {
+                    rpk_ctx.create_raw_session(ctx, &addr.into(), coap_proto_t::COAP_PROTO_DTLS)?
+                },
+            }
         };
 
         // SAFETY: raw_session was just checked to be valid pointer.
