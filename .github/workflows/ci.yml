@@ -36,10 +36,14 @@ jobs:
         with:
           packages: libgnutls28-dev libgnutls30
           version: 1.0
-      - if: matrix.crate == 'libcoap-rs' && matrix.dtls_backend != 'gnutls'
-        run: cargo test -p ${{ matrix.crate }} --no-default-features --features dtls,tcp,vendored --features dtls_${{ matrix.dtls_backend }} --features dtls_${{ matrix.dtls_backend }}_vendored --no-fail-fast
+      - if: matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'tinydtls'
+        run: cargo test -p ${{ matrix.crate }} --no-default-features --features tcp,vendored,dtls-psk,dtls-rpk --features dtls_${{ matrix.dtls_backend }} --features dtls_${{ matrix.dtls_backend }}_vendored --no-fail-fast
+      - if: matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'mbedtls'
+        run: cargo test -p ${{ matrix.crate }} --no-default-features --features tcp,vendored,dtls-psk,dtls-pki --features dtls_${{ matrix.dtls_backend }} --features dtls_${{ matrix.dtls_backend }}_vendored --no-fail-fast
+      - if: matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'openssl'
+        run: cargo test -p ${{ matrix.crate }} --no-default-features --features tcp,vendored,dtls-psk,dtls-pki --features dtls_${{ matrix.dtls_backend }} --features dtls_${{ matrix.dtls_backend }}_vendored --no-fail-fast
       - if: matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'gnutls'
-        run: cargo test -p ${{ matrix.crate }} --no-default-features --features dtls,tcp,vendored --features dtls_${{ matrix.dtls_backend }} --no-fail-fast
+        run: cargo test -p ${{ matrix.crate }} --no-default-features --features tcp,vendored,dtls-psk,dtls-pki,dtls-rpk --features dtls_${{ matrix.dtls_backend }} --no-fail-fast
       - if: matrix.crate == 'libcoap-sys' && matrix.dtls_backend != 'gnutls'
         run: cargo test -p ${{ matrix.crate }} --features dtls,dtls_backend_${{ matrix.dtls_backend }},dtls_backend_${{ matrix.dtls_backend }}_vendored --no-fail-fast
       - if: matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'gnutls'
@@ -81,7 +85,11 @@ jobs:
       - uses: baptiste0928/cargo-install@v3
         with:
           crate: cargo-tarpaulin
-      - run: cargo tarpaulin --no-fail-fast --workspace --verbose --features dtls,tcp,vendored --exclude-files libcoap-sys/tests,libcoap/tests --timeout 120 --out Xml
+      - uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: libgnutls28-dev libgnutls30
+          version: 1.0
+      - run: cargo tarpaulin --no-fail-fast --workspace --verbose --features tcp,vendored,dtls_gnutls,dtls-psk,dtls-rpk,dtls-pki --exclude-files libcoap-sys/tests,libcoap/tests --timeout 120 --out Xml
       - id: cov-report
         name: Produce the coverage report
         uses: pulsastrix/coverage-action@always_generate_comment_body
