@@ -22,14 +22,14 @@ use crate::mem::{CoapFfiRcCell, DropInnerExclusively};
 use crate::prng::coap_prng_try_fill;
 use crate::{context::CoapContext, error::SessionCreationError, types::CoapAddress};
 
-use crate::crypto::psk::ClientPskContext;
-#[cfg(feature = "dtls")]
+
+#[cfg(dtls)]
 use crate::crypto::ClientCryptoContext;
 
 #[derive(Debug)]
 struct CoapClientSessionInner<'a> {
     inner: CoapSessionInner<'a>,
-    #[cfg(feature = "dtls")]
+    #[cfg(dtls)]
     // This field is actually referred to be libcoap, so it isn't actually unused.
     #[allow(unused)]
     crypto_ctx: Option<ClientCryptoContext<'a>>,
@@ -54,6 +54,7 @@ impl<'a> CoapClientSessionInner<'a> {
 
         let inner_session = CoapFfiRcCell::new(CoapClientSessionInner {
             inner: CoapSessionInner::new(raw_session),
+            #[cfg(dtls)]
             crypto_ctx: None,
         });
 
@@ -70,7 +71,7 @@ impl<'a> CoapClientSessionInner<'a> {
     /// # Safety
     /// The provided pointer for `raw_session` must be valid and point to the newly constructed raw
     /// session.
-    #[cfg(feature = "dtls")]
+    #[cfg(dtls)]
     unsafe fn new_with_crypto_ctx(
         raw_session: *mut coap_session_t,
         crypto_ctx: ClientCryptoContext<'a>,
@@ -100,11 +101,11 @@ impl CoapClientSession<'_> {
     /// # Errors
     /// Will return a [SessionCreationError] if libcoap was unable to create a session (most likely
     /// because it was not possible to bind to a port).
-    #[cfg(feature = "dtls-psk")]
+    #[cfg(dtls)]
     pub fn connect_dtls<'a>(
         ctx: &mut CoapContext<'a>,
         addr: SocketAddr,
-        crypto_ctx: ClientPskContext<'a>,
+        crypto_ctx: impl Into<ClientCryptoContext<'a>>,
     ) -> Result<CoapClientSession<'a>, SessionCreationError> {
         let crypto_ctx = crypto_ctx.into();
         // SAFETY: The returned raw session lives for as long as the constructed

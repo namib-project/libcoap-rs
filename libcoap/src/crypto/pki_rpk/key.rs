@@ -1,122 +1,39 @@
 use libcoap_sys::{
-    coap_asn1_privatekey_type_t, coap_const_char_ptr_t, coap_dtls_key_t, coap_dtls_key_t__bindgen_ty_1,
-    coap_pki_define_t, coap_pki_key_define_t, coap_pki_key_t,
+    coap_asn1_privatekey_type_t, coap_const_char_ptr_t, coap_dtls_key_t,
+    coap_pki_define_t,
 };
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 use std::ffi::CString;
 use std::fmt::Debug;
-
-#[derive(Debug, Clone, Copy)]
-pub struct Pki {}
-#[derive(Debug, Clone, Copy)]
-pub struct Rpk {}
-
+use std::path::Path;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
+#[allow(private_bounds)]
 pub trait KeyType: KeyTypeSealed {}
 
-trait KeyTypeSealed: Debug {}
-
-impl KeyTypeSealed for Pki {}
-
-impl KeyTypeSealed for Rpk {}
+pub(super) trait KeyTypeSealed: Debug {}
 
 impl<T: KeyTypeSealed> KeyType for T {}
 
-#[derive(Clone, Debug)]
-pub struct PkiKeyDef<CA: KeyComponent<Pki>, PK: KeyComponent<Pki>, SK: KeyComponent<Pki>> {
-    ca_cert: Option<CA>,
-    public_key: PK,
-    private_key: SK,
-    user_pin: Option<CString>,
-    asn1_private_key_type: Asn1PrivateKeyType,
-}
-
-impl<CA: KeyComponent<Pki>, PK: KeyComponent<Pki>, SK: KeyComponent<Pki>> KeyDefSealed for PkiKeyDef<CA, PK, SK> {
-    type KeyType = Pki;
-
-    fn as_raw_dtls_key(&self) -> coap_dtls_key_t {
-        let (ca, ca_len) = self.ca_cert.as_ref().map(|v| v.as_raw_pki_definition()).unwrap_or((
-            coap_const_char_ptr_t {
-                s_byte: std::ptr::null(),
-            },
-            0,
-        ));
-        let (public_cert, public_cert_len) = self.public_key.as_raw_pki_definition();
-        let (private_key, private_key_len) = self.private_key.as_raw_pki_definition();
-
-        coap_dtls_key_t {
-            key_type: coap_pki_key_t::COAP_PKI_KEY_DEFINE,
-            key: coap_dtls_key_t__bindgen_ty_1 {
-                define: coap_pki_key_define_t {
-                    ca,
-                    public_cert,
-                    private_key,
-                    ca_len,
-                    public_cert_len,
-                    private_key_len,
-                    ca_def: <CA as KeyComponentSealed<Pki>>::DEFINE_TYPE,
-                    public_cert_def: <PK as KeyComponentSealed<Pki>>::DEFINE_TYPE,
-                    private_key_def: <SK as KeyComponentSealed<Pki>>::DEFINE_TYPE,
-                    private_key_type: self.asn1_private_key_type.into(),
-                    user_pin: self.user_pin.as_ref().map(|v| v.as_ptr()).unwrap_or(std::ptr::null()),
-                },
-            },
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct RpkKeyDef<PK: KeyComponent<Rpk>, SK: KeyComponent<Rpk>> {
-    public_key: PK,
-    private_key: SK,
-    user_pin: Option<CString>,
-    asn1_private_key_type: Asn1PrivateKeyType,
-}
-
-impl<PK: KeyComponent<Rpk>, SK: KeyComponent<Rpk>> KeyDefSealed for RpkKeyDef<PK, SK> {
-    type KeyType = Rpk;
-
-    fn as_raw_dtls_key(&self) -> coap_dtls_key_t {
-        let (public_cert, public_cert_len) = self.public_key.as_raw_pki_definition();
-        let (private_key, private_key_len) = self.private_key.as_raw_pki_definition();
-
-        coap_dtls_key_t {
-            key_type: coap_pki_key_t::COAP_PKI_KEY_DEFINE,
-            key: coap_dtls_key_t__bindgen_ty_1 {
-                define: coap_pki_key_define_t {
-                    ca: coap_const_char_ptr_t {
-                        u_byte: std::ptr::null(),
-                    },
-                    public_cert,
-                    private_key,
-                    ca_len: 0,
-                    public_cert_len,
-                    private_key_len,
-                    ca_def: coap_pki_define_t::COAP_PKI_KEY_DEF_PEM,
-                    public_cert_def: <PK as KeyComponentSealed<Rpk>>::DEFINE_TYPE,
-                    private_key_def: <SK as KeyComponentSealed<Rpk>>::DEFINE_TYPE,
-                    private_key_type: self.asn1_private_key_type.into(),
-                    user_pin: self.user_pin.as_ref().map(|v| v.as_ptr()).unwrap_or(std::ptr::null()),
-                },
-            },
-        }
-    }
-}
-
 pub(crate) trait KeyDefSealed: Debug {
-    type KeyType: KeyType;
     fn as_raw_dtls_key(&self) -> coap_dtls_key_t;
 }
 
-pub trait KeyDef: KeyDefSealed {}
-
-impl<T: KeyDefSealed> KeyDef for T {}
-
-pub trait KeyComponentSealed<KTY: KeyType>: Sized + Debug {
-    const DEFINE_TYPE: coap_pki_define_t;
-    fn as_raw_pki_definition(&self) -> (coap_const_char_ptr_t, usize);
+#[allow(private_bounds)]
+pub trait KeyDef: KeyDefSealed {
+    type KeyType: KeyType;
 }
 
+pub(super) trait AsRawKeyComponent: Sized + Debug {
+    fn as_raw_key_component(&self) -> (coap_const_char_ptr_t, usize);
+}
+
+pub(super) trait KeyComponentSealed<KTY: KeyType>: AsRawKeyComponent {
+    const DEFINE_TYPE: coap_pki_define_t;
+}
+
+#[allow(private_bounds)]
 pub trait KeyComponent<KTY: KeyType>: KeyComponentSealed<KTY> {}
 
 impl<KTY: KeyType, T: KeyComponentSealed<KTY>> KeyComponent<KTY> for T {}
@@ -124,10 +41,8 @@ impl<KTY: KeyType, T: KeyComponentSealed<KTY>> KeyComponent<KTY> for T {}
 #[derive(Clone, Debug)]
 pub struct PemFileKeyComponent(CString);
 
-impl KeyComponentSealed<Pki> for PemFileKeyComponent {
-    const DEFINE_TYPE: coap_pki_define_t = coap_pki_define_t::COAP_PKI_KEY_DEF_PEM;
-
-    fn as_raw_pki_definition(&self) -> (coap_const_char_ptr_t, usize) {
+impl AsRawKeyComponent for PemFileKeyComponent {
+    fn as_raw_key_component(&self) -> (coap_const_char_ptr_t, usize) {
         (
             coap_const_char_ptr_t {
                 s_byte: self.0.as_ptr(),
@@ -137,26 +52,25 @@ impl KeyComponentSealed<Pki> for PemFileKeyComponent {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct PemMemoryKeyComponent(Box<[u8]>);
-
-impl KeyComponentSealed<Pki> for PemMemoryKeyComponent {
-    const DEFINE_TYPE: coap_pki_define_t = coap_pki_define_t::COAP_PKI_KEY_DEF_PEM_BUF;
-
-    fn as_raw_pki_definition(&self) -> (coap_const_char_ptr_t, usize) {
-        (
-            coap_const_char_ptr_t {
-                u_byte: self.0.as_ptr(),
-            },
-            self.0.len(),
-        )
+#[cfg(unix)]
+impl<T: AsRef<Path>> From<T> for PemFileKeyComponent {
+    fn from(value: T) -> Self {
+        // File paths never contain null-bytes on unix, so we can unwrap here.
+        PemFileKeyComponent(CString::new(value.as_ref().as_os_str().as_bytes()).unwrap())
     }
 }
 
-impl KeyComponentSealed<Rpk> for PemMemoryKeyComponent {
-    const DEFINE_TYPE: coap_pki_define_t = coap_pki_define_t::COAP_PKI_KEY_DEF_RPK_BUF;
+#[derive(Clone, Debug)]
+pub struct PemMemoryKeyComponent(Box<[u8]>);
 
-    fn as_raw_pki_definition(&self) -> (coap_const_char_ptr_t, usize) {
+impl<T: Into<Vec<u8>>> From<T> for PemMemoryKeyComponent {
+    fn from(value: T) -> Self {
+        PemMemoryKeyComponent(value.into().into_boxed_slice())
+    }
+}
+
+impl AsRawKeyComponent for PemMemoryKeyComponent {
+    fn as_raw_key_component(&self) -> (coap_const_char_ptr_t, usize) {
         (
             coap_const_char_ptr_t {
                 u_byte: self.0.as_ptr(),
@@ -169,10 +83,8 @@ impl KeyComponentSealed<Rpk> for PemMemoryKeyComponent {
 #[derive(Clone, Debug)]
 pub struct DerFileKeyComponent(CString);
 
-impl KeyComponentSealed<Pki> for DerFileKeyComponent {
-    const DEFINE_TYPE: coap_pki_define_t = coap_pki_define_t::COAP_PKI_KEY_DEF_DER;
-
-    fn as_raw_pki_definition(&self) -> (coap_const_char_ptr_t, usize) {
+impl AsRawKeyComponent for DerFileKeyComponent {
+    fn as_raw_key_component(&self) -> (coap_const_char_ptr_t, usize) {
         (
             coap_const_char_ptr_t {
                 s_byte: self.0.as_ptr(),
@@ -182,13 +94,19 @@ impl KeyComponentSealed<Pki> for DerFileKeyComponent {
     }
 }
 
+#[cfg(unix)]
+impl<T: AsRef<Path>> From<T> for DerFileKeyComponent {
+    fn from(value: T) -> Self {
+        // File paths never contain null-bytes on unix, so we can unwrap here.
+        DerFileKeyComponent(CString::new(value.as_ref().as_os_str().as_bytes()).unwrap())
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct DerMemoryKeyComponent(Box<[u8]>);
 
-impl KeyComponentSealed<Rpk> for DerMemoryKeyComponent {
-    const DEFINE_TYPE: coap_pki_define_t = coap_pki_define_t::COAP_PKI_KEY_DEF_DER_BUF;
-
-    fn as_raw_pki_definition(&self) -> (coap_const_char_ptr_t, usize) {
+impl AsRawKeyComponent for DerMemoryKeyComponent {
+    fn as_raw_key_component(&self) -> (coap_const_char_ptr_t, usize) {
         (
             coap_const_char_ptr_t {
                 u_byte: self.0.as_ptr(),
@@ -198,13 +116,17 @@ impl KeyComponentSealed<Rpk> for DerMemoryKeyComponent {
     }
 }
 
+impl<T: Into<Vec<u8>>> From<T> for DerMemoryKeyComponent {
+    fn from(value: T) -> Self {
+        DerMemoryKeyComponent(value.into().into_boxed_slice())
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Pkcs11KeyComponent(CString);
 
-impl KeyComponentSealed<Pki> for Pkcs11KeyComponent {
-    const DEFINE_TYPE: coap_pki_define_t = coap_pki_define_t::COAP_PKI_KEY_DEF_PKCS11;
-
-    fn as_raw_pki_definition(&self) -> (coap_const_char_ptr_t, usize) {
+impl AsRawKeyComponent for Pkcs11KeyComponent {
+    fn as_raw_key_component(&self) -> (coap_const_char_ptr_t, usize) {
         (
             coap_const_char_ptr_t {
                 s_byte: self.0.as_ptr(),
@@ -214,32 +136,29 @@ impl KeyComponentSealed<Pki> for Pkcs11KeyComponent {
     }
 }
 
-impl KeyComponentSealed<Rpk> for Pkcs11KeyComponent {
-    const DEFINE_TYPE: coap_pki_define_t = coap_pki_define_t::COAP_PKI_KEY_DEF_PKCS11_RPK;
-
-    fn as_raw_pki_definition(&self) -> (coap_const_char_ptr_t, usize) {
-        (
-            coap_const_char_ptr_t {
-                s_byte: self.0.as_ptr(),
-            },
-            0,
-        )
+impl From<CString> for Pkcs11KeyComponent {
+    fn from(value: CString) -> Self {
+        Pkcs11KeyComponent(value)
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct EngineKeyComponent(CString);
 
-impl KeyComponentSealed<Pki> for EngineKeyComponent {
-    const DEFINE_TYPE: coap_pki_define_t = coap_pki_define_t::COAP_PKI_KEY_DEF_ENGINE;
-
-    fn as_raw_pki_definition(&self) -> (coap_const_char_ptr_t, usize) {
+impl AsRawKeyComponent for EngineKeyComponent {
+    fn as_raw_key_component(&self) -> (coap_const_char_ptr_t, usize) {
         (
             coap_const_char_ptr_t {
                 s_byte: self.0.as_ptr(),
             },
             0,
         )
+    }
+}
+
+impl From<CString> for EngineKeyComponent {
+    fn from(value: CString) -> Self {
+        EngineKeyComponent(value)
     }
 }
 

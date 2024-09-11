@@ -21,11 +21,15 @@ use libcoap_sys::{
     coap_context_t, coap_fixed_point_t, coap_mid_t, coap_new_message_id, coap_pdu_get_token, coap_pdu_t,
     coap_response_t, coap_send, coap_session_get_ack_random_factor, coap_session_get_ack_timeout,
     coap_session_get_addr_local, coap_session_get_addr_remote, coap_session_get_ifindex,
-    coap_session_get_max_retransmit, coap_session_get_proto, coap_session_get_psk_hint, coap_session_get_psk_identity,
-    coap_session_get_psk_key, coap_session_get_state, coap_session_get_type, coap_session_init_token,
+    coap_session_get_max_retransmit, coap_session_get_proto, coap_session_get_state, coap_session_get_type, coap_session_init_token,
     coap_session_max_pdu_size, coap_session_new_token, coap_session_send_ping, coap_session_set_ack_random_factor,
     coap_session_set_ack_timeout, coap_session_set_max_retransmit, coap_session_set_mtu, coap_session_state_t,
     coap_session_t, coap_session_type_t,
+};
+#[cfg(feature = "dtls-psk")]
+use libcoap_sys::{
+    coap_session_get_psk_hint, coap_session_get_psk_identity,
+    coap_session_get_psk_key,
 };
 
 use crate::message::request::CoapRequest;
@@ -230,7 +234,7 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     }
 
     /// Returns the current PSK hint for this session.
-    #[cfg(feature = "dtls")]
+    #[cfg(feature = "dtls-psk")]
     fn psk_hint(&self) -> Option<Box<[u8]>> {
         // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         unsafe {
@@ -241,7 +245,7 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     }
 
     /// Returns the current PSK identity for this session.
-    #[cfg(feature = "dtls")]
+    #[cfg(feature = "dtls-psk")]
     fn psk_identity(&self) -> Option<Box<[u8]>> {
         // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         unsafe {
@@ -252,7 +256,7 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     }
 
     /// Returns the current PSK key for this session.
-    #[cfg(feature = "dtls")]
+    #[cfg(feature = "dtls-psk")]
     fn psk_key(&self) -> Option<Box<[u8]>> {
         // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         unsafe {

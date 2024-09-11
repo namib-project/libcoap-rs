@@ -1,11 +1,20 @@
 mod key;
+#[cfg(feature = "dtls-pki")]
+mod pki;
+#[cfg(feature = "dtls-rpk")]
+mod rpk;
 
-use std::borrow::Borrow;
+#[cfg(feature = "dtls-pki")]
+pub use pki::*;
+#[cfg(feature = "dtls-rpk")]
+pub use rpk::*;
+
+pub use key::*;
+
 use crate::error::SessionCreationError;
 use crate::session::CoapSession;
 use crate::types::CoapAddress;
 use crate::CoapContext;
-pub use key::*;
 use libcoap_sys::{
     coap_context_set_pki, coap_context_t, coap_dtls_key_t, coap_dtls_pki_t, coap_new_client_session_pki, coap_proto_t,
     coap_session_t, COAP_DTLS_PKI_SETUP_VERSION,
@@ -19,7 +28,9 @@ use std::rc::{Rc, Weak};
 
 #[derive(Clone, Debug)]
 pub enum ServerPkiRpkCryptoContext<'a> {
+    #[cfg(feature = "dtls-pki")]
     Pki(PkiRpkContext<'a, Pki>),
+    #[cfg(feature = "dtls-rpk")]
     Rpk(PkiRpkContext<'a, Rpk>),
 }
 
@@ -27,7 +38,9 @@ impl ServerPkiRpkCryptoContext<'_> {
     /// SAFETY: The provided CoAP context must not outlive this PkiRpkContext.
     pub(crate) unsafe fn apply_to_context(&self, ctx: NonNull<coap_context_t>) {
         match self {
+            #[cfg(feature = "dtls-pki")]
             ServerPkiRpkCryptoContext::Pki(v) => { v.apply_to_context(ctx) }
+            #[cfg(feature = "dtls-rpk")]
             ServerPkiRpkCryptoContext::Rpk(v) => { v.apply_to_context(ctx) }
         }
     }
@@ -38,6 +51,7 @@ pub struct CertVerifying;
 
 trait CertVerificationModeSealed {}
 
+#[allow(private_bounds)]
 pub trait CertVerificationMode: CertVerificationModeSealed {}
 
 impl CertVerificationModeSealed for NonCertVerifying {}
@@ -92,39 +106,41 @@ impl<'a, KTY: KeyType> PkiRpkContextBuilder<'a, KTY, NonCertVerifying> {
     }
 }
 
-impl<'a> PkiRpkContextBuilder<'a, Pki, NonCertVerifying> {
-    pub fn new<K: KeyDef<KeyType = Pki> + 'a>(key: K) -> Self {
-        let mut result = Self::new_untyped(key);
-        result.ctx.raw_cfg.is_rpk_not_cert = 0;
-        result
-    }
-}
-
-impl<'a> PkiRpkContextBuilder<'a, Rpk, NonCertVerifying> {
-    pub fn new<K: KeyDef<KeyType = Rpk> + 'a>(key: K) -> Self {
+impl<'a, KTY: KeyType> PkiRpkContextBuilder<'a, KTY, NonCertVerifying> {
+    pub fn new<K: KeyDef<KeyType=KTY> + 'a>(key: K) -> Self {
         let mut result = Self::new_untyped(key);
         result.ctx.raw_cfg.is_rpk_not_cert = 1;
         result
     }
 }
 
-impl<'a> PkiRpkContextBuilder<'a, Pki, NonCertVerifying> {
-    pub fn verify_peer_cert(mut self) -> PkiRpkContextBuilder<'a, Pki, CertVerifying> {
-        self.ctx.raw_cfg.verify_peer_cert = 1;
-        PkiRpkContextBuilder::<Pki, CertVerifying> {
-            ctx: self.ctx,
-            verifying: Default::default(),
-        }
+impl<KTY: KeyType, V: CertVerificationMode> PkiRpkContextBuilder<'_, KTY, V> {
+    pub fn use_cid(mut self, use_cid: bool) -> Self {
+        self.ctx.raw_cfg.use_cid = use_cid.then_some(1).unwrap_or(0);
+        self
+    }
+
+    pub fn sni_key_provider(mut self, sni_key_provider: Box<dyn PkiRpkSniKeyProvider<KTY>>) -> Self {
+        self.ctx.sni_key_provider = Some(sni_key_provider);
+        self.ctx.raw_cfg.validate_sni_call_back = Some(dtls_pki_sni_callback::<KTY>);
+        self
+    }
+
+    pub fn client_sni(mut self, client_sni: impl Into<Vec<u8>>) -> Result<Self, NulError> {
+        // For some reason, client_sni is not immutable here.
+        // While I don't see any reason why libcoap would modify the string, it is not strictly
+        // forbidden for it to do so, so simply using CString::into_raw() is not an option (as it
+        // does not allow modifications to client_sni that change the length).
+        let sni = CString::new(client_sni.into())?
+            .into_bytes_with_nul()
+            .into_boxed_slice();
+        self.ctx.client_sni = Some(sni);
+        self.ctx.raw_cfg.client_sni = self.ctx.client_sni.as_mut().unwrap().as_mut_ptr() as *mut c_char;
+        Ok(self)
     }
 }
 
-impl<'a> PkiRpkContextBuilder<'a, Pki, CertVerifying> {
-    pub fn new<K: KeyDef<KeyType = Pki> + 'a>(key: K) -> Self {
-        PkiRpkContextBuilder::<'a, Pki, NonCertVerifying>::new(key).verify_peer_cert()
-    }
-}
-
-impl PkiRpkContextBuilder<'_, Pki, CertVerifying> {
+impl<KTY: KeyType> PkiRpkContextBuilder<'_, KTY, CertVerifying> {
     pub fn check_common_ca(mut self, check_common_ca: bool) -> Self {
         self.ctx.raw_cfg.check_common_ca = check_common_ca.then_some(1).unwrap_or(0);
         self
@@ -176,50 +192,8 @@ impl PkiRpkContextBuilder<'_, Pki, CertVerifying> {
     }
 }
 
-impl<'a, V: CertVerificationMode> PkiRpkContextBuilder<'a, Pki, V> {
-    fn cn_validator(mut self, validator: impl PkiCnValidator + 'a) -> Self {
-        self.ctx.cn_callback = Some(CnCallback::Pki(Box::new(validator)));
-        self.ctx.raw_cfg.validate_cn_call_back = Some(dtls_pki_cn_callback::<Pki>);
-        self
-    }
-}
-
-impl<'a> PkiRpkContextBuilder<'a, Rpk, NonCertVerifying> {
-    fn rpk_validator(mut self, validator: impl RpkValidator + 'a) -> Self {
-        self.ctx.cn_callback = Some(CnCallback::Rpk(Box::new(validator)));
-        self.ctx.raw_cfg.validate_cn_call_back = Some(dtls_pki_cn_callback::<Rpk>);
-        self
-    }
-}
-
-impl<KTY: KeyType, V: CertVerificationMode> PkiRpkContextBuilder<'_, KTY, V> {
-    fn use_cid(mut self, use_cid: bool) -> Self {
-        self.ctx.raw_cfg.use_cid = use_cid.then_some(1).unwrap_or(0);
-        self
-    }
-
-    fn sni_key_provider(mut self, sni_key_provider: Box<dyn PkiRpkSniKeyProvider<KTY>>) -> Self {
-        self.ctx.sni_key_provider = Some(sni_key_provider);
-        self.ctx.raw_cfg.validate_sni_call_back = Some(dtls_pki_sni_callback::<KTY>);
-        self
-    }
-
-    fn client_sni(mut self, client_sni: impl Into<Vec<u8>>) -> Result<Self, NulError> {
-        // For some reason, client_sni is not immutable here.
-        // While I don't see any reason why libcoap would modify the string, it is not strictly
-        // forbidden for it to do so, so simply using CString::into_raw() is not an option (as it
-        // does not allow modifications to client_sni that change the length).
-        let sni = CString::new(client_sni.into())?
-            .into_bytes_with_nul()
-            .into_boxed_slice();
-        self.ctx.client_sni = Some(sni);
-        self.ctx.raw_cfg.client_sni = self.ctx.client_sni.as_mut().unwrap().as_mut_ptr() as *mut c_char;
-        Ok(self)
-    }
-}
-
 impl<'a, KTY: KeyType, V: CertVerificationMode> PkiRpkContextBuilder<'a, KTY, V> {
-    fn build(self) -> PkiRpkContext<'a, KTY> {
+    pub fn build(self) -> PkiRpkContext<'a, KTY> {
         let ctx = Rc::new(RefCell::new(self.ctx));
         {
             let mut ctx_borrow = ctx.borrow_mut();
@@ -337,6 +311,8 @@ impl<KTY: KeyType> PkiRpkContext<'_, KTY> {
 }
 
 impl<'a, KTY: KeyType> PkiRpkContext<'a, KTY> {
+    // cn and depth are unused only if dtls-pki feature is not enabled
+    #[cfg_attr(not(feature = "dtls-pki"), allow(unused_variables))]
     fn cn_callback(
         &self,
         cn: &CStr,
@@ -348,15 +324,15 @@ impl<'a, KTY: KeyType> PkiRpkContext<'a, KTY> {
         let inner = (*self.inner).borrow();
         // This function is only ever called if a CN key provider is set, so it's fine to unwrap
         // here.
-        match inner
+        if match inner
             .cn_callback
             .as_ref()
             .unwrap() {
+            #[cfg(feature = "dtls-pki")]
             CnCallback::Pki(pki) => { pki.validate_cn(cn, asn1_public_cert, session, depth, validated) }
+            #[cfg(feature = "dtls-rpk")]
             CnCallback::Rpk(rpk) => { rpk.validate_rpk(asn1_public_cert, session, validated) }
-        }
-            .then_some(1)
-            .unwrap_or(0)
+        } { 1 } else { 0 }
     }
 
     fn sni_callback(&self, sni: &CStr) -> *mut coap_dtls_key_t {
@@ -395,24 +371,11 @@ impl<'a, KTY: KeyType> PkiRpkContext<'a, KTY> {
     }
 }
 
-pub trait PkiCnValidator: Debug {
-    fn validate_cn(
-        &self,
-        cn: &CStr,
-        asn1_public_cert: &[u8],
-        session: &CoapSession,
-        depth: c_uint,
-        validated: bool,
-    ) -> bool;
-}
-
-pub trait RpkValidator: Debug {
-    fn validate_rpk(&self, asn1_public_key: &[u8], session: &CoapSession, validated: bool) -> bool;
-}
-
 #[derive(Debug)]
 pub enum CnCallback<'a> {
+    #[cfg(feature = "dtls-pki")]
     Pki(Box<dyn PkiCnValidator + 'a>),
+    #[cfg(feature = "dtls-rpk")]
     Rpk(Box<dyn RpkValidator + 'a>)
 }
 

@@ -25,23 +25,3 @@ pub enum ClientCryptoContext<'a> {
     #[cfg(feature = "dtls-rpk")]
     Rpk(pki_rpk::PkiRpkContext<'a, pki_rpk::Rpk>),
 }
-
-impl<'a> From<psk::ClientPskContext<'a>> for ClientCryptoContext<'a> {
-    fn from(value: psk::ClientPskContext<'a>) -> Self {
-        ClientCryptoContext::Psk(value)
-    }
-}
-
-#[cfg(feature = "dtls-pki")]
-impl<'a> From<pki_rpk::PkiRpkContext<'a, pki_rpk::Pki>> for ClientCryptoContext<'a> {
-    fn from(value: pki_rpk::PkiRpkContext<'a, pki_rpk::Pki>) -> Self {
-        ClientCryptoContext::Pki(value)
-    }
-}
-
-#[cfg(feature = "dtls-rpk")]
-impl<'a> From<pki_rpk::PkiRpkContext<'a, pki_rpk::Rpk>> for ClientCryptoContext<'a> {
-    fn from(value: pki_rpk::PkiRpkContext<'a, pki_rpk::Rpk>) -> Self {
-        ClientCryptoContext::Rpk(value)
-    }
-}

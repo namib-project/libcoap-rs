@@ -13,7 +13,6 @@ use std::cell::{Ref, RefCell, RefMut};
 use std::ffi::c_void;
 use std::fmt::{Debug, Formatter};
 use std::ops::{Deref, DerefMut};
-use std::ptr::NonNull;
 use std::rc::{Rc, Weak};
 
 /// Trait implemented by libcoap wrapper structs that contain an inner value that may be dropped
@@ -24,6 +23,7 @@ pub(crate) trait DropInnerExclusively {
     /// referenced by this instance is also dropped.
     ///
     /// # Panics
+    ///
     /// Panics if the inner part of this struct cannot be exclusively dropped, i.e., it is still
     /// used by another instance.
     fn drop_exclusively(self);
@@ -529,19 +529,4 @@ impl<T> Drop for CoapLendableFfiRefMut<'_, T> {
             );
         }
     }
-}
-
-pub(crate) fn boxed_slice_into_parts<T>(data: Box<[T]>) -> (NonNull<T>, usize) {
-    let len = data.len();
-    // SAFETY: Box::into_raw() will never return a null pointer.
-    (unsafe { NonNull::new_unchecked(Box::into_raw(data) as *mut T) }, len)
-}
-
-pub(crate) unsafe fn boxed_slice_from_raw_parts<T>(data: *mut T, len: usize) -> Box<[T]> {
-    try_boxed_slice_from_raw_parts(data, len).expect("provided pointer is null, indicating it has not been created from a previous call of boxed_slice_into_raw")
-}
-
-pub(crate) unsafe fn try_boxed_slice_from_raw_parts<T>(data: *mut T, len: usize) -> Option<Box<[T]>> {
-    NonNull::new(data)
-        .map(|mut v| Box::from_raw(std::slice::from_raw_parts_mut(v.as_mut(), len)))
 }
