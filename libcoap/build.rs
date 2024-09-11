@@ -6,6 +6,7 @@ fn main() {
     println!("cargo::rustc-check-cfg=cfg(dtls_ec_jpake_support)");
     println!("cargo::rustc-check-cfg=cfg(dtls_cid_support)");
     println!("cargo::rustc-check-cfg=cfg(coap_uri_buf_unused)");
+    println!("cargo::rustc-check-cfg=cfg(dtls)");
     if let Ok(libcoap_version) = std::env::var("DEP_COAP_3_LIBCOAP_VERSION") {
         let version = Version::from(libcoap_version.as_ref()).expect("invalid libcoap version");
         // libcoap >= 4.3.5rc2 no longer uses the buf and buflen parameters in
@@ -26,4 +27,6 @@ fn main() {
             _ => {},
         }
     }
+    #[cfg(any(feature = "dtls-pki", feature = "dtls-rpk", feature = "dtls-psk"))]
+    println!("cargo:rustc-cfg=dtls")
 }

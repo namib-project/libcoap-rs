@@ -58,6 +58,13 @@ impl<'a> ClientPskContextBuilder<'a> {
         ClientPskContext { inner: ctx }
     }
 }
+
+impl<'a> From<crate::crypto::psk::ClientPskContext<'a>> for crate::crypto::ClientCryptoContext<'a> {
+    fn from(value: crate::crypto::psk::ClientPskContext<'a>) -> Self {
+        crate::crypto::ClientCryptoContext::Psk(value)
+    }
+}
+
 impl ClientPskContextBuilder<'_> {
     #[cfg(dtls_ec_jpake_support)]
     pub fn ec_jpake(mut self, ec_jpake: bool) -> Self {

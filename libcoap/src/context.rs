@@ -10,9 +10,10 @@
 //! Module containing context-internal types and traits.
 
 use libc::c_uint;
-use std::ptr::NonNull;
 use std::sync::Once;
-use std::{any::Any, ffi::c_void, fmt::Debug, marker::PhantomData, net::SocketAddr, ops::Sub, time::Duration};
+use std::{any::Any, ffi::c_void, fmt::Debug, net::SocketAddr, ops::Sub, time::Duration};
+#[cfg(dtls)]
+use std::ptr::NonNull;
 
 use libcoap_sys::{
     coap_add_resource, coap_can_exit, coap_context_get_csm_max_message_size, coap_context_get_csm_timeout,
@@ -24,7 +25,7 @@ use libcoap_sys::{
     coap_set_app_data, coap_startup_with_feature_checks, COAP_BLOCK_SINGLE_BODY, COAP_BLOCK_USE_LIBCOAP, COAP_IO_WAIT,
 };
 
-#[cfg(any(feature = "dtls-pki", feature = "dtls-rpk"))]
+#[cfg(any(feature = "dtls-rpk", feature = "dtls-pki"))]
 use crate::crypto::pki_rpk::ServerPkiRpkCryptoContext;
 #[cfg(feature = "dtls-psk")]
 use crate::crypto::psk::ServerPskContext;
@@ -110,7 +111,7 @@ impl<'a> CoapContext<'a> {
             event_handler: None,
             #[cfg(feature = "dtls-psk")]
             psk_context: None,
-            #[cfg(feature = "dtls-pki")]
+            #[cfg(any(feature = "dtls-pki", feature = "dtls-rpk"))]
             pki_rpk_context: None,
         });
 
@@ -232,7 +233,8 @@ impl<'a> CoapContext<'a> {
 
     /// Sets the server-side cryptography information provider.
     #[cfg(any(feature = "dtls-pki", feature = "dtls-rpk"))]
-    pub fn set_pki_rpk_context(&mut self, pki_context: ServerPkiRpkCryptoContext<'a>) {
+    pub fn set_pki_rpk_context(&mut self, pki_context: impl Into<ServerPkiRpkCryptoContext<'a>>)
+    {
         // SAFETY: raw context is valid.
         let mut inner = self.inner.borrow_mut();
         // TODO there is probably a prettier way to do this instead of panicking.
@@ -241,7 +243,7 @@ impl<'a> CoapContext<'a> {
         if inner.pki_rpk_context.is_some() {
             panic!("PKI context has already been set.")
         }
-        inner.pki_rpk_context = Some(pki_context);
+        inner.pki_rpk_context = Some(pki_context.into());
         unsafe {
             inner
                 .pki_rpk_context
@@ -292,13 +294,13 @@ impl CoapContext<'_> {
     ///
     /// Note that in order to actually connect to DTLS clients, you need to set a crypto provider
     /// using [set_server_crypto_provider()](CoapContext::set_server_crypto_provider())
-    #[cfg(feature = "dtls")]
+    #[cfg(dtls)]
     pub fn add_endpoint_dtls(&mut self, addr: SocketAddr) -> Result<(), EndpointCreationError> {
         self.add_endpoint(addr, coap_proto_t::COAP_PROTO_DTLS)
     }
 
     /// TODO
-    #[cfg(all(feature = "tcp", feature = "dtls"))]
+    #[cfg(all(feature = "tcp", dtls))]
     pub fn add_endpoint_tls(&mut self, _addr: SocketAddr) -> Result<(), EndpointCreationError> {
         todo!()
         // TODO: self.add_endpoint(addr, coap_proto_t::COAP_PROTO_TLS)
