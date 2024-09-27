@@ -25,7 +25,7 @@ pub enum EndpointCreationError {
 }
 
 #[derive(Error, Debug, Copy, Clone, Eq, PartialEq)]
-pub enum ContextCreationError {
+pub enum ContextConfigurationError {
     /// Unknown error inside of libcoap
     #[error("CoAP context creation error: unknown error in call to libcoap")]
     Unknown,
