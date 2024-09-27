@@ -9,6 +9,11 @@
 
 //! Types required for conversion between libcoap C library abstractions and Rust types.
 
+use std::ffi::CString;
+use std::fmt::{Display, Formatter};
+use std::marker::PhantomPinned;
+use std::ops::{Deref, DerefMut};
+use std::pin::Pin;
 use std::{
     fmt::Debug,
     mem::MaybeUninit,
@@ -16,13 +21,8 @@ use std::{
     os::raw::c_int,
     str::FromStr,
 };
-use std::ffi::CString;
-use std::fmt::{Display, Formatter};
-use std::marker::PhantomPinned;
-use std::ops::{Deref, DerefMut};
-use std::pin::Pin;
 
-use libc::{AF_INET, AF_INET6, c_ushort, in6_addr, in_addr, sa_family_t, sockaddr_in, sockaddr_in6, socklen_t};
+use libc::{c_ushort, in6_addr, in_addr, sa_family_t, sockaddr_in, sockaddr_in6, socklen_t, AF_INET, AF_INET6};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 #[cfg(feature = "url")]
@@ -694,13 +694,31 @@ impl CoapUri {
     pub unsafe fn from_raw_uri(raw_uri: *const coap_uri_t, is_proxy: bool) -> CoapUri {
         // Loosely based on coap_clone_uri.
         assert!(!raw_uri.is_null());
+        let host_slice = (*raw_uri)
+            .host
+            .s
+            .is_null()
+            .then_some(&[] as &[u8])
+            .unwrap_or_else(|| std::slice::from_raw_parts((*raw_uri).host.s, (*raw_uri).host.length));
+        let path_slice = (*raw_uri)
+            .path
+            .s
+            .is_null()
+            .then_some(&[] as &[u8])
+            .unwrap_or_else(|| std::slice::from_raw_parts((*raw_uri).path.s, (*raw_uri).path.length));
+        let query_slice = (*raw_uri)
+            .query
+            .s
+            .is_null()
+            .then_some(&[] as &[u8])
+            .unwrap_or_else(|| std::slice::from_raw_parts((*raw_uri).query.s, (*raw_uri).query.length));
         // Clone the actual URI string.
         let (uri_str_copy, host_pos, path_pos, query_pos) = Self::construct_uri_string_from_parts(
             CoapUriScheme::from_raw_scheme((*raw_uri).scheme),
-            std::slice::from_raw_parts((*raw_uri).host.s, (*raw_uri).host.length),
+            host_slice,
             (*raw_uri).port,
-            std::slice::from_raw_parts((*raw_uri).path.s, (*raw_uri).path.length),
-            std::slice::from_raw_parts((*raw_uri).query.s, (*raw_uri).query.length),
+            path_slice,
+            query_slice,
         )
         .expect("provided raw URI is invalid");
 
