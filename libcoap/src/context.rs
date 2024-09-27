@@ -10,20 +10,22 @@
 //! Module containing context-internal types and traits.
 
 use libc::c_uint;
-use std::sync::Once;
-use std::{any::Any, ffi::c_void, fmt::Debug, net::SocketAddr, ops::Sub, time::Duration};
-#[cfg(dtls)]
-use std::ptr::NonNull;
-
 use libcoap_sys::{
     coap_add_resource, coap_can_exit, coap_context_get_csm_max_message_size, coap_context_get_csm_timeout,
     coap_context_get_max_handshake_sessions, coap_context_get_max_idle_sessions, coap_context_get_session_timeout,
     coap_context_set_block_mode, coap_context_set_csm_max_message_size, coap_context_set_csm_timeout,
     coap_context_set_keepalive, coap_context_set_max_handshake_sessions, coap_context_set_max_idle_sessions,
-    coap_context_set_session_timeout, coap_context_t, coap_event_t, coap_free_context, coap_get_app_data,
-    coap_io_process, coap_new_context, coap_proto_t, coap_register_event_handler, coap_register_response_handler,
-    coap_set_app_data, coap_startup_with_feature_checks, COAP_BLOCK_SINGLE_BODY, COAP_BLOCK_USE_LIBCOAP, COAP_IO_WAIT,
+    coap_context_set_pki_root_cas, coap_context_set_session_timeout, coap_context_t, coap_event_t, coap_free_context,
+    coap_get_app_data, coap_io_process, coap_new_context, coap_proto_t, coap_register_event_handler,
+    coap_register_response_handler, coap_set_app_data, coap_startup_with_feature_checks, COAP_BLOCK_SINGLE_BODY,
+    COAP_BLOCK_USE_LIBCOAP, COAP_IO_WAIT,
 };
+use std::ffi::CString;
+use std::path::Path;
+#[cfg(dtls)]
+use std::ptr::NonNull;
+use std::sync::Once;
+use std::{any::Any, ffi::c_void, fmt::Debug, net::SocketAddr, ops::Sub, time::Duration};
 
 #[cfg(any(feature = "dtls-rpk", feature = "dtls-pki"))]
 use crate::crypto::pki_rpk::ServerPkiRpkCryptoContext;
@@ -35,10 +37,12 @@ use crate::session::CoapServerSession;
 use crate::session::CoapSession;
 use crate::transport::CoapEndpoint;
 use crate::{
-    error::{ContextCreationError, EndpointCreationError, IoProcessError},
+    error::{ContextConfigurationError, EndpointCreationError, IoProcessError},
     resource::{CoapResource, UntypedCoapResource},
     session::session_response_handler,
 };
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 
 static COAP_STARTUP_ONCE: Once = Once::new();
 
@@ -81,13 +85,13 @@ impl<'a> CoapContext<'a> {
     /// # Errors
     /// Returns an error if the underlying libcoap library was unable to create a new context
     /// (probably an allocation error?).
-    pub fn new() -> Result<CoapContext<'a>, ContextCreationError> {
+    pub fn new() -> Result<CoapContext<'a>, ContextConfigurationError> {
         ensure_coap_started();
         // SAFETY: Providing null here is fine, the context will just not be bound to an endpoint
         // yet.
         let raw_context = unsafe { coap_new_context(std::ptr::null()) };
         if raw_context.is_null() {
-            return Err(ContextCreationError::Unknown);
+            return Err(ContextConfigurationError::Unknown);
         }
         // SAFETY: We checked that raw_context is not null.
         unsafe {
@@ -233,8 +237,7 @@ impl<'a> CoapContext<'a> {
 
     /// Sets the server-side cryptography information provider.
     #[cfg(any(feature = "dtls-pki", feature = "dtls-rpk"))]
-    pub fn set_pki_rpk_context(&mut self, pki_context: impl Into<ServerPkiRpkCryptoContext<'a>>)
-    {
+    pub fn set_pki_rpk_context(&mut self, pki_context: impl Into<ServerPkiRpkCryptoContext<'a>>) {
         // SAFETY: raw context is valid.
         let mut inner = self.inner.borrow_mut();
         // TODO there is probably a prettier way to do this instead of panicking.
@@ -250,6 +253,41 @@ impl<'a> CoapContext<'a> {
                 .as_ref()
                 .unwrap()
                 .apply_to_context(NonNull::new(inner.raw_context).unwrap())
+        }
+    }
+
+    // TODO this for non-unix systems
+    #[cfg(all(feature = "dtls-pki", unix))]
+    pub fn set_pki_root_cas(
+        &mut self,
+        ca_file: Option<impl AsRef<Path>>,
+        ca_dir: Option<impl AsRef<Path>>,
+    ) -> Result<(), ContextConfigurationError> {
+        let ca_file = ca_file.as_ref().map(|v| {
+            let v = v.as_ref();
+            assert!(v.is_file(), "attempted to set non-file as CA file for libcoap");
+            // Unix paths never contain null bytes, so we can unwrap here.
+            CString::new(v.as_os_str().as_bytes()).unwrap()
+        });
+        let ca_dir = ca_dir.as_ref().map(|v| {
+            let v = v.as_ref();
+            assert!(v.is_dir(), "attempted to set non-directory as CA directory for libcoap");
+            // Unix paths never contain null bytes, so we can unwrap here.
+            CString::new(v.as_os_str().as_bytes()).unwrap()
+        });
+        let mut inner = self.inner.borrow_mut();
+
+        let result = unsafe {
+            coap_context_set_pki_root_cas(
+                inner.raw_context,
+                ca_file.as_ref().map(|v| v.as_ptr()).unwrap_or(std::ptr::null()),
+                ca_dir.as_ref().map(|v| v.as_ptr()).unwrap_or(std::ptr::null()),
+            )
+        };
+        if result == 1 {
+            Ok(())
+        } else {
+            Err(ContextConfigurationError::Unknown)
         }
     }
 }
