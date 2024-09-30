@@ -23,6 +23,7 @@ pub(crate) trait DropInnerExclusively {
     /// referenced by this instance is also dropped.
     ///
     /// # Panics
+    ///
     /// Panics if the inner part of this struct cannot be exclusively dropped, i.e., it is still
     /// used by another instance.
     fn drop_exclusively(self);

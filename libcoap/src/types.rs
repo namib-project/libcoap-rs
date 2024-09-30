@@ -12,7 +12,6 @@
 use std::ffi::CString;
 use std::fmt::{Display, Formatter};
 use std::marker::PhantomPinned;
-use std::ops::{Deref, DerefMut};
 use std::pin::Pin;
 use std::{
     fmt::Debug,
@@ -334,25 +333,11 @@ impl From<CoapProtocol> for CoapUriScheme {
 pub struct CoapUri {
     is_proxy: bool,
     raw_uri: coap_uri_t,
-    uri_str: Pin<CoapUriInner>,
+    uri_str: Pin<Box<CoapUriInner>>,
 }
 
 #[derive(Debug)]
 struct CoapUriInner(CString, PhantomPinned);
-
-impl Deref for CoapUriInner {
-    type Target = CString;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for CoapUriInner {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
 
 impl CoapUri {
     /// Creates a new [CoapUri] for use as a request or location URI from its constituent parts.
@@ -731,15 +716,15 @@ impl CoapUri {
         // Now, _after_ the uri_str is pinned, we can set the new object's raw_uri string fields.
         result.raw_uri.host = coap_str_const_t {
             length: (*raw_uri).host.length,
-            s: result.uri_str.as_bytes_with_nul()[host_pos..host_pos + 1].as_ptr(),
+            s: result.uri_str.0.as_bytes_with_nul()[host_pos..host_pos + 1].as_ptr(),
         };
         result.raw_uri.path = coap_str_const_t {
             length: (*raw_uri).path.length,
-            s: result.uri_str.as_bytes_with_nul()[path_pos..path_pos + 1].as_ptr(),
+            s: result.uri_str.0.as_bytes_with_nul()[path_pos..path_pos + 1].as_ptr(),
         };
         result.raw_uri.query = coap_str_const_t {
             length: (*raw_uri).query.length,
-            s: result.uri_str.as_bytes_with_nul()[query_pos..query_pos + 1].as_ptr(),
+            s: result.uri_str.0.as_bytes_with_nul()[query_pos..query_pos + 1].as_ptr(),
         };
 
         result
@@ -748,7 +733,7 @@ impl CoapUri {
     /// Create an instance of [CoapUri] with the given `uri_str`, but don't parse the value, i.e.
     /// the resulting `raw_uri` is not set correctly.
     fn create_unparsed_uri(uri_str: CString, is_proxy: bool) -> Self {
-        let uri_str = Pin::new(CoapUriInner(uri_str, PhantomPinned));
+        let uri_str = Box::pin(CoapUriInner(uri_str, PhantomPinned));
         CoapUri {
             raw_uri: coap_uri_t {
                 host: coap_str_const_t {
@@ -790,8 +775,8 @@ impl CoapUri {
         // entire lifetime of this object too.
         if unsafe {
             parsing_fn(
-                uri.uri_str.as_ptr() as *const u8,
-                libc::strlen(uri.uri_str.as_ptr()),
+                uri.uri_str.0.as_ptr() as *const u8,
+                libc::strlen(uri.uri_str.0.as_ptr()),
                 std::ptr::from_mut(&mut uri.raw_uri),
             )
         } < 0

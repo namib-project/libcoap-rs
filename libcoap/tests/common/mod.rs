@@ -7,6 +7,9 @@
  * See the README as well as the LICENSE file for more information.
  */
 
+#[cfg(any(feature = "dtls-pki", feature = "dtls-rpk"))]
+pub mod dtls;
+
 use std::net::{SocketAddr, UdpSocket};
 use std::rc::Rc;
 use std::sync::{Arc, Condvar, Mutex};
@@ -18,6 +21,7 @@ use libcoap_rs::{CoapContext, CoapRequestHandler, CoapResource};
 use libcoap_rs::message::{CoapMessageCommon, CoapRequest, CoapResponse};
 use libcoap_rs::protocol::{CoapMessageCode, CoapMessageType, CoapRequestCode, CoapResponseCode};
 use libcoap_rs::session::CoapSessionCommon;
+use libcoap_sys::{coap_dtls_set_log_level, coap_log_t, coap_set_log_level};
 
 pub(crate) fn get_unused_server_addr() -> SocketAddr {
     // This will give us a SocketAddress with a port in the local port range automatically
@@ -41,7 +45,7 @@ pub(crate) fn get_unused_server_addr() -> SocketAddr {
 /// As the context_configurator closure is responsible for binding to sockets, this can be used to
 /// spawn a test server and wait for it to be ready to accept requests before returning (avoiding
 /// test failure due to "Connection Refused" errors).
-pub(crate) fn spawn_test_server<F: FnOnce(&mut CoapContext) + Send + 'static>(
+pub(crate) fn spawn_test_server<F: FnOnce(CoapContext<'static>) -> CoapContext<'static> + Send + 'static>(
     context_configurator: F,
 ) -> JoinHandle<()> {
     let ready_condition = Arc::new((Mutex::new(false), Condvar::new()));
@@ -50,10 +54,11 @@ pub(crate) fn spawn_test_server<F: FnOnce(&mut CoapContext) + Send + 'static>(
     let server_handle = std::thread::spawn(move || {
         let (ready_var, ready_cond) = &*ready_condition2;
         run_test_server(|context| {
-            context_configurator(context);
+            let context = context_configurator(context);
             let mut ready_var = ready_var.lock().expect("ready condition mutex is poisoned");
             *ready_var = true;
             ready_cond.notify_all();
+            context
         });
     });
 
@@ -69,9 +74,14 @@ pub(crate) fn spawn_test_server<F: FnOnce(&mut CoapContext) + Send + 'static>(
 }
 
 /// Configures and starts a test server in the current thread.
-pub(crate) fn run_test_server<F: FnOnce(&mut CoapContext)>(context_configurator: F) {
+pub(crate) fn run_test_server<F: FnOnce(CoapContext<'static>) -> CoapContext<'static>>(context_configurator: F) {
+    unsafe {
+        libcoap_sys::coap_startup_with_feature_checks();
+        coap_dtls_set_log_level(coap_log_t::COAP_LOG_DEBUG);
+        coap_set_log_level(coap_log_t::COAP_LOG_DEBUG);
+    }
     let mut context = CoapContext::new().unwrap();
-    context_configurator(&mut context);
+    context = context_configurator(context);
     let request_completed = Rc::new(AtomicBool::new(false));
     let resource = CoapResource::new("test1", request_completed.clone(), false);
     resource.set_method_handler(

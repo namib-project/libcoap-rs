@@ -205,7 +205,7 @@
 //! # Using cryptography
 //! If you wish to use CoAP over DTLS, you have to provide credential and key information to
 //! libcoap. To do so, you need to provide an instance of [crypto::CoapClientCryptoProvider]
-//! to [session::CoapClientSession::connect_dtls()] (for client sessions) and/or an instance of
+//! to [session::CoapClientSession::connect_dtls_psk()] (for client sessions) and/or an instance of
 //! [crypto::CoapServerCryptoProvider] to [CoapContext::set_server_crypto_provider()] (for server
 //! sessions).
 //!
@@ -217,12 +217,14 @@
 //! Note that enabling multiple backends is not possible and doing so will result in a single
 //! backend being chosen based on the priority order (gnutls > openssl > mbedtls > tinydtls).
 
+extern crate core;
+
 pub use context::CoapContext;
 pub use event::CoapEventHandler;
 pub use resource::{CoapRequestHandler, CoapResource};
 
 mod context;
-#[cfg(feature = "dtls")]
+#[cfg(dtls)]
 pub mod crypto;
 pub mod error;
 mod event;
