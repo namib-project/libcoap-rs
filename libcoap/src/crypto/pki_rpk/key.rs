@@ -1,14 +1,11 @@
-use libcoap_sys::{
-    coap_asn1_privatekey_type_t, coap_const_char_ptr_t, coap_dtls_key_t,
-    coap_pki_define_t,
-};
+use libcoap_sys::{coap_asn1_privatekey_type_t, coap_const_char_ptr_t, coap_dtls_key_t, coap_pki_define_t};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 use std::ffi::CString;
 use std::fmt::Debug;
-use std::path::Path;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
+use std::path::Path;
 #[allow(private_bounds)]
 pub trait KeyType: KeyTypeSealed {}
 
