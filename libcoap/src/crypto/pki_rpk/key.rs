@@ -53,8 +53,8 @@ impl AsRawKeyComponent for PemFileKeyComponent {
 }
 
 #[cfg(unix)]
-impl<T: AsRef<Path>> From<T> for PemFileKeyComponent {
-    fn from(value: T) -> Self {
+impl<T: AsRef<Path>> From<&T> for PemFileKeyComponent {
+    fn from(value: &T) -> Self {
         // File paths never contain null-bytes on unix, so we can unwrap here.
         PemFileKeyComponent(CString::new(value.as_ref().as_os_str().as_bytes()).unwrap())
     }
