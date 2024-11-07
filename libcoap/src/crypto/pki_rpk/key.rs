@@ -1,4 +1,15 @@
-use libcoap_sys::{coap_asn1_privatekey_type_t, coap_const_char_ptr_t, coap_dtls_key_t, coap_pki_define_t};
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * crypto/pki_rpk/key.rs - Interfaces and types for PKI/RPK keys in libcoap-rs.
+ * This file is part of the libcoap-rs crate, see the README and LICENSE files for
+ * more information and terms of use.
+ * Copyright © 2021-2024 The NAMIB Project Developers, all rights reserved.
+ * See the README as well as the LICENSE file for more information.
+ */
+
+use libcoap_sys::{
+    coap_asn1_privatekey_type_t, coap_const_char_ptr_t, coap_dtls_key_t, coap_dtls_pki_t, coap_pki_define_t,
+};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 use std::ffi::CString;
@@ -6,35 +17,65 @@ use std::fmt::Debug;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
+
+/// Trait for marker structs that describe different types of asymmetric DTLS keys (RPK or PKI).
 #[allow(private_bounds)]
 pub trait KeyType: KeyTypeSealed {}
 
-pub(super) trait KeyTypeSealed: Debug {}
+/// Sealed trait for key types.
+pub(super) trait KeyTypeSealed: Debug {
+    /// Applies default settings for this key type to the given encryption context `ctx`.
+    fn set_key_type_defaults(ctx: &mut coap_dtls_pki_t);
+}
 
 impl<T: KeyTypeSealed> KeyType for T {}
 
-pub(crate) trait KeyDefSealed: Debug {
-    fn as_raw_dtls_key(&self) -> coap_dtls_key_t;
-}
-
+/// Trait for types that can be used as a libcoap DTLS asymmetric key definition (RPK or PKI).
 #[allow(private_bounds)]
 pub trait KeyDef: KeyDefSealed {
+    /// The key type of this key definition.
     type KeyType: KeyType;
 }
 
+/// Sealed trait for key definitions.
+pub(crate) trait KeyDefSealed: Debug {
+    /// Creates a raw key definition based on this key definition.
+    ///
+    /// **Important:** The returned raw definition refers to memory owned by `self`.
+    /// While this function alone can not cause undefined behavior (and is therefore not `unsafe`),
+    /// anything that dereferences the pointers stored in the returned [`coap_dtls_key_t`] (which is
+    /// itself only possible in `unsafe` code) after `self` has been dropped will cause Undefined
+    /// Behavior.
+    fn as_raw_dtls_key(&self) -> coap_dtls_key_t;
+}
+
+/// Trait for types that can be converted to components of an asymmetric DTLS key.
 pub(super) trait AsRawKeyComponent: Sized + Debug {
+    /// Returns a raw [`coap_const_char_ptr_t`] pointing to this key component and a `usize`
+    /// indicating the length of this key component (or `0` if this key type is supposed to be a
+    /// null-terminated string).
+    ///
+    /// **Important:** The returned raw definition refers to memory owned by `self`.
+    /// While this function alone can not cause undefined behavior (and is therefore not `unsafe`),
+    /// anything that dereferences the returned [`coap_const_char_ptr_t`] (which is itself only
+    /// possible in `unsafe` code) after `self` has been dropped will cause Undefined Behavior.
     fn as_raw_key_component(&self) -> (coap_const_char_ptr_t, usize);
 }
 
+/// Sealed trait for components of an asymmetric DTLS key of the given [`KeyType`] `KTY`.
 pub(super) trait KeyComponentSealed<KTY: KeyType>: AsRawKeyComponent {
+    /// The raw [`coap_pki_define_t`] indicating the type of this key component that should be used
+    /// when using it in a key definition of type `KTY`.
     const DEFINE_TYPE: coap_pki_define_t;
 }
 
+/// Trait indicating that a type can be used as a DTLS key component of the given [`KeyType`] `KTY`.
 #[allow(private_bounds)]
 pub trait KeyComponent<KTY: KeyType>: KeyComponentSealed<KTY> {}
 
 impl<KTY: KeyType, T: KeyComponentSealed<KTY>> KeyComponent<KTY> for T {}
 
+/// Key component that is stored in a PEM-encoded file with the given path.
 #[derive(Clone, Debug)]
 pub struct PemFileKeyComponent(CString);
 
@@ -57,6 +98,7 @@ impl<T: AsRef<Path>> From<T> for PemFileKeyComponent {
     }
 }
 
+/// Key component that is stored in memory as a PEM-encoded sequence of bytes.
 #[derive(Clone, Debug)]
 pub struct PemMemoryKeyComponent(Box<[u8]>);
 
@@ -77,6 +119,7 @@ impl AsRawKeyComponent for PemMemoryKeyComponent {
     }
 }
 
+/// Key component that is stored in a DER-encoded file with the given path.
 #[derive(Clone, Debug)]
 pub struct DerFileKeyComponent(CString);
 
@@ -99,6 +142,7 @@ impl<T: AsRef<Path>> From<T> for DerFileKeyComponent {
     }
 }
 
+/// Key component that is stored in memory as a DER-encoded sequence of bytes.
 #[derive(Clone, Debug)]
 pub struct DerMemoryKeyComponent(Box<[u8]>);
 
@@ -119,6 +163,7 @@ impl<T: Into<Vec<u8>>> From<T> for DerMemoryKeyComponent {
     }
 }
 
+/// Key component that is stored as a PKCS11 URI.
 #[derive(Clone, Debug)]
 pub struct Pkcs11KeyComponent(CString);
 
@@ -133,12 +178,13 @@ impl AsRawKeyComponent for Pkcs11KeyComponent {
     }
 }
 
-impl From<CString> for Pkcs11KeyComponent {
-    fn from(value: CString) -> Self {
-        Pkcs11KeyComponent(value)
+impl<T: Into<CString>> From<T> for Pkcs11KeyComponent {
+    fn from(value: T) -> Self {
+        Pkcs11KeyComponent(value.into())
     }
 }
 
+/// Key component that is passed to the TLS library verbatim (only supported by OpenSSL).
 #[derive(Clone, Debug)]
 pub struct EngineKeyComponent(CString);
 
@@ -153,15 +199,17 @@ impl AsRawKeyComponent for EngineKeyComponent {
     }
 }
 
-impl From<CString> for EngineKeyComponent {
-    fn from(value: CString) -> Self {
-        EngineKeyComponent(value)
+impl<T: Into<CString>> From<T> for EngineKeyComponent {
+    fn from(value: T) -> Self {
+        EngineKeyComponent(value.into())
     }
 }
 
+/// Private key type for DER/ASN.1 encoded keys.
 #[repr(C)]
-#[derive(Copy, Clone, FromPrimitive, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, FromPrimitive, Debug, PartialEq, Eq, Hash, Default)]
 pub enum Asn1PrivateKeyType {
+    #[default]
     None = coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_NONE as isize,
     Rsa = coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_RSA as isize,
     Rsa2 = coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_RSA2 as isize,
@@ -177,12 +225,6 @@ pub enum Asn1PrivateKeyType {
     Cmac = coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_CMAC as isize,
     Tls1Prf = coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_TLS1_PRF as isize,
     Hkdf = coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_HKDF as isize,
-}
-
-impl Default for Asn1PrivateKeyType {
-    fn default() -> Self {
-        Asn1PrivateKeyType::None
-    }
 }
 
 impl From<Asn1PrivateKeyType> for coap_asn1_privatekey_type_t {

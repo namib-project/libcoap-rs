@@ -22,7 +22,6 @@ use crate::mem::{CoapFfiRcCell, DropInnerExclusively};
 use crate::prng::coap_prng_try_fill;
 use crate::{context::CoapContext, error::SessionCreationError, types::CoapAddress};
 
-
 #[cfg(dtls)]
 use crate::crypto::ClientCryptoContext;
 
@@ -204,7 +203,8 @@ impl CoapClientSession<'_> {
     /// session with app data.
     ///
     /// # Safety
-    /// The provided pointer must be valid.
+    /// The provided pointer must be valid, the provided session's app data must be a valid argument
+    /// to `CoapFfiRawCell<CoapClientSessionInner>::clone_raw_rc`.
     pub(crate) unsafe fn from_raw<'a>(raw_session: *mut coap_session_t) -> CoapClientSession<'a> {
         assert!(!raw_session.is_null(), "provided raw session was null");
         let raw_session_type = coap_session_get_type(raw_session);

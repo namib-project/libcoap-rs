@@ -21,16 +21,13 @@ use libcoap_sys::{
     coap_context_t, coap_fixed_point_t, coap_mid_t, coap_new_message_id, coap_pdu_get_token, coap_pdu_t,
     coap_response_t, coap_send, coap_session_get_ack_random_factor, coap_session_get_ack_timeout,
     coap_session_get_addr_local, coap_session_get_addr_remote, coap_session_get_ifindex,
-    coap_session_get_max_retransmit, coap_session_get_proto, coap_session_get_state, coap_session_get_type, coap_session_init_token,
-    coap_session_max_pdu_size, coap_session_new_token, coap_session_send_ping, coap_session_set_ack_random_factor,
-    coap_session_set_ack_timeout, coap_session_set_max_retransmit, coap_session_set_mtu, coap_session_state_t,
-    coap_session_t, coap_session_type_t,
+    coap_session_get_max_retransmit, coap_session_get_proto, coap_session_get_state, coap_session_get_type,
+    coap_session_init_token, coap_session_max_pdu_size, coap_session_new_token, coap_session_send_ping,
+    coap_session_set_ack_random_factor, coap_session_set_ack_timeout, coap_session_set_max_retransmit,
+    coap_session_set_mtu, coap_session_state_t, coap_session_t, coap_session_type_t,
 };
 #[cfg(feature = "dtls-psk")]
-use libcoap_sys::{
-    coap_session_get_psk_hint, coap_session_get_psk_identity,
-    coap_session_get_psk_key,
-};
+use libcoap_sys::{coap_session_get_psk_hint, coap_session_get_psk_identity, coap_session_get_psk_key};
 
 use crate::message::request::CoapRequest;
 use crate::message::response::CoapResponse;
@@ -267,6 +264,7 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     }
 
     /// Returns the current state of this session.
+    #[must_use]
     fn state(&self) -> CoapSessionState {
         // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         unsafe { coap_session_get_state(self.inner_ref().raw_session).into() }
@@ -445,7 +443,9 @@ impl<'a> CoapSession<'a> {
     /// Panics if the given pointer is a null pointer.
     ///
     /// # Safety
-    /// The provided pointer must be valid.
+    /// The provided pointer must be valid, the provided session's app data must be a valid argument
+    /// to `CoapFfiRawCell<CoapClientSessionInner>::clone_raw_rc` or
+    /// `CoapFfiRawCell<CoapServerSessionInner>::clone_raw_rc` (depending on the session type).
     pub(crate) unsafe fn from_raw(raw_session: *mut coap_session_t) -> CoapSession<'a> {
         assert!(!raw_session.is_null(), "provided raw session was null");
         let raw_session_type = coap_session_get_type(raw_session);

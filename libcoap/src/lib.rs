@@ -19,7 +19,7 @@
 //!     - [x] UDP
 //!     - [x] DTLS
 //!         - [x] DTLS using PSK
-//!         - [ ] DTLS using PKI/RPK
+//!         - [x] DTLS using PKI/RPK
 //!     - [ ] TCP
 //!     - [ ] TLS
 //!     - [ ] OSCORE
@@ -76,6 +76,18 @@
 //! CONFIG_MBEDTLS_PSK_MODES=y
 //! CONFIG_MBEDTLS_KEY_EXCHANGE_PSK=y
 //! ```
+//!
+//! # Using cryptography
+//! If you wish to use CoAP over DTLS, you have to provide credential and key information to
+//! libcoap. See the documentation of the [`crypto`] module for more information and examples.
+//!
+//! libcoap requires a DTLS library to be selected for DTLS functionality. By default, libcoap-rs
+//! will use `openssl` for this purpose. If you wish to use one of the other supported DTLS
+//! libraries (GnuTLS, MbedTLS, TinyDTLS), disable the `dtls_openssl` feature and replace it with
+//! the feature for the library of your choice.
+//!
+//! Note that enabling multiple backends is not possible and doing so will result in a single
+//! backend being chosen based on the priority order (gnutls > openssl > mbedtls > tinydtls).
 //!
 //! # Examples
 //!
@@ -144,23 +156,9 @@
 //!     session::{CoapSessionCommon, CoapServerSession},
 //! };
 //!
-//! // This will give us a SocketAddress with a port in the local port range automatically
-//! // assigned by the operating system.
-//! // Because the UdpSocket goes out of scope, the Port will be free for usage by libcoap.
-//! // This seems to be the only portable way to get a port number assigned from the operating
-//! // system.
-//! // It is assumed here that after unbinding the temporary socket, the OS will not reassign
-//! // this port until we bind it again. This should work in most cases (unless we run on a
-//! // system with very few free ports), because at least Linux will not reuse port numbers
-//! // unless necessary, see https://unix.stackexchange.com/a/132524.
-//! let server_address = UdpSocket::bind("localhost:0")
-//!     .expect("Failed to bind server socket")
-//!     .local_addr()
-//!     .expect("Failed to get server socket address");
-//!
 //! // a new CoAP context and bind to the generated SocketAddr.
 //! let mut context = CoapContext::new().expect("Failed to create CoAP context");
-//! context.add_endpoint_udp(server_address).expect("Unable to add/bind to endpoint");
+//! context.add_endpoint_udp("[::1]:5683".parse().unwrap()).expect("Unable to add/bind to endpoint");
 //!
 //! // Create a new resource that is available at the URI path `hello_world`
 //! // The second argument can be used to provide any kind of user-specific data, which will
@@ -201,21 +199,6 @@
 //! // Properly shut down, completing outstanding IO requests and properly closing sessions.
 //! context.shutdown(Some(Duration::from_secs(0))).unwrap();
 //! ```
-//!
-//! # Using cryptography
-//! If you wish to use CoAP over DTLS, you have to provide credential and key information to
-//! libcoap. To do so, you need to provide an instance of [crypto::CoapClientCryptoProvider]
-//! to [session::CoapClientSession::connect_dtls_psk()] (for client sessions) and/or an instance of
-//! [crypto::CoapServerCryptoProvider] to [CoapContext::set_server_crypto_provider()] (for server
-//! sessions).
-//!
-//! libcoap requires a DTLS library to be selected for DTLS functionality. By default, libcoap-rs
-//! will use `openssl` for this purpose. If you wish to use one of the other supported DTLS
-//! libraries (GnuTLS, MbedTLS, TinyDTLS), disable the `dtls_openssl` feature and replace it with
-//! the feature for the library of your choice.
-//!
-//! Note that enabling multiple backends is not possible and doing so will result in a single
-//! backend being chosen based on the priority order (gnutls > openssl > mbedtls > tinydtls).
 
 extern crate core;
 

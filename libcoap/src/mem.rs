@@ -333,7 +333,7 @@ impl<T: Debug> CoapLendableFfiRcCell<T> {
         let ret_val = ref_box
             .upgrade()
             .expect("unable to restore CoapLendableFfiRcCell as the underlying value was already dropped");
-        Box::into_raw(ref_box);
+        assert_eq!(Box::into_raw(ref_box), ptr);
         ret_val
     }
 

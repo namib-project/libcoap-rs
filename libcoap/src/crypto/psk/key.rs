@@ -1,20 +1,33 @@
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * crypto/psk/key.rs - Interfaces and types for PSK keys in libcoap-rs.
+ * This file is part of the libcoap-rs crate, see the README and LICENSE files for
+ * more information and terms of use.
+ * Copyright © 2021-2024 The NAMIB Project Developers, all rights reserved.
+ * See the README as well as the LICENSE file for more information.
+ */
+
 use libcoap_sys::{coap_bin_const_t, coap_dtls_cpsk_info_t, coap_dtls_spsk_info_t};
 use std::borrow::Cow;
 use std::marker::PhantomData;
 use std::ptr::NonNull;
 
+/// A pre-shared DTLS key.
 #[derive(Debug, Clone)]
 pub struct PskKey<'a> {
+    /// Identity of this key (or None if no identity is known).
     identity: Option<Box<[u8]>>,
+    /// Actual key data (the key bytes).
     data: Box<[u8]>,
     // This lifetime is not strictly necessary for now. This is just future-proofing for later
     // changes, which might allow PskKey instances with limited lifetimes (e.g. using borrowed byte
     // slices).
     // In practice (at least for now), all PskKey instances have a 'static lifetime.
-    _lifetime_marker: PhantomData<&'a ()>
+    _lifetime_marker: PhantomData<&'a ()>,
 }
 
 impl<'a> PskKey<'a> {
+    /// Creates a new key object with the given `identity` and the actual key bytes given in `data`.
     pub fn new<T: Into<Vec<u8>>, U: Into<Vec<u8>>>(identity: Option<T>, data: U) -> PskKey<'a> {
         PskKey {
             identity: identity.map(Into::into).map(|v| v.into_boxed_slice()),
@@ -25,11 +38,12 @@ impl<'a> PskKey<'a> {
 }
 
 impl PskKey<'_> {
-
+    /// Returns the key's identity or `None` if no key identity was set.
     pub fn identity(&self) -> Option<&[u8]> {
         self.identity.as_ref().map(|v| v.as_ref())
     }
 
+    /// Returns the key data bytes as an immutable slice.
     pub fn data(&self) -> &[u8] {
         self.data.as_ref()
     }
@@ -96,6 +110,11 @@ impl PskKey<'_> {
         Self::from_bin_consts(&cpsk_info.identity, &cpsk_info.key)
     }
 
+    /// Consumes this key object to create two [`coap_bin_const_t`] instances referring to the
+    /// `identity` and `data` fields.
+    ///
+    /// The pointers given in [`coap_bin_const_t`] have been created by a call to [`Box::into_raw`]
+    /// with the `length` field set to the length of the given field.
     fn into_bin_consts(self) -> (coap_bin_const_t, coap_bin_const_t) {
         let identity = self
             .identity
@@ -114,6 +133,13 @@ impl PskKey<'_> {
         (identity, key)
     }
 
+    /// Converts the given pair of [`coap_bin_const_t`]s back into a [`PskKey`] instance with the
+    /// given `identity` and `key`
+    ///
+    /// # Safety
+    /// The provided `identity` and `key` must have been created by a previous call to
+    /// [PskKey::into_bin_consts], the `length` field and pointers of both constants must not have
+    /// been modified.
     unsafe fn from_bin_consts(identity: &coap_bin_const_t, key: &coap_bin_const_t) -> Self {
         // SAFETY: Caller contract requires the provided identity and key to be created by a
         // previous call to into_bin_consts, which means that the pointer in identity.s refers to a
@@ -124,8 +150,12 @@ impl PskKey<'_> {
             .map(|mut v| unsafe { Box::from_raw(std::slice::from_raw_parts_mut(v.as_mut(), identity.length)) });
 
         // SAFETY same as above.
-        let data = unsafe { Box::from_raw(std::slice::from_raw_parts_mut(key.s as *mut u8, key.length) as *mut [u8]) };
-        Self { identity, data, _lifetime_marker: Default::default() }
+        let data = unsafe { Box::from_raw(std::slice::from_raw_parts_mut(key.s as *mut u8, key.length)) };
+        Self {
+            identity,
+            data,
+            _lifetime_marker: Default::default(),
+        }
     }
 }
 

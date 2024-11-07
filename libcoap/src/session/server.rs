@@ -102,6 +102,8 @@ impl CoapServerSession<'_> {
     ///
     /// # Safety
     /// The provided pointer must be valid for the entire lifetime of this struct.
+    /// The provided session's app data must be a valid argument to
+    /// `CoapFfiRawCell<CoapServerSessionInner>::clone_raw_rc`.
     pub(crate) unsafe fn from_raw<'a>(raw_session: *mut coap_session_t) -> CoapServerSession<'a> {
         let mut session = Self::from_raw_without_refcount(raw_session);
         coap_session_reference(raw_session);
@@ -133,6 +135,9 @@ impl CoapServerSession<'_> {
     ///
     /// This also implies that libcoap *must not* clean up this session during the lifetime of this
     /// struct, which could happen at any time if the libcoap context is not locked.
+    ///
+    /// The provided session's app data must be a valid argument to
+    /// `CoapFfiRawCell<CoapServerSessionInner>::clone_raw_rc`.
     pub(crate) unsafe fn from_raw_without_refcount<'a>(raw_session: *mut coap_session_t) -> CoapServerSession<'a> {
         assert!(!raw_session.is_null(), "provided raw session was null");
         let raw_session_type = coap_session_get_type(raw_session);

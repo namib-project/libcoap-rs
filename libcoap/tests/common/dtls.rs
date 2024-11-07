@@ -28,7 +28,7 @@ pub fn dtls_client_server_request_common<KTY: KeyType, FC, FS>(
     let server_handle = common::spawn_test_server(move |mut context: CoapContext| {
         let server_crypto_ctx =
             server_ctx_setup(PkiRpkContextBuilder::<'static, KTY, NonCertVerifying>::new(server_key));
-        context.set_pki_rpk_context(server_crypto_ctx);
+        context.set_pki_rpk_context(server_crypto_ctx).unwrap();
         context.add_endpoint_dtls(server_address).unwrap();
         #[cfg(feature = "dtls-pki")]
         context.set_pki_root_cas(Some("./resources/test-keys/ca/ca.crt.pem"), None::<PathBuf>);

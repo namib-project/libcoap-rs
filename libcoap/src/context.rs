@@ -216,7 +216,7 @@ impl<'a> CoapContext<'a> {
 
     /// Sets the server-side cryptography information provider.
     #[cfg(feature = "dtls-psk")]
-    pub fn set_psk_context(&mut self, psk_context: ServerPskContext<'a>) {
+    pub fn set_psk_context(&mut self, psk_context: ServerPskContext<'a>) -> Result<(), ContextConfigurationError> {
         // SAFETY: raw context is valid.
         let mut inner = self.inner.borrow_mut();
         // TODO there is probably a prettier way to do this instead of panicking.
@@ -237,7 +237,10 @@ impl<'a> CoapContext<'a> {
 
     /// Sets the server-side cryptography information provider.
     #[cfg(any(feature = "dtls-pki", feature = "dtls-rpk"))]
-    pub fn set_pki_rpk_context(&mut self, pki_context: impl Into<ServerPkiRpkCryptoContext<'a>>) {
+    pub fn set_pki_rpk_context(
+        &mut self,
+        pki_context: impl Into<ServerPkiRpkCryptoContext<'a>>,
+    ) -> Result<(), ContextConfigurationError> {
         // SAFETY: raw context is valid.
         let mut inner = self.inner.borrow_mut();
         // TODO there is probably a prettier way to do this instead of panicking.
@@ -275,7 +278,7 @@ impl<'a> CoapContext<'a> {
             // Unix paths never contain null bytes, so we can unwrap here.
             CString::new(v.as_os_str().as_bytes()).unwrap()
         });
-        let mut inner = self.inner.borrow_mut();
+        let inner = self.inner.borrow();
 
         let result = unsafe {
             coap_context_set_pki_root_cas(
@@ -331,7 +334,7 @@ impl CoapContext<'_> {
     /// Creates a new DTLS endpoint that is bound to the given address.
     ///
     /// Note that in order to actually connect to DTLS clients, you need to set a crypto provider
-    /// using [set_server_crypto_provider()](CoapContext::set_server_crypto_provider())
+    /// using [CoapContext::set_psk_context] and/or [CoapContext::set_pki_rpk_context].
     #[cfg(dtls)]
     pub fn add_endpoint_dtls(&mut self, addr: SocketAddr) -> Result<(), EndpointCreationError> {
         self.add_endpoint(addr, coap_proto_t::COAP_PROTO_DTLS)

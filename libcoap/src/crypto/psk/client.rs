@@ -1,3 +1,12 @@
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * crypto/psk/client.rs - Interfaces and types for client-side PSK support in libcoap-rs.
+ * This file is part of the libcoap-rs crate, see the README and LICENSE files for
+ * more information and terms of use.
+ * Copyright © 2021-2024 The NAMIB Project Developers, all rights reserved.
+ * See the README as well as the LICENSE file for more information.
+ */
+
 use crate::crypto::psk::key::PskKey;
 use crate::error::SessionCreationError;
 use crate::session::CoapClientSession;
@@ -13,12 +22,19 @@ use std::fmt::Debug;
 use std::ptr::NonNull;
 use std::rc::{Rc, Weak};
 
+/// Builder for a client-side DTLS encryption context for use with pre-shared keys (PSK).
 #[derive(Debug)]
 pub struct ClientPskContextBuilder<'a> {
     ctx: ClientPskContextInner<'a>,
 }
 
 impl<'a> ClientPskContextBuilder<'a> {
+    /// Creates a new context builder with the given `key` as the default key to use.
+    ///
+    /// # Implementation details (informative, not covered by semver guarantees)
+    ///
+    /// Providing a raw public key will set `psk_info` to the provided key in the underlying
+    /// [`coap_dtls_cpsk_t`] structure.
     pub fn new(psk: PskKey<'a>) -> Self {
         Self {
             ctx: ClientPskContextInner {
@@ -41,12 +57,23 @@ impl<'a> ClientPskContextBuilder<'a> {
         }
     }
 
-    pub fn key_provider(mut self, key_provider: Box<dyn ClientPskHintKeyProvider<'a>>) -> Self {
-        self.ctx.key_provider = Some(key_provider);
+    /// Sets the key provider that provides pre-shared keys based on the PSK hint received by the
+    /// server.
+    ///
+    /// # Implementation details (informative, not covered by semver guarantees)
+    ///
+    /// Setting a `key_provider` will set the `validate_ih_call_back` of the underlying
+    /// [`coap_dtls_cpsk_t`] to a wrapper function, which will then call the key provider.
+    ///
+    /// Keys returned by the key provider will be stored in the context for at least as long as they
+    /// are used by the respective session.
+    pub fn key_provider(mut self, key_provider: impl ClientPskHintKeyProvider<'a> + 'a) -> Self {
+        self.ctx.key_provider = Some(Box::new(key_provider));
         self.ctx.raw_cfg.validate_ih_call_back = Some(dtls_psk_client_ih_callback);
         self
     }
 
+    /// Consumes this builder to construct the resulting PSK context.
     pub fn build(self) -> ClientPskContext<'a> {
         let ctx = Rc::new(RefCell::new(self.ctx));
         {
@@ -59,25 +86,52 @@ impl<'a> ClientPskContextBuilder<'a> {
     }
 }
 
-impl<'a> From<crate::crypto::psk::ClientPskContext<'a>> for crate::crypto::ClientCryptoContext<'a> {
-    fn from(value: crate::crypto::psk::ClientPskContext<'a>) -> Self {
+impl<'a> From<ClientPskContext<'a>> for crate::crypto::ClientCryptoContext<'a> {
+    fn from(value: ClientPskContext<'a>) -> Self {
         crate::crypto::ClientCryptoContext::Psk(value)
     }
 }
 
 impl ClientPskContextBuilder<'_> {
+    /// Enables or disables support for EC JPAKE ([RFC 8236](https://datatracker.ietf.org/doc/html/rfc8236))
+    /// key exchanges in (D)TLS.
+    ///
+    /// # Implementation details (informative, not covered by semver guarantees)
+    ///
+    /// Equivalent to setting `ec_jpake` in the underlying [`coap_dtls_cpsk_t`] structure.
     #[cfg(dtls_ec_jpake_support)]
     pub fn ec_jpake(mut self, ec_jpake: bool) -> Self {
-        self.ctx.raw_cfg.ec_jpake = ec_jpake.then_some(1).unwrap_or(0);
+        self.ctx.raw_cfg.ec_jpake = if ec_jpake { 1 } else { 0 };
         self
     }
 
+    /// Enables or disables use of DTLS connection IDs ([RFC 9146](https://datatracker.ietf.org/doc/rfc9146/)).
+    ///
+    /// # Implementation details (informative, not covered by semver guarantees)
+    ///
+    /// Equivalent to setting `use_cid` in the underlying [`coap_dtls_cpsk_t`] structure.
     #[cfg(dtls_cid_support)]
     pub fn use_cid(mut self, use_cid: bool) -> Self {
         self.ctx.raw_cfg.use_cid = use_cid.then_some(1).unwrap_or(0);
         self
     }
 
+    /// Sets the server name indication that should be sent to servers if the built
+    /// [`ClientPskContext`] is used.
+    ///
+    /// `client_sni` should be convertible into a byte string that does not contain null bytes.
+    /// Typically, you would provide a `&str` or `String`.
+    ///
+    /// # Errors
+    ///
+    /// Will return [`NulError`] if the provided byte string contains null bytes.
+    ///
+    /// # Implementation details (informative, not covered by semver guarantees)
+    ///
+    /// Equivalent to setting `client_sni` in the underlying [`coap_dtls_cpsk_t`] structure.
+    ///
+    /// The provided `client_sni` will be converted into a `Box<[u8]>`, which will be owned and
+    /// stored by the built context.
     pub fn client_sni<T: Into<Vec<u8>>>(mut self, client_sni: T) -> Result<Self, NulError> {
         // For some reason, client_sni is not immutable here.
         // While I don't see any reason why libcoap would modify the string, it is not strictly
@@ -92,8 +146,10 @@ impl ClientPskContextBuilder<'_> {
     }
 }
 
+/// Client-side encryption context for PSK-based (D)TLS sessions.
 #[derive(Clone, Debug)]
 pub struct ClientPskContext<'a> {
+    /// Inner structure of this context.
     inner: Rc<RefCell<ClientPskContextInner<'a>>>,
 }
 
@@ -106,8 +162,8 @@ impl ClientPskContext<'_> {
     /// As the [`ClientPskContext`] is also stored in the [`CoapClientSession`] instance, this
     /// implies that the pointer is valid for at least as long as the session is.
     ///
-    /// After the underlying [`ClientPskContextInner`] is dropped, the returned pointer will no
-    /// longer be valid and should no longer be dereferenced.
+    /// **Important:** After the underlying [`ClientPskContextInner`] is dropped, the returned
+    /// pointer will no longer be valid and should no longer be dereferenced.
     fn ih_callback(
         &self,
         identity_hint: Option<&[u8]>,
@@ -132,7 +188,11 @@ impl ClientPskContext<'_> {
         }
     }
 
-    /// SAFETY: This ClientPskContext must outlive the returned coap_session_t.
+    /// Creates a raw CoAP session object that is bound to and utilizes this encryption context.
+    ///
+    /// # Safety
+    ///
+    /// This [`ClientPskContext`] must outlive the returned [`coap_session_t`].
     pub(crate) unsafe fn create_raw_session(
         &self,
         ctx: &mut CoapContext<'_>,
@@ -179,19 +239,23 @@ impl<'a> ClientPskContext<'a> {
     }
 }
 
+/// Inner structure of a client-side PSK context.
 #[derive(Debug)]
 struct ClientPskContextInner<'a> {
-    key_provider: Option<Box<dyn ClientPskHintKeyProvider<'a>>>,
+    /// Raw configuration object.
     raw_cfg: Box<coap_dtls_cpsk_t>,
+    /// User-supplied key provider.
+    key_provider: Option<Box<dyn ClientPskHintKeyProvider<'a> + 'a>>,
     /// Store for `coap_dtls_cpsk_info_t` instances that we provided in previous identity hint
     /// callback invocations.
     ///
     /// The stored pointers *must* all be created from Box::into_raw().
     ///
-    /// Using `Vec<coap_dtls_cpsk_info_t>` instead is not an option, as a Vec resize may cause the
+    /// Using `Vec<coap_dtls_cpsk_info_t>` instead is not an option, as a `Vec` resize may cause the
     /// instances to be moved to a different place in memory, invalidating pointers provided to
     /// libcoap.
     provided_keys: Vec<*mut coap_dtls_cpsk_info_t>,
+    /// Server Name Indication to send to servers.
     client_sni: Option<Box<[u8]>>,
 }
 
@@ -218,17 +282,31 @@ impl Drop for ClientPskContextInner<'_> {
     }
 }
 
+/// Trait for types that can provide the appropriate pre-shared key for a given PSK hint sent by the
+/// server.
 pub trait ClientPskHintKeyProvider<'a>: Debug {
-    fn key_for_identity_hint(&self, identity_hint: Option<&[u8]>, session: &CoapClientSession<'_>) -> Option<PskKey<'a>>;
+    /// Returns the appropriate pre-shared key for a given `identity_hint` and the given `session`,
+    /// or `None` if the session should be aborted/no key is available.
+    fn key_for_identity_hint(
+        &self,
+        identity_hint: Option<&[u8]>,
+        session: &CoapClientSession<'_>,
+    ) -> Option<PskKey<'a>>;
 }
 
 impl<'a, T: Debug> ClientPskHintKeyProvider<'a> for T
 where
     T: AsRef<PskKey<'a>>,
 {
-    fn key_for_identity_hint(&self, identity_hint: Option<&[u8]>, _session: &CoapClientSession<'_>) -> Option<PskKey<'a>> {
+    /// Returns the key if the supplied `identity_hint` is `None` or the key's identity matches the
+    /// hint.
+    fn key_for_identity_hint(
+        &self,
+        identity_hint: Option<&[u8]>,
+        _session: &CoapClientSession<'_>,
+    ) -> Option<PskKey<'a>> {
         let key = self.as_ref();
-        if identity_hint.is_none() || key.identity().as_deref() == identity_hint {
+        if identity_hint.is_none() || key.identity() == identity_hint {
             Some(key.clone())
         } else {
             None
@@ -236,6 +314,14 @@ where
     }
 }
 
+/// Raw PSK identity hint callback that can be provided to libcoap.
+///
+/// # Safety
+///
+/// This function expects the arguments to be provided in a way that libcoap would when invoking
+/// this function as an identity hint callback.
+///
+/// Additionally, `arg` must be a valid argument to [`ClientPskContext::from_raw`].
 unsafe extern "C" fn dtls_psk_client_ih_callback(
     hint: *mut coap_str_const_t,
     session: *mut coap_session_t,

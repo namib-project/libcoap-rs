@@ -30,7 +30,7 @@ pub fn dtls_psk_client_server_request() {
 
     let server_handle = common::spawn_test_server(move |mut context| {
         let server_psk_context = ServerPskContextBuilder::new(dummy_key.clone()).build();
-        context.set_psk_context(server_psk_context);
+        context.set_psk_context(server_psk_context).unwrap();
         context.add_endpoint_dtls(server_address).unwrap();
         context
     });
