@@ -28,7 +28,7 @@ jobs:
         dtls_backend: [ openssl, gnutls, tinydtls, mbedtls ]
         rust_version: [ msrv, stable, nightly ]
     env:
-      LLVM_PROFILE_FILE: 'target/debug/coverage/${{ matrix.crate }}-%p-%m.profraw'
+      LLVM_PROFILE_FILE: 'target/debug/coverage/libcoap-rs-%p-%m.profraw'
       RUSTFLAGS: "${{ matrix.rust_version == 'nightly' && '-Cinstrument-coverage -Cpanic=abort -Zpanic_abort_tests' || ' ' }}"
       RUSTDOCFLAGS: "${{ matrix.rust_version == 'nightly' && '-C instrument-coverage -Cpanic=abort -Zpanic_abort_tests -Z unstable-options --persist-doctests target/debug/' || ' ' }}"
       LIBRARY_FEATURES: |
@@ -117,7 +117,7 @@ jobs:
     needs: [ test ]
     if: always()
     env:      
-      LLVM_PROFILE_FILE: './coverage-data/coverage/${{ matrix.crate }}-%p-%m.profraw'
+      LLVM_PROFILE_FILE: './coverage-data/coverage/libcoap-rs-%p-%m.profraw'
     outputs:
       report: ${{ steps.cov-report.outputs.summary }}
     steps:
