@@ -33,7 +33,7 @@ jobs:
             || matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'mbedtls' && 'tcp,dtls-psk,dtls-pki,dtls_mbedtls_vendored'
             || matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'openssl' && 'tcp,dtls-psk,dtls-pki,dtls_openssl_vendored'
             || matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'gnutls' && 'tcp,dtls-psk,dtls-pki,dtls-rpk,dtls_gnutls'
-            || matrix.crate == 'libcoap-sys' && matrix.dtls_backend != 'gnutls' && 'dtls,dtls_backend_${{ matrix.dtls_backend }},dtls_backend_${{ matrix.dtls_backend }}_vendored'
+            || matrix.crate == 'libcoap-sys' && matrix.dtls_backend != 'gnutls' && 'dtls,dtls_backend_'+matrix.dtls_backend+',dtls_backend_'+matrix.dtls_backend+'_vendored'
             || matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'gnutls' && 'dtls,dtls_backend_gnutls'
         }}
     steps:
