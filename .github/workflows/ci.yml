@@ -130,7 +130,7 @@ jobs:
       - uses: baptiste0928/cargo-install@v3
         with:
           crate: grcov
-      - run: grcov ./coverage-data/coverage/ . --binary-path ./coverage-data/test-binaries --commit-sha ${GITHUB_SHA} -t cobertura --branch -o ./coverage/
+      - run: grcov ./coverage-data/coverage/ . --binary-path ./coverage-data/test-binaries --commit-sha ${GITHUB_SHA} -t cobertura,markdown,html --branch -o ./coverage/
       - id: cov-report
         name: Produce the coverage report
         uses: pulsastrix/coverage-action@always_generate_comment_body
