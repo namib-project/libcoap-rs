@@ -1,0 +1,3 @@
+<component name="DependencyValidationManager">
+  <scope name="Actual Project Files" pattern="file[libcoap-rs]:*/&amp;&amp;!file[libcoap-rs]:libcoap-sys/src/libcoap/*&amp;&amp;!file[libcoap-rs]:.idea/*&amp;&amp;!file[libcoap-rs]:libcoap-sys/src/libcoap//*" />
+</component>

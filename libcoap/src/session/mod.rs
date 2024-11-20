@@ -9,39 +9,34 @@
 
 use std::{
     any::Any,
+    borrow::BorrowMut,
+    cell::{Ref, RefMut},
     collections::{HashMap, VecDeque},
     marker::PhantomData,
     net::{SocketAddr, ToSocketAddrs},
     rc::Rc,
 };
-use std::borrow::BorrowMut;
-use std::cell::{Ref, RefMut};
 
 use libcoap_sys::{
     coap_context_t, coap_fixed_point_t, coap_mid_t, coap_new_message_id, coap_pdu_get_token, coap_pdu_t,
     coap_response_t, coap_send, coap_session_get_ack_random_factor, coap_session_get_ack_timeout,
     coap_session_get_addr_local, coap_session_get_addr_remote, coap_session_get_ifindex,
-    coap_session_get_max_retransmit, coap_session_get_proto, coap_session_get_psk_hint, coap_session_get_psk_identity,
-    coap_session_get_psk_key, coap_session_get_state, coap_session_get_type, coap_session_init_token,
-    coap_session_max_pdu_size, coap_session_new_token, coap_session_send_ping, coap_session_set_ack_random_factor,
-    coap_session_set_ack_timeout, coap_session_set_max_retransmit, coap_session_set_mtu, coap_session_state_t,
-    coap_session_t, coap_session_type_t,
+    coap_session_get_max_retransmit, coap_session_get_proto, coap_session_get_state, coap_session_get_type,
+    coap_session_init_token, coap_session_max_pdu_size, coap_session_new_token, coap_session_send_ping,
+    coap_session_set_ack_random_factor, coap_session_set_ack_timeout, coap_session_set_max_retransmit,
+    coap_session_set_mtu, coap_session_state_t, coap_session_t, coap_session_type_t,
 };
+#[cfg(feature = "dtls-psk")]
+use libcoap_sys::{coap_session_get_psk_hint, coap_session_get_psk_identity, coap_session_get_psk_key};
 
+use self::sealed::{CoapSessionCommonInternal, CoapSessionInnerProvider};
+pub use self::{client::CoapClientSession, server::CoapServerSession};
 use crate::{
     error::{MessageConversionError, SessionGetAppDataError},
-    message::{CoapMessage, CoapMessageCommon},
+    message::{request::CoapRequest, response::CoapResponse, CoapMessage, CoapMessageCommon},
     protocol::CoapToken,
     types::{CoapAddress, CoapMessageId, CoapProtocol, IfIndex, MaxRetransmit},
 };
-#[cfg(feature = "dtls")]
-use crate::crypto::{CoapCryptoPskData, CoapCryptoPskIdentity};
-use crate::message::request::CoapRequest;
-use crate::message::response::CoapResponse;
-
-pub use self::client::CoapClientSession;
-use self::sealed::{CoapSessionCommonInternal, CoapSessionInnerProvider};
-pub use self::server::CoapServerSession;
 
 pub mod client;
 
@@ -117,7 +112,7 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     }
 
     /// Sets the application-specific data stored alongside this session.
-    fn set_app_data<T: 'static + Any>(&self, value: Option<T>) {
+    fn set_app_data<T: 'static+Any>(&self, value: Option<T>) {
         let mut inner = self.inner_mut();
         let new_box: Option<Rc<dyn Any>> = value.map(|v| Rc::new(v) as Rc<dyn Any>);
         inner.app_data = new_box;
@@ -232,8 +227,8 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     }
 
     /// Returns the current PSK hint for this session.
-    #[cfg(feature = "dtls")]
-    fn psk_hint(&self) -> Option<Box<CoapCryptoPskIdentity>> {
+    #[cfg(feature = "dtls-psk")]
+    fn psk_hint(&self) -> Option<Box<[u8]>> {
         // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         unsafe {
             coap_session_get_psk_hint(self.inner_ref().raw_session)
@@ -243,8 +238,8 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     }
 
     /// Returns the current PSK identity for this session.
-    #[cfg(feature = "dtls")]
-    fn psk_identity(&self) -> Option<Box<CoapCryptoPskIdentity>> {
+    #[cfg(feature = "dtls-psk")]
+    fn psk_identity(&self) -> Option<Box<[u8]>> {
         // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         unsafe {
             coap_session_get_psk_identity(self.inner_ref().raw_session)
@@ -254,8 +249,8 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     }
 
     /// Returns the current PSK key for this session.
-    #[cfg(feature = "dtls")]
-    fn psk_key(&self) -> Option<Box<CoapCryptoPskData>> {
+    #[cfg(feature = "dtls-psk")]
+    fn psk_key(&self) -> Option<Box<[u8]>> {
         // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         unsafe {
             coap_session_get_psk_key(self.inner_ref().raw_session)
@@ -265,6 +260,7 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     }
 
     /// Returns the current state of this session.
+    #[must_use = "getting the current session state without using it is a no-op"]
     fn state(&self) -> CoapSessionState {
         // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         unsafe { coap_session_get_state(self.inner_ref().raw_session).into() }
@@ -440,10 +436,14 @@ impl<'a> CoapSession<'a> {
     /// claim exclusive ownership of the session.
     ///
     /// # Panics
+    ///
     /// Panics if the given pointer is a null pointer.
     ///
     /// # Safety
-    /// The provided pointer must be valid.
+    /// The provided pointer must be valid, the provided session's app data must be a valid argument
+    /// to [`CoapFfiRcCell<CoapClientSessionInner>::clone_raw_rc`](crate::mem::CoapFfiRcCell::clone_raw_rc)
+    /// or [`CoapFfiRcCell<CoapServerSessionInner>::clone_raw_rc`](crate::mem::CoapFfiRcCell::clone_raw_rc)
+    /// (depending on the session type).
     pub(crate) unsafe fn from_raw(raw_session: *mut coap_session_t) -> CoapSession<'a> {
         assert!(!raw_session.is_null(), "provided raw session was null");
         let raw_session_type = coap_session_get_type(raw_session);

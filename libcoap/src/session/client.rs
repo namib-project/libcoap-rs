@@ -11,35 +11,81 @@ use std::cell::{Ref, RefMut};
 use std::net::SocketAddr;
 
 use libcoap_sys::{
-    coap_bin_const_t, coap_dtls_cpsk_info_t, coap_dtls_cpsk_t, COAP_DTLS_SPSK_SETUP_VERSION, coap_new_client_session,
-    coap_new_client_session_psk2, coap_proto_t, coap_register_event_handler, coap_session_get_app_data,
-    coap_session_get_context, coap_session_get_type, coap_session_release, coap_session_set_app_data, coap_session_t,
-    coap_session_type_t, COAP_TOKEN_DEFAULT_MAX,
+    coap_new_client_session, coap_proto_t, coap_register_event_handler, coap_session_get_app_data,
+    coap_session_get_context, coap_session_get_type, coap_session_init_token, coap_session_release,
+    coap_session_set_app_data, coap_session_t, coap_session_type_t, COAP_TOKEN_DEFAULT_MAX,
 };
 
-use crate::{context::CoapContext, error::SessionCreationError, types::CoapAddress};
-#[cfg(feature = "dtls")]
-use crate::crypto::{CoapClientCryptoProvider, CoapCryptoProviderResponse, CoapCryptoPskIdentity, CoapCryptoPskInfo};
-#[cfg(not(feature = "dtls_mbedtls"))]
-use crate::crypto::dtls_ih_callback;
+use super::{CoapSessionCommon, CoapSessionInner, CoapSessionInnerProvider};
 use crate::event::event_handler_callback;
 use crate::mem::{CoapFfiRcCell, DropInnerExclusively};
 use crate::prng::coap_prng_try_fill;
+use crate::{context::CoapContext, error::SessionCreationError, types::CoapAddress};
 
-use super::{CoapSessionCommon, CoapSessionInner, CoapSessionInnerProvider};
+#[cfg(dtls)]
+use crate::crypto::ClientCryptoContext;
 
 #[derive(Debug)]
 struct CoapClientSessionInner<'a> {
     inner: CoapSessionInner<'a>,
-    #[cfg(feature = "dtls")]
-    crypto_provider: Option<Box<dyn CoapClientCryptoProvider>>,
-    #[cfg(feature = "dtls")]
-    crypto_current_data: Option<CoapCryptoPskInfo>,
-    // coap_dtls_cpsk_info_t created upon calling dtls_client_ih_callback().
-    // The caller of the callback will make a defensive copy, so this one only has
-    // to be valid for a very short time and can always be overridden.
-    #[cfg(feature = "dtls")]
-    crypto_last_info_ref: coap_dtls_cpsk_info_t,
+    #[cfg(dtls)]
+    // This field is actually referred to be libcoap, so it isn't actually unused.
+    #[allow(unused)]
+    crypto_ctx: Option<ClientCryptoContext<'a>>,
+}
+
+impl<'a> CoapClientSessionInner<'a> {
+    /// Initializes a new [`CoapClientSessionInner`] for an unencrypted session from its raw counterpart
+    /// with the provided initial information.
+    ///
+    /// Also initializes the message token to a random value to prevent off-path response spoofing
+    /// (see [RFC 7252, section 5.3.1](https://datatracker.ietf.org/doc/html/rfc7252#section-5.3.1)).
+    ///
+    /// # Safety
+    /// The provided pointer for `raw_session` must be valid and point to the newly constructed raw
+    /// session.
+    unsafe fn new(raw_session: *mut coap_session_t) -> CoapFfiRcCell<CoapClientSessionInner<'a>> {
+        // For insecure protocols, generate a random initial token to prevent off-path response
+        // spoofing, see https://datatracker.ietf.org/doc/html/rfc7252#section-5.3.1
+        let mut token = [0; COAP_TOKEN_DEFAULT_MAX as usize];
+        coap_prng_try_fill(&mut token).expect("unable to generate random initial token");
+        coap_session_init_token(raw_session, token.len(), token.as_ptr());
+
+        let inner_session = CoapFfiRcCell::new(CoapClientSessionInner {
+            inner: CoapSessionInner::new(raw_session),
+            #[cfg(dtls)]
+            crypto_ctx: None,
+        });
+
+        // SAFETY: raw session is valid, inner session pointer must be valid as it was just created
+        // from one of Rust's smart pointers.
+        coap_session_set_app_data(raw_session, inner_session.create_raw_weak());
+
+        inner_session
+    }
+
+    /// Initializes a new [`CoapClientSessionInner`] for an encrypted session from its raw counterpart
+    /// with the provided initial information.
+    ///
+    /// # Safety
+    /// The provided pointer for `raw_session` must be valid and point to the newly constructed raw
+    /// session.
+    #[cfg(dtls)]
+    unsafe fn new_with_crypto_ctx(
+        raw_session: *mut coap_session_t,
+        crypto_ctx: ClientCryptoContext<'a>,
+    ) -> CoapFfiRcCell<CoapClientSessionInner<'a>> {
+        let inner_session = CoapFfiRcCell::new(CoapClientSessionInner {
+            inner: CoapSessionInner::new(raw_session),
+            crypto_ctx: Some(crypto_ctx),
+        });
+
+        // SAFETY: raw session is valid, inner session pointer must be valid as it was just created
+        // from one of Rust's smart pointers.
+        coap_session_set_app_data(raw_session, inner_session.create_raw_weak());
+
+        inner_session
+    }
 }
 
 /// Representation of a client-side CoAP session.
@@ -49,79 +95,43 @@ pub struct CoapClientSession<'a> {
 }
 
 impl CoapClientSession<'_> {
-    /// Create a new DTLS encrypted session with the given peer.
-    ///
-    /// To supply cryptographic information (like PSK hints or key data), you have to provide a
-    /// struct implementing [CoapClientCryptoProvider].
+    /// Create a new DTLS encrypted session with the given peer `addr` using the given `crypto_ctx`.
     ///
     /// # Errors
     /// Will return a [SessionCreationError] if libcoap was unable to create a session (most likely
     /// because it was not possible to bind to a port).
-    #[cfg(feature = "dtls")]
-    pub fn connect_dtls<'a, P: 'static + CoapClientCryptoProvider>(
+    #[cfg(dtls)]
+    pub fn connect_dtls<'a>(
         ctx: &mut CoapContext<'a>,
         addr: SocketAddr,
-        mut crypto_provider: P,
+        crypto_ctx: impl Into<ClientCryptoContext<'a>>,
     ) -> Result<CoapClientSession<'a>, SessionCreationError> {
-        // Get default identity.
-        let id = crypto_provider.provide_default_info();
-        let client_setup_data = Box::into_raw(Box::new(coap_dtls_cpsk_t {
-            version: COAP_DTLS_SPSK_SETUP_VERSION as u8,
-            #[cfg(not(any(dtls_ec_jpake_support, dtls_cid_support)))]
-            reserved: [0; 7],
-            #[cfg(all(any(dtls_ec_jpake_support, dtls_cid_support), not(all(dtls_ec_jpake_support, dtls_cid_support))))]
-            reserved: [0; 6],
-            #[cfg(all(dtls_ec_jpake_support, dtls_cid_support))]
-            reserved: [0; 5],
-            #[cfg(dtls_ec_jpake_support)]
-            // TODO allow enabling this?
-            ec_jpake: 0,
-            // TODO allow enabling this?
-            #[cfg(dtls_cid_support)]
-            use_cid: 0,
-            validate_ih_call_back: {
-                // Unsupported by MbedTLS
-                #[cfg(not(feature = "dtls_mbedtls"))]
-                {
-                    Some(dtls_ih_callback)
-                }
-                #[cfg(feature = "dtls_mbedtls")]
-                {
-                    None
-                }
-            },
-            ih_call_back_arg: std::ptr::null_mut(),
-            client_sni: std::ptr::null_mut(),
-            psk_info: coap_dtls_cpsk_info_t {
-                identity: coap_bin_const_t {
-                    length: id.identity.len(),
-                    s: id.identity.as_ptr(),
-                },
-                key: coap_bin_const_t {
-                    length: id.key.len(),
-                    s: id.key.as_ptr(),
-                },
-            },
-        }));
-        // SAFETY: self.raw_context is guaranteed to be valid, local_if can be null, constructed
-        // coap_dtls_cpsk_t is of valid format and has no out-of-bounds issues.
+        let crypto_ctx = crypto_ctx.into();
+        // SAFETY: The returned raw session lives for as long as the constructed
+        // CoapClientSessionInner does, which is limited to the lifetime of crypto_ctx.
+        // When the CoapClientSessionInner instance is dropped, the session is dropped before the
+        // crypto context is.
         let raw_session = unsafe {
-            coap_new_client_session_psk2(
-                ctx.as_mut_raw_context(),
-                std::ptr::null(),
-                CoapAddress::from(addr).as_raw_address(),
-                coap_proto_t::COAP_PROTO_DTLS,
-                client_setup_data,
-            )
+            match &crypto_ctx {
+                #[cfg(feature = "dtls-psk")]
+                ClientCryptoContext::Psk(psk_ctx) => {
+                    psk_ctx.create_raw_session(ctx, &addr.into(), coap_proto_t::COAP_PROTO_DTLS)?
+                },
+                #[cfg(feature = "dtls-pki")]
+                ClientCryptoContext::Pki(pki_ctx) => {
+                    pki_ctx.create_raw_session(ctx, &addr.into(), coap_proto_t::COAP_PROTO_DTLS)?
+                },
+                #[cfg(feature = "dtls-rpk")]
+                ClientCryptoContext::Rpk(rpk_ctx) => {
+                    rpk_ctx.create_raw_session(ctx, &addr.into(), coap_proto_t::COAP_PROTO_DTLS)?
+                },
+            }
         };
 
-        if raw_session.is_null() {
-            return Err(SessionCreationError::Unknown);
-        }
-
-        // SAFETY: raw_session was just checked, crypto_current_data is data provided to
-        // coap_new_client_session_psk2().
-        Ok(unsafe { CoapClientSession::new(raw_session, Some(id), Some(Box::new(crypto_provider))) })
+        // SAFETY: raw_session was just checked to be valid pointer.
+        Ok(CoapClientSession {
+            inner: unsafe { CoapClientSessionInner::new_with_crypto_ctx(raw_session.as_ptr(), crypto_ctx) },
+        })
     }
 
     /// Create a new unencrypted session with the given peer over UDP.
@@ -145,16 +155,9 @@ impl CoapClientSession<'_> {
         if session.is_null() {
             return Err(SessionCreationError::Unknown);
         }
-        // SAFETY: Session was just checked for validity, no crypto info was provided to
-        // coap_new_client_session().
-        Ok(unsafe {
-            CoapClientSession::new(
-                session as *mut coap_session_t,
-                #[cfg(feature = "dtls")]
-                None,
-                #[cfg(feature = "dtls")]
-                None,
-            )
+        // SAFETY: Session was just checked for validity.
+        Ok(CoapClientSession {
+            inner: unsafe { CoapClientSessionInner::new(session) },
         })
     }
 
@@ -179,68 +182,10 @@ impl CoapClientSession<'_> {
         if session.is_null() {
             return Err(SessionCreationError::Unknown);
         }
-        // SAFETY: Session was just checked for validity, no crypto info was provided to
-        // coap_new_client_session().
-        Ok(unsafe {
-            CoapClientSession::new(
-                session as *mut coap_session_t,
-                #[cfg(feature = "dtls")]
-                None,
-                #[cfg(feature = "dtls")]
-                None,
-            )
+        // SAFETY: Session was just checked for validity.
+        Ok(CoapClientSession {
+            inner: unsafe { CoapClientSessionInner::new(session) },
         })
-    }
-
-    /// Initializes a new CoapClientSession from its raw counterpart with the provided initial
-    /// information.
-    ///
-    /// # Safety
-    /// The provided pointer for `raw_session` must be valid and point to the newly constructed raw
-    /// session.
-    ///
-    /// The provided value for `crypto_current_data` must be the one whose memory pointers were used
-    /// when calling `coap_new_client_session_*` (if any was provided).
-    unsafe fn new<'a>(
-        raw_session: *mut coap_session_t,
-        #[cfg(feature = "dtls")] crypto_current_data: Option<CoapCryptoPskInfo>,
-        #[cfg(feature = "dtls")] crypto_provider: Option<Box<dyn CoapClientCryptoProvider>>,
-    ) -> CoapClientSession<'a> {
-        let inner_session = CoapFfiRcCell::new(CoapClientSessionInner {
-            inner: CoapSessionInner::new(raw_session),
-            #[cfg(feature = "dtls")]
-            crypto_provider,
-            #[cfg(feature = "dtls")]
-            crypto_current_data,
-            #[cfg(feature = "dtls")]
-            crypto_last_info_ref: coap_dtls_cpsk_info_t {
-                identity: coap_bin_const_t {
-                    length: 0,
-                    s: std::ptr::null(),
-                },
-                key: coap_bin_const_t {
-                    length: 0,
-                    s: std::ptr::null(),
-                },
-            },
-        });
-
-        let client_session = CoapClientSession {
-            inner: inner_session.clone(),
-        };
-        // SAFETY: raw session is valid, inner session pointer must be valid as it was just created
-        // from one of Rusts smart pointers.
-        coap_session_set_app_data(raw_session, inner_session.create_raw_weak());
-
-        // For insecure protocols, generate a random initial token to prevent off-path response
-        // spoofing, see https://datatracker.ietf.org/doc/html/rfc7252#section-5.3.1
-        if !client_session.proto().is_secure() {
-            let mut token = [0; COAP_TOKEN_DEFAULT_MAX as usize];
-            coap_prng_try_fill(&mut token).expect("unable to generate random initial token");
-            client_session.init_token(&token)
-        }
-
-        client_session
     }
 
     /// Restores a [CoapClientSession] from its raw counterpart.
@@ -253,11 +198,13 @@ impl CoapClientSession<'_> {
     /// claim exclusive ownership of the client session.
     ///
     /// # Panics
+    ///
     /// Panics if the given pointer is a null pointer or the raw session is not a client-side
     /// session with app data.
     ///
     /// # Safety
-    /// The provided pointer must be valid.
+    /// The provided pointer must be valid, the provided session's app data must be a valid argument
+    /// to [`CoapFfiRawCell<CoapClientSessionInner>::clone_raw_rc`].
     pub(crate) unsafe fn from_raw<'a>(raw_session: *mut coap_session_t) -> CoapClientSession<'a> {
         assert!(!raw_session.is_null(), "provided raw session was null");
         let raw_session_type = coap_session_get_type(raw_session);
@@ -273,48 +220,6 @@ impl CoapClientSession<'_> {
                 panic!("attempted to create CoapClientSession from raw server session")
             },
             _ => unreachable!("unknown session type"),
-        }
-    }
-
-    /// Sets the provider for cryptographic information for this session.
-    #[cfg(feature = "dtls")]
-    pub fn set_crypto_provider(&mut self, crypto_provider: Option<Box<dyn CoapClientCryptoProvider>>) {
-        self.inner.borrow_mut().crypto_provider = crypto_provider;
-    }
-
-    #[cfg(feature = "dtls")]
-    pub(crate) fn provide_raw_key_for_hint(
-        &mut self,
-        hint: &CoapCryptoPskIdentity,
-    ) -> Option<*const coap_dtls_cpsk_info_t> {
-        let inner_ref = &mut *self.inner.borrow_mut();
-
-        match inner_ref.crypto_provider.as_mut().map(|v| v.provide_key_for_hint(hint)) {
-            Some(CoapCryptoProviderResponse::UseNew(new_data)) => {
-                inner_ref.crypto_current_data = Some(CoapCryptoPskInfo {
-                    identity: Box::from(hint),
-                    key: new_data,
-                });
-                inner_ref
-                    .crypto_current_data
-                    .as_ref()
-                    .unwrap()
-                    .apply_to_cpsk_info(&mut inner_ref.crypto_last_info_ref);
-                Some(&inner_ref.crypto_last_info_ref as *const coap_dtls_cpsk_info_t)
-            },
-            Some(CoapCryptoProviderResponse::UseCurrent) => {
-                if inner_ref.crypto_current_data.is_some() {
-                    inner_ref
-                        .crypto_current_data
-                        .as_ref()
-                        .unwrap()
-                        .apply_to_cpsk_info(&mut inner_ref.crypto_last_info_ref);
-                    Some(&inner_ref.crypto_last_info_ref as *const coap_dtls_cpsk_info_t)
-                } else {
-                    None
-                }
-            },
-            None | Some(CoapCryptoProviderResponse::Unacceptable) => None,
         }
     }
 }

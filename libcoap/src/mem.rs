@@ -23,6 +23,7 @@ pub(crate) trait DropInnerExclusively {
     /// referenced by this instance is also dropped.
     ///
     /// # Panics
+    ///
     /// Panics if the inner part of this struct cannot be exclusively dropped, i.e., it is still
     /// used by another instance.
     fn drop_exclusively(self);
@@ -332,7 +333,7 @@ impl<T: Debug> CoapLendableFfiRcCell<T> {
         let ret_val = ref_box
             .upgrade()
             .expect("unable to restore CoapLendableFfiRcCell as the underlying value was already dropped");
-        Box::into_raw(ref_box);
+        assert_eq!(Box::into_raw(ref_box), ptr);
         ret_val
     }
 
