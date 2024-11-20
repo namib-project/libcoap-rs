@@ -26,8 +26,8 @@ jobs:
         rust_version: [ msrv, stable, nightly ]
     env:
       LLVM_PROFILE_FILE: 'target/debug/coverage/${{ matrix.crate }}-%p-%m.profraw'
-      RUSTFLAGS: "${{ matrix.rust_version == 'nightly' && '-Cinstrument-coverage -Cpanic=abort -Zpanic_abort_tests' }}"
-      RUSTDOCFLAGS: "${{ matrix.rust_version == 'nightly' && '-C instrument-coverage -Cpanic=abort -Zpanic_abort_tests -Z unstable-options --persist-doctests target/debug/' }}"
+      RUSTFLAGS: "${{ matrix.rust_version == 'nightly' && '-Cinstrument-coverage -Cpanic=abort -Zpanic_abort_tests' || ' ' }}"
+      RUSTDOCFLAGS: "${{ matrix.rust_version == 'nightly' && '-C instrument-coverage -Cpanic=abort -Zpanic_abort_tests -Z unstable-options --persist-doctests target/debug/' || ' ' }}"
       DTLS_LIBRARY_FEATURES: |
         ${{ (matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'tinydtls' && 'tcp,dtls-psk,dtls-rpk,dtls_tinydtls_vendored')
             || (matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'mbedtls' && 'tcp,dtls-psk,dtls-pki,dtls_mbedtls_vendored')
