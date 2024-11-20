@@ -1,0 +1,5 @@
+runner:
+  clippy:
+    cmd: 'find . -type f -name \*.rs -exec touch {} \;; cargo clippy --message-format json 2>&1 | clippy-reviewdog-filter'
+    format: checkstyle
+

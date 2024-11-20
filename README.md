@@ -1,7 +1,7 @@
 # libcoap-rs
 
 [![CI Status](https://github.com/namib-project/libcoap-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/namib-project/libcoap-rs/actions/workflows/ci.yml)
-![Coverage](https://raw.githubusercontent.com/namib-project/libcoap-rs/_xml_coverage_reports/data/main/badge.svg)
+![Coverage](https://namib-project.github.io/libcoap-rs/coverage/main/badges/flat.svg)
 
 Raw binding and safe wrapper for the [libcoap CoAP libary](https://github.com/obgm/libcoap).
 
