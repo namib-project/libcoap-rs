@@ -28,6 +28,11 @@ jobs:
       LLVM_PROFILE_FILE: 'target/debug/coverage/${{ matrix.crate }}-%p-%m.profraw'
       RUSTFLAGS: "${{ matrix.rust_version == 'nightly' && '-Cinstrument-coverage -Cpanic=abort -Zpanic_abort_tests' || ' ' }}"
       RUSTDOCFLAGS: "${{ matrix.rust_version == 'nightly' && '-C instrument-coverage -Cpanic=abort -Zpanic_abort_tests -Z unstable-options --persist-doctests target/debug/' || ' ' }}"
+      LIBRARY_FEATURES: |
+        ${{ (matrix.crate == 'libcoap-rs' && 'tcp,vendored,rand')
+            || (matrix.crate == 'libcoap-sys' && 'default')
+            || 'vendored'
+        }}
       DTLS_LIBRARY_FEATURES: |
         ${{ (matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'tinydtls' && 'tcp,dtls-psk,dtls-rpk,dtls_tinydtls_vendored')
             || (matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'mbedtls' && 'tcp,dtls-psk,dtls-pki,dtls_mbedtls_vendored')
@@ -52,16 +57,17 @@ jobs:
         with:
           packages: libgnutls28-dev libgnutls30
           version: 1.0
-      - run: cargo test -p ${{ matrix.crate }} --no-default-features --features tcp,rand,vendored --features "$DTLS_LIBRARY_FEATURES" --no-fail-fast
+      - run: cargo test -p ${{ matrix.crate }} --no-default-features --features "$LIBRARY_FEATURES" --features "$DTLS_LIBRARY_FEATURES" --no-fail-fast
       - if: matrix.rust_version == 'nightly'
         run: |
           mkdir -p target/debug/test-binaries
-          cp $(cargo test --no-run --message-format=json --no-default-features --features tcp,rand,vendored --features "$DTLS_LIBRARY_FEATURES" --no-fail-fast  \
+          cp $(cargo test --no-run --message-format=json --no-default-features --features "$LIBRARY_FEATURES" --features "$DTLS_LIBRARY_FEATURES" --no-fail-fast  \
               | jq -r "select(.profile.test == true) | .filenames[]" \
               | grep -v dSYM -) target/debug/test-binaries/
       - if: matrix.rust_version == 'nightly'
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 1
           path: |
             target/debug/coverage/
             target/debug/test-binaries/
