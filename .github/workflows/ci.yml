@@ -69,7 +69,7 @@ jobs:
               | grep -v dSYM -) target/debug/test-binaries/
           cp $(cargo test --no-run --message-format=json --no-default-features --features "$LIBRARY_FEATURES" --features "$DTLS_LIBRARY_FEATURES" --no-fail-fast  \
               | jq -r "select(.profile.test == true) | .filenames[]" \
-              | grep -v dSYM -
+              | grep -v dSYM - \
               | sed 's/$/.d/' -) target/debug/test-binaries/
       - if: matrix.rust_version == 'nightly'
         uses: actions/upload-artifact@v4
