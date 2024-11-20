@@ -18,6 +18,7 @@ categories = ["external-ffi-bindings", "network-programming", "embedded"]
 keywords = ["coap", "libcoap"]
 exclude = ["src/libcoap/ext/"]
 resolver = "2"
+rust-version = "1.77.0"
 
 [features]
 # The default features match those of libcoaps configure script, except for dtls, which is disabled here because it

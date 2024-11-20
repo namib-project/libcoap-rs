@@ -16,6 +16,7 @@ authors = ["Hugo Hakim Damer <hdamer@uni-bremen.de>"]
 categories = ["api-bindings", "network-programming", "embedded"]
 keywords = ["coap", "libcoap"]
 resolver = "2"
+rust-version = "1.77.0"
 
 [features]
 default = ["dtls-psk", "tcp", "dtls_openssl", "vendored", "libcoap-sys/default"]
