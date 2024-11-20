@@ -134,7 +134,7 @@ jobs:
         with:
           crate: grcov
       - run: mkdir -p ./coverage
-      - run: grcov ./coverage-data/coverage/ . --binary-path ./coverage-data/test-binaries --commit-sha ${GITHUB_SHA} --ignore "$HOME/.cargo/**" --ignore "$HOME/.rustup/**" --ignore "./target/**" --ignore-not-existing --ignore "/*" -t cobertura,markdown,html --branch --log-level DEBUG -o ./coverage/
+      - run: grcov ./coverage-data/coverage/ . --binary-path ./coverage-data/test-binaries --commit-sha ${GITHUB_SHA} --ignore-not-existing --ignore "/*" -t cobertura,markdown,html --branch --log-level TRACE -o ./coverage/
       - id: cov-report
         name: Produce the coverage report
         uses: pulsastrix/coverage-action@always_generate_comment_body
