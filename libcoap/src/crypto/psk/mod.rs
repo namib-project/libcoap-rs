@@ -8,7 +8,7 @@
  */
 //! Types and traits related to support for (D)TLS with pre-shared keys for CoAP.
 //!
-//! PSK configuration differs between client-side and server-side configuration.
+//! PSK configuration differs between client-side and server-side.
 //!
 //! # Client Configuration
 //! Typically, you would follow these steps to configure a DTLS PSK client:
@@ -28,7 +28,6 @@
 //! use libcoap_rs::CoapContext;
 //! use libcoap_rs::crypto::psk::{ClientPskContextBuilder, PskKey};
 //! use libcoap_rs::session::CoapClientSession;
-//!
 //!
 //! let example_key = PskKey::new(Some("dtls_test_id_client1"), "dtls_test_key__1");
 //! let psk_context = ClientPskContextBuilder::new(example_key.clone());
@@ -100,7 +99,7 @@
 
 /// Data structures and builders for PSK client-side operation.
 mod client;
-/// Data structures for PSK keys.
+/// Data structures for PSKs.
 mod key;
 /// Data structures and builders for PSK server-side operation.
 mod server;

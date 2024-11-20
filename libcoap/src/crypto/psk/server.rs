@@ -110,7 +110,7 @@ impl ServerPskContextBuilder<'_> {
     /// Equivalent to setting `ec_jpake` in the underlying [`coap_dtls_spsk_t`] structure.
     #[cfg(dtls_ec_jpake_support)]
     pub fn ec_jpake(mut self, ec_jpake: bool) -> Self {
-        self.ctx.raw_cfg.ec_jpake = if ec_jpake { 1 } else { 0 };
+        self.ctx.raw_cfg.ec_jpake = ec_jpake.into();
         self
     }
 }
@@ -231,6 +231,11 @@ impl ServerPskContext<'_> {
 
     /// Applies this encryption configuration to the given raw `coap_context_t`.
     ///
+    /// # Errors
+    ///
+    /// Will return [`ContextConfigurationError::Unknown`] if the call to the underlying libcoap
+    /// function fails.
+    ///
     /// # Safety
     /// This [ServerPskContext] must outlive the provided CoAP context, the provided pointer must be
     /// valid.
@@ -287,7 +292,7 @@ where
     fn key_for_identity(&self, identity: &[u8], _session: &CoapServerSession<'_>) -> Option<PskKey<'a>> {
         let keys = self.as_ref();
         keys.iter()
-            .find(|k| k.identity().as_deref().is_some_and(|kid| kid == identity))
+            .find(|k| k.identity().is_some_and(|kid| kid == identity))
             .or_else(|| keys.iter().find(|k| k.identity().is_none()))
             .cloned()
     }
@@ -315,8 +320,7 @@ impl<'a, T: AsRef<[u8]> + Debug, U: AsRef<PskKey<'a>> + Debug> ServerPskSniKeyPr
 impl<'a, T: AsRef<[u8]> + Debug, U: AsRef<PskKey<'a>> + Debug> ServerPskSniKeyProvider<'a> for [(T, U)] {
     /// Return the second tuple object if the first one matches the given SNI.
     fn key_for_sni(&self, sni: &CStr, _session: &CoapServerSession<'_>) -> Option<PskKey<'a>> {
-        let keys = self.as_ref();
-        keys.iter()
+        self.iter()
             .find_map(|(key_sni, key)| (key_sni.as_ref() == sni.to_bytes()).then_some(key.as_ref().clone()))
     }
 }
@@ -345,7 +349,7 @@ impl<'a, T: Borrow<[u8]> + Debug + Ord, U: AsRef<PskKey<'a>> + Debug> ServerPskS
 /// this function as an identity callback.
 ///
 /// Additionally, `arg` must be a valid argument to [`ServerPskContext::from_raw`].
-pub(crate) unsafe extern "C" fn dtls_psk_server_id_callback(
+unsafe extern "C" fn dtls_psk_server_id_callback(
     identity: *mut coap_bin_const_t,
     session: *mut coap_session_t,
     userdata: *mut c_void,
@@ -370,7 +374,7 @@ pub(crate) unsafe extern "C" fn dtls_psk_server_id_callback(
 /// this function as an PSK SNI callback.
 ///
 /// Additionally, `arg` must be a valid argument to [`ServerPskContext::from_raw`].
-pub(crate) unsafe extern "C" fn dtls_psk_server_sni_callback(
+unsafe extern "C" fn dtls_psk_server_sni_callback(
     sni: *const c_char,
     session: *mut coap_session_t,
     userdata: *mut c_void,

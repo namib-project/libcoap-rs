@@ -101,7 +101,7 @@ impl ClientPskContextBuilder<'_> {
     /// Equivalent to setting `ec_jpake` in the underlying [`coap_dtls_cpsk_t`] structure.
     #[cfg(dtls_ec_jpake_support)]
     pub fn ec_jpake(mut self, ec_jpake: bool) -> Self {
-        self.ctx.raw_cfg.ec_jpake = if ec_jpake { 1 } else { 0 };
+        self.ctx.raw_cfg.ec_jpake = ec_jpake.into();
         self
     }
 
@@ -112,7 +112,7 @@ impl ClientPskContextBuilder<'_> {
     /// Equivalent to setting `use_cid` in the underlying [`coap_dtls_cpsk_t`] structure.
     #[cfg(dtls_cid_support)]
     pub fn use_cid(mut self, use_cid: bool) -> Self {
-        self.ctx.raw_cfg.use_cid = use_cid.then_some(1).unwrap_or(0);
+        self.ctx.raw_cfg.use_cid = use_cid.into();
         self
     }
 
@@ -218,7 +218,7 @@ impl ClientPskContext<'_> {
 }
 
 impl<'a> ClientPskContext<'a> {
-    /// Restores a [`ClientPskContext`] from a pointer to its inner structure (i.e. from the
+    /// Restores a [`ClientPskContext`] from a pointer to its inner structure (i.e., from the
     /// user-provided pointer given to DTLS callbacks).
     ///
     /// # Panics
@@ -249,7 +249,7 @@ struct ClientPskContextInner<'a> {
     /// Store for `coap_dtls_cpsk_info_t` instances that we provided in previous identity hint
     /// callback invocations.
     ///
-    /// The stored pointers *must* all be created from Box::into_raw().
+    /// The stored pointers *must* all be created from [`Box::into_raw`].
     ///
     /// Using `Vec<coap_dtls_cpsk_info_t>` instead is not an option, as a `Vec` resize may cause the
     /// instances to be moved to a different place in memory, invalidating pointers provided to

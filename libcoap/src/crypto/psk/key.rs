@@ -54,9 +54,9 @@ impl PskKey<'_> {
     /// [`coap_dtls_spsk_info_t`] structure that allows libcoap to use those values.
     ///
     /// After this call, the caller is responsible for managing the memory allocated for the
-    /// identity and key byte strings referred to be the created struct instance, i.e. simply
+    /// identity and key byte strings referred to be the created struct instance, i.e., simply
     /// dropping the created [`coap_dtls_spsk_info_t`] will cause a memory leak.
-    /// The easiest way to clean up the memory is by calling [from_raw_spsk_info](Self::from_raw_spsk_info)
+    /// The easiest way to clean up the memory is by calling [`from_raw_spsk_info`](Self::from_raw_spsk_info)
     /// to reverse the conversion done by this method and then dropping the restored [`PskKey`]
     /// instance.
     pub(crate) fn into_raw_spsk_info(self) -> coap_dtls_spsk_info_t {
@@ -64,12 +64,12 @@ impl PskKey<'_> {
         coap_dtls_spsk_info_t { hint, key }
     }
 
-    /// Restores a DtlsPsk instance from a [`coap_dtls_spsk_info_t`] structure.
+    /// Restores a `DtlsPsk` instance from a [`coap_dtls_spsk_info_t`] structure.
     ///
     /// # Safety
     ///
     /// The provided object must point to a valid instance of [`coap_dtls_spsk_info_t`] that *must*
-    /// have been created by a previous call to [into_raw_spsk_info](Self::into_raw_spsk_info).
+    /// have been created by a previous call to [`into_raw_spsk_info`](Self::into_raw_spsk_info).
     ///
     /// The byte strings the provided `spsk_info` points to *must* not be in use anywhere else (as
     /// this might violate the aliasing rules), i.e. libcoap must no longer use these byte strings.
@@ -85,9 +85,9 @@ impl PskKey<'_> {
     /// [`coap_dtls_cpsk_info_t`] structure that allows libcoap to use those values.
     ///
     /// After this call, the caller is responsible for managing the memory allocated for the
-    /// identity and key byte strings referred to be the created struct instance, i.e. simply
+    /// identity and key byte strings referred to be the created struct instance, i.e., simply
     /// dropping the created [`coap_dtls_cpsk_info_t`] will cause a memory leak.
-    /// The easiest way to clean up the memory is by calling [from_raw_cpsk_info](Self::from_raw_cpsk_info)
+    /// The easiest way to clean up the memory is by calling [`from_raw_cpsk_info`](Self::from_raw_cpsk_info)
     /// to reverse the conversion done by this method and then dropping the restored [`PskKey`]
     /// instance.
     pub(crate) fn into_raw_cpsk_info(self) -> coap_dtls_cpsk_info_t {
@@ -100,10 +100,10 @@ impl PskKey<'_> {
     /// # Safety
     ///
     /// The provided object must point to a valid instance of [`coap_dtls_cpsk_info_t`] that *must*
-    /// have been created by a previous call to [into_raw_cpsk_info](Self::into_raw_cpsk_info).
+    /// have been created by a previous call to [`into_raw_cpsk_info`](Self::into_raw_cpsk_info).
     ///
     /// The byte strings the provided `cpsk_info` points to *must* not be in use anywhere else (as
-    /// this might violate the aliasing rules), i.e. libcoap must no longer use these byte strings.
+    /// this might violate the aliasing rules), i.e., libcoap must no longer use these byte strings.
     pub(crate) unsafe fn from_raw_cpsk_info(cpsk_info: coap_dtls_cpsk_info_t) -> Self {
         // SAFETY: Caller contract requires the provided cpsk_info to be created by a previous call
         // to into_raw_cpsk_info.
@@ -138,7 +138,7 @@ impl PskKey<'_> {
     ///
     /// # Safety
     /// The provided `identity` and `key` must have been created by a previous call to
-    /// [PskKey::into_bin_consts], the `length` field and pointers of both constants must not have
+    /// [`PskKey::into_bin_consts`], the `length` field and pointers of both constants must not have
     /// been modified.
     unsafe fn from_bin_consts(identity: &coap_bin_const_t, key: &coap_bin_const_t) -> Self {
         // SAFETY: Caller contract requires the provided identity and key to be created by a
@@ -163,7 +163,7 @@ impl From<Box<[u8]>> for PskKey<'static> {
     fn from(value: Box<[u8]>) -> Self {
         PskKey {
             identity: None,
-            data: value.into(),
+            data: value,
             _lifetime_marker: Default::default(),
         }
     }

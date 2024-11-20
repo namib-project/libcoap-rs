@@ -27,8 +27,12 @@ pub enum EndpointCreationError {
 #[derive(Error, Debug, Copy, Clone, Eq, PartialEq)]
 pub enum ContextConfigurationError {
     /// Unknown error inside of libcoap
-    #[error("CoAP context creation error: unknown error in call to libcoap")]
+    #[error("CoAP context configuration error: unknown error in call to libcoap")]
     Unknown,
+    #[error(
+        "CoAP context configuration error: attempted to set encryption context while one has already been configured for this encryption variant"
+    )]
+    CryptoContextAlreadySet,
 }
 
 #[derive(Error, Debug, Copy, Clone, Eq, PartialEq)]

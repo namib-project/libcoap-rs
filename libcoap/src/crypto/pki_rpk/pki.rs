@@ -43,7 +43,7 @@ impl<'a> From<PkiRpkContext<'a, Pki>> for ServerPkiRpkCryptoContext<'a> {
 }
 
 impl<'a> From<PkiRpkContext<'a, Pki>> for ClientCryptoContext<'a> {
-    fn from(value: pki_rpk::PkiRpkContext<'a, pki_rpk::Pki>) -> Self {
+    fn from(value: PkiRpkContext<'a, Pki>) -> Self {
         ClientCryptoContext::Pki(value)
     }
 }
@@ -58,7 +58,7 @@ impl<'a> PkiRpkContextBuilder<'a, Pki, NonCertVerifying> {
     /// [`PkiRpkContextBuilder::cert_chain_validation`].
     ///
     /// Depending on your circumstances, you might want to add additional root certificates
-    /// using [`CoapContext::set_pki_root_cas`](crate::CoapContext::set_pki_root_cas).
+    /// using [`CoapContext::set_pki_root_cas`](crate::CoapContext::set_pki_root_ca_paths).
     ///
     /// # Implementation details (informative, not covered by semver guarantees)
     ///
@@ -222,7 +222,7 @@ impl PkiKeyDef<PemFileKeyComponent, PemFileKeyComponent, PemFileKeyComponent> {
 impl PkiKeyDef<PemMemoryKeyComponent, PemMemoryKeyComponent, PemMemoryKeyComponent> {
     /// Creates a new key definition using PEM-encoded byte sequences in memory as components.
     ///
-    /// See the documentation of [PkiKeyDef::new] for more information on the parameters, especially
+    /// See the documentation of [`PkiKeyDef::new`] for more information on the parameters, especially
     /// regarding the `ca_cert` field.
     pub fn with_pem_memory(
         ca_cert: Option<impl Into<PemMemoryKeyComponent>>,
@@ -242,7 +242,7 @@ impl PkiKeyDef<PemMemoryKeyComponent, PemMemoryKeyComponent, PemMemoryKeyCompone
 impl PkiKeyDef<DerFileKeyComponent, DerFileKeyComponent, DerFileKeyComponent> {
     /// Creates a new key definition using DER-encoded files as components.
     ///
-    /// See the documentation of [PkiKeyDef::new] for more information on the parameters, especially
+    /// See the documentation of [`PkiKeyDef::new`] for more information on the parameters, especially
     /// regarding the `ca_cert` field.
     pub fn with_asn1_files(
         ca_cert: Option<impl Into<DerFileKeyComponent>>,
@@ -263,7 +263,7 @@ impl PkiKeyDef<DerFileKeyComponent, DerFileKeyComponent, DerFileKeyComponent> {
 impl PkiKeyDef<DerMemoryKeyComponent, DerMemoryKeyComponent, DerMemoryKeyComponent> {
     /// Creates a new key definition using DER-encoded byte sequences in memory as components.
     ///
-    /// See the documentation of [PkiKeyDef::new] for more information on the parameters, especially
+    /// See the documentation of [`PkiKeyDef::new`] for more information on the parameters, especially
     /// regarding the `ca_cert` field.
     pub fn with_asn1_memory(
         ca_cert: Option<impl Into<DerMemoryKeyComponent>>,
@@ -284,7 +284,7 @@ impl PkiKeyDef<DerMemoryKeyComponent, DerMemoryKeyComponent, DerMemoryKeyCompone
 impl PkiKeyDef<Pkcs11KeyComponent, Pkcs11KeyComponent, Pkcs11KeyComponent> {
     /// Creates a new key definition using PKCS11 URIs as components.
     ///
-    /// See the documentation of [PkiKeyDef::new] for more information on the parameters, especially
+    /// See the documentation of [`PkiKeyDef::new`] for more information on the parameters, especially
     /// regarding the `ca_cert` field.
     pub fn with_pkcs11(
         ca_cert: Option<impl Into<Pkcs11KeyComponent>>,

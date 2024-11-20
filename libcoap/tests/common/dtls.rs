@@ -31,13 +31,13 @@ pub fn dtls_client_server_request_common<KTY: KeyType, FC, FS>(
         context.set_pki_rpk_context(server_crypto_ctx).unwrap();
         context.add_endpoint_dtls(server_address).unwrap();
         #[cfg(feature = "dtls-pki")]
-        context.set_pki_root_cas(Some("./resources/test-keys/ca/ca.crt.pem"), None::<PathBuf>);
+        context.set_pki_root_ca_paths(Some("./resources/test-keys/ca/ca.crt.pem"), None::<PathBuf>);
         context
     });
 
     let mut context = CoapContext::new().unwrap();
     #[cfg(feature = "dtls-pki")]
-    context.set_pki_root_cas(Some("./resources/test-keys/ca/ca.crt.pem"), None::<PathBuf>);
+    context.set_pki_root_ca_paths(Some("./resources/test-keys/ca/ca.crt.pem"), None::<PathBuf>);
     let session = CoapClientSession::connect_dtls(&mut context, server_address, client_crypto_ctx).unwrap();
 
     let request = common::gen_test_request();

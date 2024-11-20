@@ -35,11 +35,11 @@ struct CoapClientSessionInner<'a> {
 }
 
 impl<'a> CoapClientSessionInner<'a> {
-    /// Initializes a new CoapClientSessionInner for an unencrypted session from its raw counterpart
+    /// Initializes a new [`CoapClientSessionInner`] for an unencrypted session from its raw counterpart
     /// with the provided initial information.
     ///
     /// Also initializes the message token to a random value to prevent off-path response spoofing
-    /// (see https://datatracker.ietf.org/doc/html/rfc7252#section-5.3.1).
+    /// (see [RFC 7252, section 5.3.1](https://datatracker.ietf.org/doc/html/rfc7252#section-5.3.1)).
     ///
     /// # Safety
     /// The provided pointer for `raw_session` must be valid and point to the newly constructed raw
@@ -64,7 +64,7 @@ impl<'a> CoapClientSessionInner<'a> {
         inner_session
     }
 
-    /// Initializes a new CoapClientSessionInner for an encrypted session from its raw counterpart
+    /// Initializes a new [`CoapClientSessionInner`] for an encrypted session from its raw counterpart
     /// with the provided initial information.
     ///
     /// # Safety
@@ -204,7 +204,7 @@ impl CoapClientSession<'_> {
     ///
     /// # Safety
     /// The provided pointer must be valid, the provided session's app data must be a valid argument
-    /// to `CoapFfiRawCell<CoapClientSessionInner>::clone_raw_rc`.
+    /// to [`CoapFfiRawCell<CoapClientSessionInner>::clone_raw_rc`].
     pub(crate) unsafe fn from_raw<'a>(raw_session: *mut coap_session_t) -> CoapClientSession<'a> {
         assert!(!raw_session.is_null(), "provided raw session was null");
         let raw_session_type = coap_session_get_type(raw_session);

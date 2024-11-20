@@ -51,7 +51,7 @@ impl<'a> PkiRpkContextBuilder<'a, Rpk, NonCertVerifying> {
     /// Sets the raw public key validator for this encryption context.
     ///
     /// The raw public key validator's [`validate_rpk`](RpkValidator::validate_rpk) function will be
-    /// called after the TLS level validation checks have been completed in order to check whether
+    /// called after the TLS-level validation checks have been completed in order to check whether
     /// the RPK provided by the peer is allowed/as expected.
     ///
     /// # Implementation details (informative, not covered by semver guarantees)
@@ -81,7 +81,7 @@ pub trait RpkValidator {
     /// SubjectPublicKeyInformation encoded within.
     ///
     /// See [the libcoap documentation](https://libcoap.net/doc/reference/4.3.5/group__dtls.html#gaef7a2800757a4922102311c94c3fa529)
-    /// for more background information
+    /// for more information.
     fn validate_rpk(&self, asn1_public_key: &[u8], session: &CoapSession, validated: bool) -> bool;
 }
 
@@ -137,7 +137,7 @@ impl<PK: KeyComponent<Rpk>, SK: KeyComponent<Rpk>> RpkKeyDef<PK, SK> {
 impl RpkKeyDef<PemMemoryKeyComponent, PemMemoryKeyComponent> {
     /// Creates a new key definition using PEM-encoded byte sequences in memory as components.
     ///
-    /// See the documentation of [RpkKeyDef::new] for more information on the parameters.
+    /// See the documentation of [`RpkKeyDef::new`] for more information on the parameters.
     pub fn with_pem_memory(
         public_key: impl Into<PemMemoryKeyComponent>,
         private_key: impl Into<PemMemoryKeyComponent>,
@@ -149,7 +149,7 @@ impl RpkKeyDef<PemMemoryKeyComponent, PemMemoryKeyComponent> {
 impl RpkKeyDef<Pkcs11KeyComponent, Pkcs11KeyComponent> {
     /// Creates a new key definition using PKCS11 URIs as components.
     ///
-    /// See the documentation of [RpkKeyDef::new] for more information on the parameters.
+    /// See the documentation of [`RpkKeyDef::new`] for more information on the parameters.
     pub fn with_pkcs11(
         public_key: impl Into<Pkcs11KeyComponent>,
         private_key: impl Into<Pkcs11KeyComponent>,

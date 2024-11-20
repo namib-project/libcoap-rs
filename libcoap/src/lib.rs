@@ -83,7 +83,7 @@
 //!
 //! libcoap requires a DTLS library to be selected for DTLS functionality. By default, libcoap-rs
 //! will use `openssl` for this purpose. If you wish to use one of the other supported DTLS
-//! libraries (GnuTLS, MbedTLS, TinyDTLS), disable the `dtls_openssl` feature and replace it with
+//! libraries (GnuTLS, MbedTLS, tinydtls), disable the `dtls_openssl` feature and replace it with
 //! the feature for the library of your choice.
 //!
 //! Note that enabling multiple backends is not possible and doing so will result in a single

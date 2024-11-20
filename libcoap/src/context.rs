@@ -9,40 +9,39 @@
 
 //! Module containing context-internal types and traits.
 
+#[cfg(feature = "dtls-pki")]
+use std::ffi::CString;
+#[cfg(dtls)]
+use std::ptr::NonNull;
+use std::{any::Any, ffi::c_void, fmt::Debug, net::SocketAddr, ops::Sub, sync::Once, time::Duration};
+#[cfg(all(feature = "dtls-pki", unix))]
+use std::{os::unix::ffi::OsStrExt, path::Path};
+
 use libc::c_uint;
+#[cfg(feature = "dtls-pki")]
+use libcoap_sys::coap_context_set_pki_root_cas;
 use libcoap_sys::{
     coap_add_resource, coap_can_exit, coap_context_get_csm_max_message_size, coap_context_get_csm_timeout,
     coap_context_get_max_handshake_sessions, coap_context_get_max_idle_sessions, coap_context_get_session_timeout,
     coap_context_set_block_mode, coap_context_set_csm_max_message_size, coap_context_set_csm_timeout,
     coap_context_set_keepalive, coap_context_set_max_handshake_sessions, coap_context_set_max_idle_sessions,
-    coap_context_set_pki_root_cas, coap_context_set_session_timeout, coap_context_t, coap_event_t, coap_free_context,
-    coap_get_app_data, coap_io_process, coap_new_context, coap_proto_t, coap_register_event_handler,
-    coap_register_response_handler, coap_set_app_data, coap_startup_with_feature_checks, COAP_BLOCK_SINGLE_BODY,
-    COAP_BLOCK_USE_LIBCOAP, COAP_IO_WAIT,
+    coap_context_set_session_timeout, coap_context_t, coap_event_t, coap_free_context, coap_get_app_data,
+    coap_io_process, coap_new_context, coap_proto_t, coap_register_event_handler, coap_register_response_handler,
+    coap_set_app_data, coap_startup_with_feature_checks, COAP_BLOCK_SINGLE_BODY, COAP_BLOCK_USE_LIBCOAP, COAP_IO_WAIT,
 };
-use std::ffi::CString;
-use std::path::Path;
-#[cfg(dtls)]
-use std::ptr::NonNull;
-use std::sync::Once;
-use std::{any::Any, ffi::c_void, fmt::Debug, net::SocketAddr, ops::Sub, time::Duration};
 
 #[cfg(any(feature = "dtls-rpk", feature = "dtls-pki"))]
 use crate::crypto::pki_rpk::ServerPkiRpkCryptoContext;
 #[cfg(feature = "dtls-psk")]
 use crate::crypto::psk::ServerPskContext;
-use crate::event::{event_handler_callback, CoapEventHandler};
-use crate::mem::{CoapLendableFfiRcCell, CoapLendableFfiWeakCell, DropInnerExclusively};
-use crate::session::CoapServerSession;
-use crate::session::CoapSession;
-use crate::transport::CoapEndpoint;
 use crate::{
     error::{ContextConfigurationError, EndpointCreationError, IoProcessError},
+    event::{event_handler_callback, CoapEventHandler},
+    mem::{CoapLendableFfiRcCell, CoapLendableFfiWeakCell, DropInnerExclusively},
     resource::{CoapResource, UntypedCoapResource},
-    session::session_response_handler,
+    session::{session_response_handler, CoapServerSession, CoapSession},
+    transport::CoapEndpoint,
 };
-#[cfg(unix)]
-use std::os::unix::ffi::OsStrExt;
 
 static COAP_STARTUP_ONCE: Once = Once::new();
 
@@ -215,17 +214,22 @@ impl<'a> CoapContext<'a> {
     }
 
     /// Sets the server-side cryptography information provider.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ContextConfigurationError::Unknown`] if the call to the underlying libcoap library
+    /// function fails and [`ContextConfigurationError::CryptoContextAlreadySet`] if the PSK context
+    /// has already been set previously.
     #[cfg(feature = "dtls-psk")]
     pub fn set_psk_context(&mut self, psk_context: ServerPskContext<'a>) -> Result<(), ContextConfigurationError> {
-        // SAFETY: raw context is valid.
         let mut inner = self.inner.borrow_mut();
-        // TODO there is probably a prettier way to do this instead of panicking.
-        //      It would probably be easier to have a CoapContextBuilder that sets this, or to
-        //      provide this in the constructor.
         if inner.psk_context.is_some() {
-            panic!("PSK context has already been set.")
+            return Err(ContextConfigurationError::CryptoContextAlreadySet);
         }
         inner.psk_context = Some(psk_context);
+        // SAFETY: raw context is valid, we ensure that an already set encryption context will not
+        // be overwritten, and the raw coap_context_t is cleaned up before the encryption context is
+        // dropped (ensuring the encryption context outlives the CoAP context).
         unsafe {
             inner
                 .psk_context
@@ -236,20 +240,25 @@ impl<'a> CoapContext<'a> {
     }
 
     /// Sets the server-side cryptography information provider.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ContextConfigurationError::Unknown`] if the call to the underlying libcoap library
+    /// function fails and [`ContextConfigurationError::CryptoContextAlreadySet`] if the PSK context
+    /// has already been set previously.
     #[cfg(any(feature = "dtls-pki", feature = "dtls-rpk"))]
     pub fn set_pki_rpk_context(
         &mut self,
         pki_context: impl Into<ServerPkiRpkCryptoContext<'a>>,
     ) -> Result<(), ContextConfigurationError> {
-        // SAFETY: raw context is valid.
         let mut inner = self.inner.borrow_mut();
-        // TODO there is probably a prettier way to do this instead of panicking.
-        //      It would probably be easier to have a CoapContextBuilder that sets this, or to
-        //      provide this in the constructor.
         if inner.pki_rpk_context.is_some() {
-            panic!("PKI context has already been set.")
+            return Err(ContextConfigurationError::CryptoContextAlreadySet);
         }
         inner.pki_rpk_context = Some(pki_context.into());
+        // SAFETY: raw context is valid, we ensure that an already set encryption context will not
+        // be overwritten, and the raw coap_context_t is cleaned up before the encryption context is
+        // dropped (ensuring the encryption context outlives the CoAP context).
         unsafe {
             inner
                 .pki_rpk_context
@@ -259,9 +268,27 @@ impl<'a> CoapContext<'a> {
         }
     }
 
-    // TODO this for non-unix systems
+    /// Convenience wrapper around [`set_pki_root_cas`](CoapContext::set_pki_root_cas) that can be
+    /// provided with any type that implements `AsRef<Path>`.
+    ///
+    /// `ca_file` should be the full path of a PEM-encoded file containing all root CAs to be used
+    /// or `None`, `ca_dir` should be a directory path containing PEM-encoded CA certificates to
+    /// be used or `None`.
+    ///
+    /// As not all implementations of [`OsString`] (which is the basis of [`Path`]) provide
+    /// conversions to non-zero byte sequences, this function is only available on Unix.
+    /// On other operating systems, perform manual conversion of paths into [`CString`] and call
+    /// [`set_pki_root_cas`](CoapContext::set_pki_root_cas) directly instead.
+    ///
+    /// See the Rust standard library documentation on [FFI conversions](https://doc.rust-lang.org/std/ffi/index.html#conversions])
+    /// and the [`OsString` type](https://doc.rust-lang.org/std/ffi/struct.OsString.html) for more
+    /// information.
+    ///
+    /// # Errors
+    /// Will return [`ContextConfigurationError::Unknown`] if the call to the underlying libcoap
+    /// function fails (indicating an error in either libcoap or the underlying TLS library).
     #[cfg(all(feature = "dtls-pki", unix))]
-    pub fn set_pki_root_cas(
+    pub fn set_pki_root_ca_paths(
         &mut self,
         ca_file: Option<impl AsRef<Path>>,
         ca_dir: Option<impl AsRef<Path>>,
@@ -278,6 +305,26 @@ impl<'a> CoapContext<'a> {
             // Unix paths never contain null bytes, so we can unwrap here.
             CString::new(v.as_os_str().as_bytes()).unwrap()
         });
+
+        self.set_pki_root_cas(ca_file, ca_dir)
+    }
+
+    /// Sets the path to a CA certificate file and/or a directory of CA certificate files that
+    /// should be used as this context's default root CA information.
+    ///
+    /// `ca_file` should be the full path of a PEM-encoded file containing all root CAs to be used
+    /// or `None`, `ca_dir` should be a directory path containing PEM-encoded CA certificates to
+    /// be used or `None`.
+    ///
+    /// # Errors
+    /// Will return [`ContextConfigurationError::Unknown`] if the call to the underlying libcoap
+    /// function fails (indicating an error in either libcoap or the underlying TLS library).
+    #[cfg(feature = "dtls-pki")]
+    pub fn set_pki_root_cas(
+        &mut self,
+        ca_file: Option<CString>,
+        ca_dir: Option<CString>,
+    ) -> Result<(), ContextConfigurationError> {
         let inner = self.inner.borrow();
 
         let result = unsafe {
@@ -340,15 +387,15 @@ impl CoapContext<'_> {
         self.add_endpoint(addr, coap_proto_t::COAP_PROTO_DTLS)
     }
 
-    /// TODO
-    #[cfg(all(feature = "tcp", dtls))]
-    pub fn add_endpoint_tls(&mut self, _addr: SocketAddr) -> Result<(), EndpointCreationError> {
-        todo!()
-        // TODO: self.add_endpoint(addr, coap_proto_t::COAP_PROTO_TLS)
-    }
+    // /// TODO
+    // #[cfg(all(feature = "tcp", dtls))]
+    // pub fn add_endpoint_tls(&mut self, _addr: SocketAddr) -> Result<(), EndpointCreationError> {
+    //     todo!()
+    //     // TODO: self.add_endpoint(addr, coap_proto_t::COAP_PROTO_TLS)
+    // }
 
     /// Adds the given resource to the resource pool of this context.
-    pub fn add_resource<D: Any + ?Sized + Debug>(&mut self, res: CoapResource<D>) {
+    pub fn add_resource<D: Any+?Sized+Debug>(&mut self, res: CoapResource<D>) {
         let mut inner_ref = self.inner.borrow_mut();
         inner_ref.resources.push(Box::new(res));
         // SAFETY: raw context is valid, raw resource is also guaranteed to be valid as long as

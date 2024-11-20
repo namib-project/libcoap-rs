@@ -14,10 +14,8 @@ use libcoap_sys::{
     coap_session_set_app_data, coap_session_t, coap_session_type_t,
 };
 
-use crate::mem::CoapFfiRcCell;
-use crate::mem::DropInnerExclusively;
-
 use super::{CoapSessionCommon, CoapSessionInner, CoapSessionInnerProvider};
+use crate::mem::{CoapFfiRcCell, DropInnerExclusively};
 
 impl DropInnerExclusively for CoapServerSession<'_> {
     fn drop_exclusively(self) {
@@ -103,7 +101,7 @@ impl CoapServerSession<'_> {
     /// # Safety
     /// The provided pointer must be valid for the entire lifetime of this struct.
     /// The provided session's app data must be a valid argument to
-    /// `CoapFfiRawCell<CoapServerSessionInner>::clone_raw_rc`.
+    /// [`CoapFfiRcCell<CoapServerSessionInner>::clone_raw_rc`](CoapFfiRcCell::clone_raw_rc).
     pub(crate) unsafe fn from_raw<'a>(raw_session: *mut coap_session_t) -> CoapServerSession<'a> {
         let mut session = Self::from_raw_without_refcount(raw_session);
         coap_session_reference(raw_session);
@@ -137,7 +135,7 @@ impl CoapServerSession<'_> {
     /// struct, which could happen at any time if the libcoap context is not locked.
     ///
     /// The provided session's app data must be a valid argument to
-    /// `CoapFfiRawCell<CoapServerSessionInner>::clone_raw_rc`.
+    /// [`CoapFfiRcCell<CoapServerSessionInner>::clone_raw_rc`](CoapFfiRcCell::clone_raw_rc).
     pub(crate) unsafe fn from_raw_without_refcount<'a>(raw_session: *mut coap_session_t) -> CoapServerSession<'a> {
         assert!(!raw_session.is_null(), "provided raw session was null");
         let raw_session_type = coap_session_get_type(raw_session);
@@ -177,6 +175,7 @@ impl<'a> CoapSessionInnerProvider<'a> for CoapServerSession<'a> {
     fn inner_ref<'b>(&'b self) -> Ref<'b, CoapSessionInner<'a>> {
         Ref::map(self.inner.borrow(), |v| &v.inner)
     }
+
     fn inner_mut<'b>(&'b self) -> RefMut<'b, CoapSessionInner<'a>> {
         RefMut::map(self.inner.borrow_mut(), |v| &mut v.inner)
     }

@@ -7,10 +7,10 @@
  * See the README as well as the LICENSE file for more information.
  */
 
-use std::borrow::BorrowMut;
-use std::cell::{Ref, RefMut};
 use std::{
     any::Any,
+    borrow::BorrowMut,
+    cell::{Ref, RefMut},
     collections::{HashMap, VecDeque},
     marker::PhantomData,
     net::{SocketAddr, ToSocketAddrs},
@@ -29,18 +29,14 @@ use libcoap_sys::{
 #[cfg(feature = "dtls-psk")]
 use libcoap_sys::{coap_session_get_psk_hint, coap_session_get_psk_identity, coap_session_get_psk_key};
 
-use crate::message::request::CoapRequest;
-use crate::message::response::CoapResponse;
+use self::sealed::{CoapSessionCommonInternal, CoapSessionInnerProvider};
+pub use self::{client::CoapClientSession, server::CoapServerSession};
 use crate::{
     error::{MessageConversionError, SessionGetAppDataError},
-    message::{CoapMessage, CoapMessageCommon},
+    message::{request::CoapRequest, response::CoapResponse, CoapMessage, CoapMessageCommon},
     protocol::CoapToken,
     types::{CoapAddress, CoapMessageId, CoapProtocol, IfIndex, MaxRetransmit},
 };
-
-pub use self::client::CoapClientSession;
-use self::sealed::{CoapSessionCommonInternal, CoapSessionInnerProvider};
-pub use self::server::CoapServerSession;
 
 pub mod client;
 
@@ -116,7 +112,7 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     }
 
     /// Sets the application-specific data stored alongside this session.
-    fn set_app_data<T: 'static + Any>(&self, value: Option<T>) {
+    fn set_app_data<T: 'static+Any>(&self, value: Option<T>) {
         let mut inner = self.inner_mut();
         let new_box: Option<Rc<dyn Any>> = value.map(|v| Rc::new(v) as Rc<dyn Any>);
         inner.app_data = new_box;
@@ -264,7 +260,7 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     }
 
     /// Returns the current state of this session.
-    #[must_use]
+    #[must_use = "getting the current session state without using it is a no-op"]
     fn state(&self) -> CoapSessionState {
         // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         unsafe { coap_session_get_state(self.inner_ref().raw_session).into() }
@@ -440,12 +436,14 @@ impl<'a> CoapSession<'a> {
     /// claim exclusive ownership of the session.
     ///
     /// # Panics
+    ///
     /// Panics if the given pointer is a null pointer.
     ///
     /// # Safety
     /// The provided pointer must be valid, the provided session's app data must be a valid argument
-    /// to `CoapFfiRawCell<CoapClientSessionInner>::clone_raw_rc` or
-    /// `CoapFfiRawCell<CoapServerSessionInner>::clone_raw_rc` (depending on the session type).
+    /// to [`CoapFfiRcCell<CoapClientSessionInner>::clone_raw_rc`](crate::mem::CoapFfiRcCell::clone_raw_rc)
+    /// or [`CoapFfiRcCell<CoapServerSessionInner>::clone_raw_rc`](crate::mem::CoapFfiRcCell::clone_raw_rc)
+    /// (depending on the session type).
     pub(crate) unsafe fn from_raw(raw_session: *mut coap_session_t) -> CoapSession<'a> {
         assert!(!raw_session.is_null(), "provided raw session was null");
         let raw_session_type = coap_session_get_type(raw_session);

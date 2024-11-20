@@ -331,6 +331,11 @@ pub enum ServerPkiRpkCryptoContext<'a> {
 impl ServerPkiRpkCryptoContext<'_> {
     /// Apply this cryptographic context to the given raw `coap_context_t`.
     ///
+    /// # Errors
+    ///
+    /// Will return [`ContextConfigurationError::Unknown`] if the call to the underlying libcoap
+    /// function fails.
+    ///
     /// # Safety
     /// The provided CoAP context must be valid and must not outlive this PkiRpkContext.
     pub(crate) unsafe fn apply_to_context(
@@ -442,7 +447,7 @@ impl<KTY: KeyType, V: CertVerificationMode> PkiRpkContextBuilder<'_, KTY, V> {
     ///
     /// Equivalent to setting `use_cid` in the underlying [`coap_dtls_pki_t`] structure.
     pub fn use_cid(mut self, use_cid: bool) -> Self {
-        self.ctx.raw_cfg.use_cid = use_cid.then_some(1).unwrap_or(0);
+        self.ctx.raw_cfg.use_cid = use_cid.into();
         self
     }
 
@@ -483,7 +488,7 @@ impl<KTY: KeyType> PkiRpkContextBuilder<'_, KTY, CertVerifying> {
     ///
     /// Equivalent to setting `check_common_ca` in the underlying [`coap_dtls_pki_t`] structure.
     pub fn check_common_ca(mut self, check_common_ca: bool) -> Self {
-        self.ctx.raw_cfg.check_common_ca = check_common_ca.then_some(1).unwrap_or(0);
+        self.ctx.raw_cfg.check_common_ca = check_common_ca.into();
         self
     }
 
@@ -495,7 +500,7 @@ impl<KTY: KeyType> PkiRpkContextBuilder<'_, KTY, CertVerifying> {
     ///
     /// Equivalent to setting `allow_self_signed` in the underlying [`coap_dtls_pki_t`] structure.
     pub fn allow_self_signed(mut self, allow_self_signed: bool) -> Self {
-        self.ctx.raw_cfg.allow_self_signed = allow_self_signed.then_some(1).unwrap_or(0);
+        self.ctx.raw_cfg.allow_self_signed = allow_self_signed.into();
         self
     }
 
@@ -505,7 +510,7 @@ impl<KTY: KeyType> PkiRpkContextBuilder<'_, KTY, CertVerifying> {
     ///
     /// Equivalent to setting `allow_expired_certs` in the underlying [`coap_dtls_pki_t`] structure.
     pub fn allow_expired_certs(mut self, allow_expired_certs: bool) -> Self {
-        self.ctx.raw_cfg.allow_expired_certs = allow_expired_certs.then_some(1).unwrap_or(0);
+        self.ctx.raw_cfg.allow_expired_certs = allow_expired_certs.into();
         self
     }
 
@@ -530,7 +535,7 @@ impl<KTY: KeyType> PkiRpkContextBuilder<'_, KTY, CertVerifying> {
     ///
     /// Equivalent to setting `check_cert_revocation` in the underlying [`coap_dtls_pki_t`] structure.
     pub fn check_cert_revocation(mut self, check_cert_revocation: bool) -> Self {
-        self.ctx.raw_cfg.check_cert_revocation = if check_cert_revocation { 1 } else { 0 };
+        self.ctx.raw_cfg.check_cert_revocation = check_cert_revocation.into();
         self
     }
 
@@ -541,7 +546,7 @@ impl<KTY: KeyType> PkiRpkContextBuilder<'_, KTY, CertVerifying> {
     ///
     /// Equivalent to setting `allow_no_crl` in the underlying [`coap_dtls_pki_t`] structure.
     pub fn allow_no_crl(mut self, allow_no_crl: bool) -> Self {
-        self.ctx.raw_cfg.allow_no_crl = if allow_no_crl { 1 } else { 0 };
+        self.ctx.raw_cfg.allow_no_crl = allow_no_crl.into();
         self
     }
 
@@ -552,7 +557,7 @@ impl<KTY: KeyType> PkiRpkContextBuilder<'_, KTY, CertVerifying> {
     ///
     /// Equivalent to setting `allow_expired_crl` in the underlying [`coap_dtls_pki_t`] structure.
     pub fn allow_expired_crl(mut self, allow_expired_crl: bool) -> Self {
-        self.ctx.raw_cfg.allow_expired_crl = if allow_expired_crl { 1 } else { 0 };
+        self.ctx.raw_cfg.allow_expired_crl = allow_expired_crl.into();
         self
     }
 
@@ -562,7 +567,7 @@ impl<KTY: KeyType> PkiRpkContextBuilder<'_, KTY, CertVerifying> {
     ///
     /// Equivalent to setting `allow_bad_md_hash` in the underlying [`coap_dtls_pki_t`] structure.
     pub fn allow_bad_md_hash(mut self, allow_bad_md_hash: bool) -> Self {
-        self.ctx.raw_cfg.allow_bad_md_hash = if allow_bad_md_hash { 1 } else { 0 };
+        self.ctx.raw_cfg.allow_bad_md_hash = allow_bad_md_hash.into();
         self
     }
 
@@ -572,7 +577,7 @@ impl<KTY: KeyType> PkiRpkContextBuilder<'_, KTY, CertVerifying> {
     ///
     /// Equivalent to setting `allow_short_rsa_length` in the underlying [`coap_dtls_pki_t`] structure.
     pub fn allow_short_rsa_length(mut self, allow_short_rsa_length: bool) -> Self {
-        self.ctx.raw_cfg.allow_short_rsa_length = if allow_short_rsa_length { 1 } else { 0 };
+        self.ctx.raw_cfg.allow_short_rsa_length = allow_short_rsa_length.into();
         self
     }
 }
@@ -670,14 +675,14 @@ impl<KTY: KeyType> Drop for PkiRpkContextInner<'_, KTY> {
             }
         }
         if !self.raw_cfg.cn_call_back_arg.is_null() {
-            // SAFETY: If we set this, it must have been using a call to Weak::into_raw with the
+            // SAFETY: If we set this, it must have been using a call to `Weak::into_raw` with the
             //         correct type, otherwise, the value will always be null.
             unsafe {
                 Weak::from_raw(self.raw_cfg.cn_call_back_arg as *mut RefCell<Self>);
             }
         }
         if !self.raw_cfg.sni_call_back_arg.is_null() {
-            // SAFETY: If we set this, it must have been using a call to Weak::into_raw with the
+            // SAFETY: If we set this, it must have been using a call to `Weak::into_raw` with the
             //         correct type, otherwise, the value will always be null.
             unsafe {
                 Weak::from_raw(self.raw_cfg.sni_call_back_arg as *mut RefCell<Self>);
@@ -727,6 +732,11 @@ impl<KTY: KeyType> PkiRpkContext<'_, KTY> {
 
     /// Configures the provided raw [`coap_context_t`] to use this encryption context for RPK or PKI
     /// based server-side operation.
+    ///
+    /// # Errors
+    ///
+    /// Will return [`ContextConfigurationError::Unknown`] if the call to the underlying libcoap
+    /// function fails.
     ///
     /// # Safety
     ///
