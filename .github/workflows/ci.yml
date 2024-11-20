@@ -98,6 +98,7 @@ jobs:
     name: rustfmt
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         crate: [ libcoap-sys, libcoap-rs ]
     steps:
@@ -123,7 +124,9 @@ jobs:
           pattern: test-coverage-data-*
           merge-multiple: true
           path: coverage-data
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: llvm-tools, llvm-tools-preview
       - uses: baptiste0928/cargo-install@v3
         with:
           crate: grcov
