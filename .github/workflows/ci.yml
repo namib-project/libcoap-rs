@@ -29,14 +29,15 @@ jobs:
       RUSTFLAGS: "${{ matrix.rust_version == 'nightly' && '-Cinstrument-coverage -Cpanic=abort -Zpanic_abort_tests' }}"
       RUSTDOCFLAGS: "${{ matrix.rust_version == 'nightly' && '-C instrument-coverage -Cpanic=abort -Zpanic_abort_tests -Z unstable-options --persist-doctests target/debug/' }}"
       DTLS_LIBRARY_FEATURES: |
-        ${{ matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'tinydtls' && 'tcp,dtls-psk,dtls-rpk,dtls_tinydtls_vendored'
-            || matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'mbedtls' && 'tcp,dtls-psk,dtls-pki,dtls_mbedtls_vendored'
-            || matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'openssl' && 'tcp,dtls-psk,dtls-pki,dtls_openssl_vendored'
-            || matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'gnutls' && 'tcp,dtls-psk,dtls-pki,dtls-rpk,dtls_gnutls'
-            || matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'tinydtls' && 'dtls,dtls_backend_tinydtls,dtls_backend_tinydtls_vendored'
-            || matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'mbedtls' && 'dtls,dtls_backend_mbedtls,dtls_backend_mbedtls_vendored'
-            || matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'openssl' && 'dtls,dtls_backend_openssl,dtls_backend_openssl_vendored'
-            || matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'gnutls' && 'dtls,dtls_backend_gnutls'
+        ${{ (matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'tinydtls' && 'tcp,dtls-psk,dtls-rpk,dtls_tinydtls_vendored')
+            || (matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'mbedtls' && 'tcp,dtls-psk,dtls-pki,dtls_mbedtls_vendored')
+            || (matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'openssl' && 'tcp,dtls-psk,dtls-pki,dtls_openssl_vendored')
+            || (matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'gnutls' && 'tcp,dtls-psk,dtls-pki,dtls-rpk,dtls_gnutls')
+            || (matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'tinydtls' && 'dtls,dtls_backend_tinydtls,dtls_backend_tinydtls_vendored')
+            || (matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'mbedtls' && 'dtls,dtls_backend_mbedtls,dtls_backend_mbedtls_vendored')
+            || (matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'openssl' && 'dtls,dtls_backend_openssl,dtls_backend_openssl_vendored')
+            || (matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'gnutls' && 'dtls,dtls_backend_gnutls')
+            || 'vendored'
         }}
     steps:
       - uses: actions/checkout@v4
@@ -51,11 +52,11 @@ jobs:
         with:
           packages: libgnutls28-dev libgnutls30
           version: 1.0
-      - run: cargo test -p ${{ matrix.crate }} --no-default-features --no-fail-fast --features tcp,rand,vendored --features $DTLS_LIBRARY_FEATURES
+      - run: cargo test -p ${{ matrix.crate }} --no-default-features --features tcp,rand,vendored --features $DTLS_LIBRARY_FEATURES --no-fail-fast
       - if: matrix.rust_version == 'nightly'
         run: |
           mkdir -p target/debug/test-binaries
-          cp $(cargo test --no-run --message-format=json --no-default-features --no-fail-fast --features tcp,rand,vendored --features $DTLS_LIBRARY_FEATURES  \
+          cp $(cargo test --no-run --message-format=json --no-default-features --features tcp,rand,vendored --features $DTLS_LIBRARY_FEATURES --no-fail-fast  \
               | jq -r "select(.profile.test == true) | .filenames[]" \
               | grep -v dSYM -) target/debug/test-binaries/
       - if: matrix.rust_version == 'nightly'
