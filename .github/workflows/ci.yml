@@ -52,11 +52,11 @@ jobs:
         with:
           packages: libgnutls28-dev libgnutls30
           version: 1.0
-      - run: cargo test -p ${{ matrix.crate }} --no-default-features --features tcp,rand,vendored --features $DTLS_LIBRARY_FEATURES --no-fail-fast
+      - run: cargo test -p ${{ matrix.crate }} --no-default-features --features tcp,rand,vendored --features "$DTLS_LIBRARY_FEATURES" --no-fail-fast
       - if: matrix.rust_version == 'nightly'
         run: |
           mkdir -p target/debug/test-binaries
-          cp $(cargo test --no-run --message-format=json --no-default-features --features tcp,rand,vendored --features $DTLS_LIBRARY_FEATURES --no-fail-fast  \
+          cp $(cargo test --no-run --message-format=json --no-default-features --features tcp,rand,vendored --features "$DTLS_LIBRARY_FEATURES" --no-fail-fast  \
               | jq -r "select(.profile.test == true) | .filenames[]" \
               | grep -v dSYM -) target/debug/test-binaries/
       - if: matrix.rust_version == 'nightly'
