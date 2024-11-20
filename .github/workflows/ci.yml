@@ -68,6 +68,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           retention-days: 1
+          name: test-coverage-data-${{ matrix.crate }}-${{ matrix.dtls_backend }}
           path: |
             target/debug/coverage/
             target/debug/test-binaries/
@@ -109,29 +110,28 @@ jobs:
   coverage:
     name: coverage
     runs-on: ubuntu-latest
+    needs: [ test ]
     outputs:
       report: ${{ steps.cov-report.outputs.summary }}
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/download-artifact@v4
         with:
-          components: clippy, rustfmt
+          pattern: test-coverage-data-*
+          merge-multiple: true
+          path: coverage-data
+      - uses: dtolnay/rust-toolchain@stable
       - uses: baptiste0928/cargo-install@v3
         with:
-          crate: cargo-tarpaulin
-      - uses: awalsh128/cache-apt-pkgs-action@latest
-        with:
-          packages: libgnutls28-dev libgnutls30
-          version: 1.0
-
-      - run: cargo tarpaulin --no-fail-fast --workspace --verbose --features tcp,vendored,dtls_gnutls,dtls-psk,dtls-rpk,dtls-pki --exclude-files libcoap-sys/tests,libcoap/tests --timeout 120 --out Xml
+          crate: grcov
+      - run: grcov ./coverage-data/coverage/ . --binary-path ./coverage-data/test-binaries --commit-sha ${GITHUB_SHA} -t cobertura --branch -o ./coverage/
       - id: cov-report
         name: Produce the coverage report
         uses: pulsastrix/coverage-action@always_generate_comment_body
         with:
-          path: ./cobertura.xml
+          path: ./coverage/cobertura.xml
           threshold: 80.0
           fail: false
           publish: false
