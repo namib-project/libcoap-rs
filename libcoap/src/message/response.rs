@@ -7,12 +7,14 @@
  * See the README as well as the LICENSE file for more information.
  */
 
-use crate::error::{MessageConversionError, MessageTypeError, OptionValueError};
-use crate::message::{CoapMessage, CoapMessageCommon, CoapOption, construct_path_string, construct_query_string};
-use crate::protocol::{
-    CoapMessageCode, CoapMessageType, CoapOptionType, CoapResponseCode, ContentFormat, Echo, ETag, MaxAge, Observe,
+use crate::{
+    error::{MessageConversionError, MessageTypeError, OptionValueError},
+    message::{construct_path_string, construct_query_string, CoapMessage, CoapMessageCommon, CoapOption},
+    protocol::{
+        CoapMessageCode, CoapMessageType, CoapOptionType, CoapResponseCode, ContentFormat, ETag, Echo, MaxAge, Observe,
+    },
+    types::CoapUri,
 };
-use crate::types::CoapUri;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct CoapResponse {

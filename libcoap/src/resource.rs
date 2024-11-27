@@ -11,31 +11,27 @@
 
 use std::{
     any::Any,
-    cell::Ref,
-    cell::RefMut,
+    cell::{Ref, RefMut},
     fmt::{Debug, Formatter},
     marker::PhantomData,
 };
 
 use libc::c_int;
-
 use libcoap_sys::{
-    coap_delete_resource, coap_new_str_const, coap_pdu_t, coap_register_request_handler, COAP_RESOURCE_FLAGS_NOTIFY_CON,
-    COAP_RESOURCE_FLAGS_NOTIFY_NON, COAP_RESOURCE_FLAGS_RELEASE_URI, coap_resource_get_uri_path, coap_resource_get_userdata,
-    coap_resource_init, coap_resource_notify_observers, coap_resource_set_get_observable, coap_resource_set_mode, coap_resource_set_userdata, coap_resource_t,
-    coap_send_rst, coap_session_t, coap_string_t,
+    coap_delete_resource, coap_new_str_const, coap_pdu_t, coap_register_request_handler, coap_resource_get_uri_path,
+    coap_resource_get_userdata, coap_resource_init, coap_resource_notify_observers, coap_resource_set_get_observable,
+    coap_resource_set_mode, coap_resource_set_userdata, coap_resource_t, coap_send_rst, coap_session_t, coap_string_t,
+    COAP_RESOURCE_FLAGS_NOTIFY_CON, COAP_RESOURCE_FLAGS_NOTIFY_NON, COAP_RESOURCE_FLAGS_RELEASE_URI,
 };
 
-use crate::{error::MessageConversionError, message::CoapMessage, protocol::CoapRequestCode};
-use crate::context::ensure_coap_started;
-use crate::mem::{CoapFfiRcCell, DropInnerExclusively};
-use crate::message::CoapMessageCommon;
-use crate::message::request::CoapRequest;
-use crate::message::response::CoapResponse;
-use crate::protocol::CoapMessageCode;
-use crate::protocol::CoapMessageType;
-use crate::session::CoapServerSession;
-use crate::session::CoapSessionCommon;
+use crate::{
+    context::ensure_coap_started,
+    error::MessageConversionError,
+    mem::{CoapFfiRcCell, DropInnerExclusively},
+    message::{request::CoapRequest, response::CoapResponse, CoapMessage, CoapMessageCommon},
+    protocol::{CoapMessageCode, CoapMessageType, CoapRequestCode},
+    session::CoapServerSession,
+};
 
 // Trait aliases are experimental
 //trait CoapMethodHandlerFn<D> = FnMut(&D, &mut CoapSession, &CoapRequestMessage, &mut CoapResponseMessage);
@@ -50,7 +46,7 @@ use crate::session::CoapSessionCommon;
 macro_rules! resource_handler {
     ($f:ident, $t:path) => {{
         #[allow(clippy::unnecessary_mut_passed)] // We don't know whether the function needs a mutable reference or not.
-        unsafe extern "C" fn _coap_method_handler_wrapper<D: Any + ?Sized + Debug>(
+        unsafe extern "C" fn _coap_method_handler_wrapper<D: Any+?Sized+Debug>(
             resource: *mut coap_resource_t,
             session: *mut coap_session_t,
             incoming_pdu: *const coap_pdu_t,
@@ -59,8 +55,12 @@ macro_rules! resource_handler {
         ) {
             let handler_data =
                 prepare_resource_handler_data::<$t>(resource, session, incoming_pdu, query, response_pdu);
-            if let Ok((mut resource, mut session, incoming_pdu, outgoing_pdu)) = handler_data {
-                ($f::<D>)(&mut resource, &mut session, &incoming_pdu, outgoing_pdu)
+            if let Ok((mut resource, mut session, incoming_pdu, mut outgoing_pdu)) = handler_data {
+                ($f::<D>)(&mut resource, &mut session, &incoming_pdu, &mut outgoing_pdu);
+                // TODO better error handling (would require some larger changes).
+                if let Err(e) = outgoing_pdu.into_message().apply_to_raw_pdu(response_pdu, &session) {
+                    println!("WARN: Unable to apply CoapMessage to response PDU of server-side request handler");
+                }
             }
         }
         unsafe { CoapRequestHandler::<$t>::from_raw_handler(_coap_method_handler_wrapper::<$t>) }
@@ -79,7 +79,7 @@ macro_rules! resource_handler {
 /// The provided pointers must all be valid and point to the appropriate data structures.
 #[inline]
 #[doc(hidden)]
-pub unsafe fn prepare_resource_handler_data<'a, D: Any + ?Sized + Debug>(
+pub unsafe fn prepare_resource_handler_data<'a, D: Any+?Sized+Debug>(
     raw_resource: *mut coap_resource_t,
     raw_session: *mut coap_session_t,
     raw_incoming_pdu: *const coap_pdu_t,
@@ -101,7 +101,7 @@ pub unsafe fn prepare_resource_handler_data<'a, D: Any + ?Sized + Debug>(
 }
 
 /// Trait with functions relating to [CoapResource]s with an unknown data type.
-pub trait UntypedCoapResource: Any + Debug {
+pub trait UntypedCoapResource: Any+Debug {
     /// Returns the uri_path this resource responds to.
     fn uri_path(&self) -> &str;
     /// Provides a reference to this resource as an [Any] trait object.
@@ -134,14 +134,14 @@ pub trait UntypedCoapResource: Any + Debug {
 }
 
 /// Representation of a CoapResource that can be requested from a server.
-#[derive(Debug)]
-pub struct CoapResource<D: Any + ?Sized + Debug> {
+#[derive(Debug, Clone)]
+pub struct CoapResource<D: Any+?Sized+Debug> {
     inner: CoapFfiRcCell<CoapResourceInner<D>>,
 }
 
 /// Container for resource handlers for various CoAP methods.
 #[derive(Debug)]
-struct CoapResourceHandlers<D: Any + ?Sized + Debug> {
+struct CoapResourceHandlers<D: Any+?Sized+Debug> {
     get: Option<CoapRequestHandler<D>>,
     put: Option<CoapRequestHandler<D>>,
     delete: Option<CoapRequestHandler<D>>,
@@ -151,7 +151,7 @@ struct CoapResourceHandlers<D: Any + ?Sized + Debug> {
     patch: Option<CoapRequestHandler<D>>,
 }
 
-impl<D: Any + ?Sized + Debug> Default for CoapResourceHandlers<D> {
+impl<D: Any+?Sized+Debug> Default for CoapResourceHandlers<D> {
     fn default() -> Self {
         CoapResourceHandlers {
             get: None,
@@ -165,7 +165,7 @@ impl<D: Any + ?Sized + Debug> Default for CoapResourceHandlers<D> {
     }
 }
 
-impl<D: Any + ?Sized + Debug> CoapResourceHandlers<D> {
+impl<D: Any+?Sized+Debug> CoapResourceHandlers<D> {
     #[inline]
     fn handler(&self, code: CoapRequestCode) -> Option<&CoapRequestHandler<D>> {
         match code {
@@ -226,13 +226,13 @@ impl<D: Any + ?Sized + Debug> CoapResourceHandlers<D> {
 /// Inner part of a [CoapResource], which is referenced inside the raw resource and might be
 /// referenced multiple times, e.g. outside and inside of a resource handler.
 #[derive(Debug)]
-pub(crate) struct CoapResourceInner<D: Any + ?Sized + Debug> {
+pub(crate) struct CoapResourceInner<D: Any+?Sized+Debug> {
     raw_resource: *mut coap_resource_t,
     user_data: Box<D>,
     handlers: CoapResourceHandlers<D>,
 }
 
-impl<D: Any + ?Sized + Debug> CoapResource<D> {
+impl<D: Any+?Sized+Debug> CoapResource<D> {
     /// Creates a new CoapResource for the given `uri_path`.
     ///
     /// Handlers that are associated with this resource have to be able to take a reference to the
@@ -321,15 +321,13 @@ impl<D: Any + ?Sized + Debug> CoapResource<D> {
         &self,
         session: &mut CoapServerSession,
         req_message: &CoapRequest,
-        mut rsp_message: CoapResponse,
+        mut rsp_message: &mut CoapResponse,
     ) {
         let mut inner = self.inner.borrow_mut();
         let req_code = match req_message.code() {
             CoapMessageCode::Request(req_code) => req_code,
             _ => {
                 rsp_message.set_type_(CoapMessageType::Rst);
-                // TODO some better error handling
-                session.send(rsp_message).expect("error while sending RST packet");
                 return;
             },
         };
@@ -350,7 +348,7 @@ impl<D: Any + ?Sized + Debug> CoapResource<D> {
             self,
             session,
             req_message,
-            rsp_message,
+            &mut rsp_message,
         );
 
         // Put the handler function back into the resource, unless the handler was replaced.
@@ -362,7 +360,7 @@ impl<D: Any + ?Sized + Debug> CoapResource<D> {
     }
 }
 
-impl<D: Any + ?Sized + Debug> UntypedCoapResource for CoapResource<D> {
+impl<D: Any+?Sized+Debug> UntypedCoapResource for CoapResource<D> {
     fn uri_path(&self) -> &str {
         unsafe {
             let raw_path = coap_resource_get_uri_path(self.inner.borrow().raw_resource);
@@ -384,13 +382,13 @@ impl<D: Any + ?Sized + Debug> UntypedCoapResource for CoapResource<D> {
 }
 
 #[doc(hidden)]
-impl<D: Any + ?Sized + Debug> From<CoapFfiRcCell<CoapResourceInner<D>>> for CoapResource<D> {
+impl<D: Any+?Sized+Debug> From<CoapFfiRcCell<CoapResourceInner<D>>> for CoapResource<D> {
     fn from(raw_cell: CoapFfiRcCell<CoapResourceInner<D>>) -> Self {
         CoapResource { inner: raw_cell }
     }
 }
 
-impl<D: Any + ?Sized + Debug> Drop for CoapResourceInner<D> {
+impl<D: Any+?Sized+Debug> Drop for CoapResourceInner<D> {
     fn drop(&mut self) {
         // SAFETY: We set the user data on creation of the inner resource, so it cannot be invalid.
         std::mem::drop(unsafe {
@@ -434,7 +432,7 @@ impl<D: Any + ?Sized + Debug> Drop for CoapResourceInner<D> {
 // We'll allow the complex type as trait aliases are experimental and we'll probably want to use
 // those instead of aliasing the entire type including wrappers.
 #[allow(clippy::type_complexity)]
-pub struct CoapRequestHandler<D: Any + ?Sized + Debug> {
+pub struct CoapRequestHandler<D: Any+?Sized+Debug> {
     raw_handler: unsafe extern "C" fn(
         resource: *mut coap_resource_t,
         session: *mut coap_session_t,
@@ -443,13 +441,13 @@ pub struct CoapRequestHandler<D: Any + ?Sized + Debug> {
         response_pdu: *mut coap_pdu_t,
     ),
     dynamic_handler_function:
-        Option<Box<dyn FnMut(&CoapResource<D>, &mut CoapServerSession, &CoapRequest, CoapResponse)>>,
+        Option<Box<dyn FnMut(&CoapResource<D>, &mut CoapServerSession, &CoapRequest, &mut CoapResponse)>>,
     __handler_data_type: PhantomData<D>,
 }
 
-impl<D: 'static + ?Sized + Debug> CoapRequestHandler<D> {
+impl<D: 'static+?Sized+Debug> CoapRequestHandler<D> {
     /// Creates a new CoapResourceHandler with the given function as the handler function to call.
-    pub fn new<F: 'static + FnMut(&mut D, &mut CoapServerSession, &CoapRequest, CoapResponse)>(
+    pub fn new<F: 'static+FnMut(&mut D, &mut CoapServerSession, &CoapRequest, &mut CoapResponse)>(
         mut handler: F,
     ) -> CoapRequestHandler<D> {
         CoapRequestHandler::new_resource_ref(move |resource, session, request, response| {
@@ -464,7 +462,7 @@ impl<D: 'static + ?Sized + Debug> CoapRequestHandler<D> {
     /// `CoapResource`. This way, you can perform actions on the resource directly (e.g., notify
     /// observers).
     pub fn new_resource_ref<
-        F: 'static + FnMut(&CoapResource<D>, &mut CoapServerSession, &CoapRequest, CoapResponse),
+        F: 'static+FnMut(&CoapResource<D>, &mut CoapServerSession, &CoapRequest, &mut CoapResponse),
     >(
         handler: F,
     ) -> CoapRequestHandler<D> {
@@ -494,8 +492,9 @@ impl<D: 'static + ?Sized + Debug> CoapRequestHandler<D> {
         ),
     ) -> CoapRequestHandler<D> {
         ensure_coap_started();
-        let handler_fn: Option<Box<dyn FnMut(&CoapResource<D>, &mut CoapServerSession, &CoapRequest, CoapResponse)>> =
-            None;
+        let handler_fn: Option<
+            Box<dyn FnMut(&CoapResource<D>, &mut CoapServerSession, &CoapRequest, &mut CoapResponse)>,
+        > = None;
         CoapRequestHandler {
             raw_handler,
             dynamic_handler_function: handler_fn,
@@ -504,17 +503,17 @@ impl<D: 'static + ?Sized + Debug> CoapRequestHandler<D> {
     }
 }
 
-impl<D: 'static + ?Sized + Debug> Debug for CoapRequestHandler<D> {
+impl<D: 'static+?Sized+Debug> Debug for CoapRequestHandler<D> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("CoapRequestHandler").finish()
     }
 }
 
-fn coap_resource_handler_dynamic_wrapper<D: Any + ?Sized + Debug>(
+fn coap_resource_handler_dynamic_wrapper<D: Any+?Sized+Debug>(
     resource: &CoapResource<D>,
     session: &mut CoapServerSession,
     req_message: &CoapRequest,
-    rsp_message: CoapResponse,
+    rsp_message: &mut CoapResponse,
 ) {
     resource.call_dynamic_handler(session, req_message, rsp_message);
 }

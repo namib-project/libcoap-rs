@@ -10,17 +10,22 @@
 #[cfg(any(feature = "dtls-pki", feature = "dtls-rpk"))]
 pub mod dtls;
 
-use std::net::{SocketAddr, UdpSocket};
-use std::rc::Rc;
-use std::sync::{Arc, Condvar, Mutex};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::thread::JoinHandle;
-use std::time::Duration;
+use std::{
+    net::{SocketAddr, UdpSocket},
+    rc::Rc,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Condvar, Mutex,
+    },
+    thread::JoinHandle,
+    time::Duration,
+};
 
-use libcoap_rs::{CoapContext, CoapRequestHandler, CoapResource};
-use libcoap_rs::message::{CoapMessageCommon, CoapRequest, CoapResponse};
-use libcoap_rs::protocol::{CoapMessageCode, CoapMessageType, CoapRequestCode, CoapResponseCode};
-use libcoap_rs::session::CoapSessionCommon;
+use libcoap_rs::{
+    message::{CoapMessageCommon, CoapRequest, CoapResponse},
+    protocol::{CoapMessageCode, CoapMessageType, CoapRequestCode, CoapResponseCode},
+    CoapContext, CoapRequestHandler, CoapResource,
+};
 use libcoap_sys::{coap_dtls_set_log_level, coap_log_t, coap_set_log_level};
 
 pub(crate) fn get_unused_server_addr() -> SocketAddr {
@@ -45,7 +50,9 @@ pub(crate) fn get_unused_server_addr() -> SocketAddr {
 /// As the context_configurator closure is responsible for binding to sockets, this can be used to
 /// spawn a test server and wait for it to be ready to accept requests before returning (avoiding
 /// test failure due to "Connection Refused" errors).
-pub(crate) fn spawn_test_server<F: FnOnce(CoapContext<'static>) -> CoapContext<'static> + Send + 'static>(
+pub(crate) fn spawn_test_server<
+    F: FnOnce(CoapContext<'static>, Rc<AtomicBool>) -> CoapContext<'static>+Send+'static,
+>(
     context_configurator: F,
 ) -> JoinHandle<()> {
     let ready_condition = Arc::new((Mutex::new(false), Condvar::new()));
@@ -53,8 +60,8 @@ pub(crate) fn spawn_test_server<F: FnOnce(CoapContext<'static>) -> CoapContext<'
 
     let server_handle = std::thread::spawn(move || {
         let (ready_var, ready_cond) = &*ready_condition2;
-        run_test_server(|context| {
-            let context = context_configurator(context);
+        run_test_server(|context, request_complete| {
+            let context = context_configurator(context, request_complete);
             let mut ready_var = ready_var.lock().expect("ready condition mutex is poisoned");
             *ready_var = true;
             ready_cond.notify_all();
@@ -74,24 +81,25 @@ pub(crate) fn spawn_test_server<F: FnOnce(CoapContext<'static>) -> CoapContext<'
 }
 
 /// Configures and starts a test server in the current thread.
-pub(crate) fn run_test_server<F: FnOnce(CoapContext<'static>) -> CoapContext<'static>>(context_configurator: F) {
+pub(crate) fn run_test_server<F: FnOnce(CoapContext<'static>, Rc<AtomicBool>) -> CoapContext<'static>>(
+    context_configurator: F,
+) {
     unsafe {
         libcoap_sys::coap_startup_with_feature_checks();
         coap_dtls_set_log_level(coap_log_t::COAP_LOG_DEBUG);
         coap_set_log_level(coap_log_t::COAP_LOG_DEBUG);
     }
     let mut context = CoapContext::new().unwrap();
-    context = context_configurator(context);
     let request_completed = Rc::new(AtomicBool::new(false));
+    context = context_configurator(context, Rc::clone(&request_completed));
     let resource = CoapResource::new("test1", request_completed.clone(), false);
     resource.set_method_handler(
         CoapRequestCode::Get,
         Some(CoapRequestHandler::new(
-            |completed: &mut Rc<AtomicBool>, sess, _req, mut rsp: CoapResponse| {
+            |completed: &mut Rc<AtomicBool>, sess, _req, rsp: &mut CoapResponse| {
                 let data = Vec::<u8>::from("Hello World!".as_bytes());
                 rsp.set_data(Some(data));
                 rsp.set_code(CoapMessageCode::Response(CoapResponseCode::Content));
-                sess.send(rsp).unwrap();
                 completed.store(true, Ordering::Relaxed);
             },
         )),
@@ -100,14 +108,14 @@ pub(crate) fn run_test_server<F: FnOnce(CoapContext<'static>) -> CoapContext<'st
     context.add_resource(resource);
     loop {
         assert!(
-            context.do_io(Some(Duration::from_secs(10))).unwrap() < Duration::from_secs(10),
+            context.do_io(Some(Duration::from_secs(1000))).unwrap() < Duration::from_secs(1000),
             "timeout while waiting for test client request"
         );
         if request_completed.load(Ordering::Relaxed) {
             break;
         }
     }
-    context.shutdown(Some(Duration::from_secs(0))).unwrap();
+    context.shutdown(Some(Duration::from_secs(5))).unwrap();
 }
 
 pub(crate) fn gen_test_request() -> CoapRequest {
