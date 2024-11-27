@@ -7,12 +7,14 @@
  * See the README as well as the LICENSE file for more information.
  */
 
-use crate::error::{MessageConversionError, MessageTypeError, OptionValueError};
-use crate::message::{CoapMessage, CoapMessageCommon, CoapOption, construct_path_string, construct_query_string};
-use crate::protocol::{
-    CoapMessageCode, CoapMessageType, CoapOptionType, CoapResponseCode, ContentFormat, Echo, ETag, MaxAge, Observe,
+use crate::{
+    error::{MessageConversionError, MessageTypeError, OptionValueError},
+    message::{construct_path_string, construct_query_string, CoapMessage, CoapMessageCommon, CoapOption},
+    protocol::{
+        CoapMessageCode, CoapMessageType, CoapOptionType, CoapResponseCode, ContentFormat, ETag, Echo, MaxAge, Observe,
+    },
+    types::CoapUri,
 };
-use crate::types::CoapUri;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct CoapResponse {
@@ -171,7 +173,14 @@ impl CoapResponse {
             self.pdu.add_option(CoapOption::ETag(etag));
         }
         if let Some(observe) = self.observe {
-            self.pdu.add_option(CoapOption::Observe(observe));
+            // TODO this is quite an ugly workaround for the fact the server-side sessions alredy
+            //      come with this option set and we add a duplicate here otherwise.
+            //      The proper solution would be to rewrite the entire message handling API to
+            //      no longer create intermediate copies (and use the underlying structs directly),
+            //      which is currently planned in GitHub issue #21.
+            if !self.pdu.options.contains(&CoapOption::Observe(observe)) {
+                self.pdu.add_option(CoapOption::Observe(observe));
+            }
         }
         self.pdu
     }
@@ -179,7 +188,7 @@ impl CoapResponse {
     /// Parses the given [CoapMessage] into a CoapResponse.
     ///
     /// Returns a [MessageConversionError] if the provided PDU cannot be parsed into a response.
-    pub fn from_message(pdu: CoapMessage) -> Result<CoapResponse, MessageConversionError> {
+    pub fn from_message(mut pdu: CoapMessage) -> Result<CoapResponse, MessageConversionError> {
         let mut location_path = None;
         let mut location_query = None;
         let mut max_age = None;
