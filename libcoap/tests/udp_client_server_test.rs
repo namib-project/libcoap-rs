@@ -7,14 +7,14 @@
  * See the README as well as the LICENSE file for more information.
  */
 
-use libcoap_rs::session::CoapClientSession;
+use std::time::Duration;
+
 use libcoap_rs::{
     message::CoapMessageCommon,
     protocol::{CoapMessageCode, CoapResponseCode},
-    session::CoapSessionCommon,
+    session::{CoapClientSession, CoapSessionCommon},
     CoapContext,
 };
-use std::time::Duration;
 
 mod common;
 
@@ -22,7 +22,7 @@ mod common;
 pub fn basic_client_server_request() {
     let server_address = common::get_unused_server_addr();
 
-    let server_handle = common::spawn_test_server(move |mut context| {
+    let server_handle = common::spawn_test_server(move |mut context, _request_complete| {
         context.add_endpoint_udp(server_address).unwrap();
         context
     });

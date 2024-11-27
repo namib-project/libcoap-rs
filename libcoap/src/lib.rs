@@ -20,7 +20,7 @@
 //!     - [x] DTLS
 //!         - [x] DTLS using PSK
 //!         - [x] DTLS using PKI/RPK
-//!     - [ ] TCP
+//!     - [x] TCP
 //!     - [ ] TLS
 //!     - [ ] OSCORE
 //!     - [ ] WebSockets
