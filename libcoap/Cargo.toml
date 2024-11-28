@@ -16,6 +16,11 @@ authors = ["Hugo Hakim Damer <hdamer@uni-bremen.de>"]
 categories = ["api-bindings", "network-programming", "embedded"]
 keywords = ["coap", "libcoap"]
 resolver = "2"
+# libcoap-rs currently does not have mechanisms for passing unwinds through the FFI layer
+# in libcoap-initiated callbacks. Therefore, we need the behavior described in
+# https://blog.rust-lang.org/2024/09/05/Rust-1.81.0.html#abort-on-uncaught-panics-in-extern-c-functions
+# to avoid soundness issues.
+rust-version = "1.81.0"
 
 [features]
 default = ["dtls-psk", "tcp", "dtls_openssl", "vendored", "libcoap-sys/default"]
