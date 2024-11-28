@@ -13,7 +13,7 @@
 use std::ffi::CString;
 #[cfg(dtls)]
 use std::ptr::NonNull;
-use std::{any::Any, ffi::c_void, fmt::Debug, net::SocketAddr, ops::Sub, sync::Once, time::Duration};
+use std::{any::Any, ffi::c_void, fmt::Debug, net::SocketAddr, sync::Once, time::Duration};
 #[cfg(all(feature = "dtls-pki", unix))]
 use std::{os::unix::ffi::OsStrExt, path::Path};
 
@@ -25,9 +25,10 @@ use libcoap_sys::{
     coap_context_get_max_handshake_sessions, coap_context_get_max_idle_sessions, coap_context_get_session_timeout,
     coap_context_set_block_mode, coap_context_set_csm_max_message_size, coap_context_set_csm_timeout,
     coap_context_set_keepalive, coap_context_set_max_handshake_sessions, coap_context_set_max_idle_sessions,
-    coap_context_set_session_timeout, coap_context_t, coap_event_t, coap_free_context, coap_get_app_data,
-    coap_io_process, coap_new_context, coap_proto_t, coap_register_event_handler, coap_register_response_handler,
-    coap_set_app_data, coap_startup_with_feature_checks, COAP_BLOCK_SINGLE_BODY, COAP_BLOCK_USE_LIBCOAP, COAP_IO_WAIT,
+    coap_context_set_session_timeout, coap_context_t, coap_endpoint_t, coap_event_t, coap_free_context,
+    coap_get_app_data, coap_io_process, coap_new_context, coap_proto_t, coap_register_event_handler,
+    coap_register_response_handler, coap_set_app_data, coap_startup_with_feature_checks, COAP_BLOCK_SINGLE_BODY,
+    COAP_BLOCK_USE_LIBCOAP, COAP_IO_WAIT,
 };
 
 #[cfg(any(feature = "dtls-rpk", feature = "dtls-pki"))]
@@ -346,14 +347,19 @@ impl CoapContext<'_> {
     /// Performs a controlled shutdown of the CoAP context.
     ///
     /// This will perform all still outstanding IO operations until [coap_can_exit()] confirms that
-    /// the context has no more outstanding IO and can be dropped without interrupting sessions.
+    /// the context has no more outstanding IO and can be dropped.
     pub fn shutdown(mut self, exit_wait_timeout: Option<Duration>) -> Result<(), IoProcessError> {
         let mut remaining_time = exit_wait_timeout;
         // Send remaining packets until we can cleanly shutdown.
         // SAFETY: Provided context is always valid as an invariant of this struct.
-        while unsafe { coap_can_exit(self.inner.borrow_mut().raw_context) } == 0 {
+        let raw_context = self.inner.borrow_mut().raw_context;
+
+        while unsafe { coap_can_exit(raw_context) } == 0 {
             let spent_time = self.do_io(remaining_time)?;
-            remaining_time = remaining_time.map(|v| v.sub(spent_time));
+            remaining_time = remaining_time.map(|v| v.saturating_sub(spent_time));
+            if remaining_time.is_some_and(|v| v.is_zero()) {
+                break;
+            }
         }
         Ok(())
     }
@@ -652,8 +658,12 @@ impl Drop for CoapContextInner<'_> {
         for session in std::mem::take(&mut self.server_sessions).into_iter() {
             session.drop_exclusively();
         }
-        // Clear endpoints because coap_free_context() would free their underlying raw structs.
-        self.endpoints.clear();
+        // Decompose endpoint wrappers into raw values (can't drop them directly, as doing so might
+        // not work as long as server-side sessions are still active).
+        let _endpoints: Vec<*mut coap_endpoint_t> = std::mem::take(&mut self.endpoints)
+            .into_iter()
+            .map(|v| v.into_raw())
+            .collect();
         // Extract reference to CoapContextInner from raw context and drop it.
         // SAFETY: Value is set upon construction of the inner context and never deleted.
         unsafe {
