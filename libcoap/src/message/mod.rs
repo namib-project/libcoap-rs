@@ -15,35 +15,32 @@
 //! process of creating requests and responses and setting the appropriate options ([CoapRequest]
 //! and [CoapResponse]).
 
-use std::{ffi::c_void, mem::MaybeUninit, slice::Iter};
-use std::fmt::Write;
-
-use num_traits::FromPrimitive;
+use std::{ffi::c_void, fmt::Write, mem::MaybeUninit, slice::Iter};
 
 use libcoap_sys::{
-    coap_add_data, coap_add_data_large_request, coap_add_optlist_pdu, coap_add_token, coap_delete_optlist,
-    coap_delete_pdu, coap_get_data, coap_insert_optlist, coap_new_optlist, coap_opt_length, coap_opt_t, coap_opt_value,
-    coap_option_iterator_init, coap_option_next, coap_option_num_t, coap_optlist_t, coap_pdu_get_code,
-    coap_pdu_get_mid, coap_pdu_get_token, coap_pdu_get_type, coap_pdu_init, coap_pdu_set_code, coap_pdu_set_type,
-    coap_pdu_t, coap_session_t,
+    coap_add_data, coap_add_data_large_request, coap_add_optlist_pdu, coap_add_token, coap_check_option,
+    coap_delete_optlist, coap_delete_pdu, coap_get_data, coap_insert_optlist, coap_new_optlist, coap_opt_iterator_t,
+    coap_opt_length, coap_opt_t, coap_opt_value, coap_option_iterator_init, coap_option_next, coap_option_num_t,
+    coap_optlist_t, coap_pdu_get_code, coap_pdu_get_mid, coap_pdu_get_token, coap_pdu_get_type, coap_pdu_init,
+    coap_pdu_set_code, coap_pdu_set_type, coap_pdu_t, coap_session_t,
 };
+use num_traits::FromPrimitive;
 pub use request::CoapRequest;
 pub use response::CoapResponse;
 
 use crate::{
+    context::ensure_coap_started,
     error::{MessageConversionError, OptionValueError},
     protocol::{
-        Block, CoapMatch, CoapMessageCode, CoapMessageType, CoapOptionNum, CoapOptionType, ContentFormat, ETag,
-        HopLimit, MaxAge, NoResponse, Observe, ProxyScheme, ProxyUri, Size, UriHost, UriPath, UriPort, UriQuery,
+        Block, CoapMatch, CoapMessageCode, CoapMessageType, CoapOptionNum, CoapOptionType, ContentFormat, ETag, Echo,
+        HopLimit, MaxAge, NoResponse, Observe, Oscore, ProxyScheme, ProxyUri, RequestTag, Size, UriHost, UriPath,
+        UriPort, UriQuery,
     },
     session::CoapSessionCommon,
-    types::CoapMessageId,
-};
-use crate::context::ensure_coap_started;
-use crate::protocol::{Echo, Oscore, RequestTag};
-use crate::types::{
-    decode_var_len_u16, decode_var_len_u32, decode_var_len_u8, encode_var_len_u16, encode_var_len_u32,
-    encode_var_len_u8,
+    types::{
+        decode_var_len_u16, decode_var_len_u32, decode_var_len_u8, encode_var_len_u16, encode_var_len_u32,
+        encode_var_len_u8, CoapMessageId,
+    },
 };
 
 pub mod request;
@@ -424,12 +421,11 @@ impl CoapMessage {
     ///
     /// The caller is responsible for freeing the returned PDU, either by calling [coap_send()](libcoap_sys::coap_send()) or
     /// [coap_delete_pdu()].
-    pub fn into_raw_pdu<'a, S: CoapSessionCommon<'a> + ?Sized>(
+    pub fn into_raw_pdu<'a, S: CoapSessionCommon<'a>+?Sized>(
         mut self,
         session: &S,
     ) -> Result<*mut coap_pdu_t, MessageConversionError> {
         let message = self.as_message_mut();
-
         // SAFETY: all values are valid, cannot cause UB.
         let pdu = unsafe {
             coap_pdu_init(
@@ -466,7 +462,7 @@ impl CoapMessage {
     ///
     /// # Safety
     /// raw_pdu must point to a valid mutable instance of coap_pdu_t.
-    pub(crate) unsafe fn apply_to_raw_pdu<'a, S: CoapSessionCommon<'a> + ?Sized>(
+    pub(crate) unsafe fn apply_to_raw_pdu<'a, S: CoapSessionCommon<'a>+?Sized>(
         mut self,
         raw_pdu: *mut coap_pdu_t,
         session: &S,
@@ -475,14 +471,49 @@ impl CoapMessage {
         coap_pdu_set_type(raw_pdu, self.type_.to_raw_pdu_type());
         coap_pdu_set_code(raw_pdu, self.code.to_raw_pdu_code());
         let message = self.as_message_mut();
-        let token: &[u8] = message.token.as_ref().ok_or(MessageConversionError::MissingToken)?;
-        if coap_add_token(raw_pdu, token.len(), token.as_ptr()) == 0 {
-            return Err(MessageConversionError::Unknown);
+        let cur_token = coap_pdu_get_token(raw_pdu);
+
+        let cur_token = (cur_token.length > 0).then(|| core::slice::from_raw_parts(cur_token.s, cur_token.length));
+        // Return error if no token was supplied.
+        if cur_token.is_none() && message.token.is_none() {
+            return Err(MessageConversionError::MissingToken);
         }
+        // Update token if necessary.
+        if message.token.is_some() && cur_token != message.token.as_deref() {
+            let token = message.token.as_ref().unwrap();
+            if coap_add_token(raw_pdu, token.len(), token.as_ptr()) == 0 {
+                return Err(MessageConversionError::Unknown);
+            }
+        }
+
         let mut optlist = None;
         let option_iter = std::mem::take(&mut message.options).into_iter();
         for option in option_iter {
             let optnum = option.number();
+            // TODO this is a really ugly workaround, remove this as soon as we have builder-like
+            //      interfaces for PDUs.
+            //      Do not duplicate Observe option as reapplying to the same PDU would cause the option
+            //      to be added twice otherwise.
+            if let CoapOption::Observe(option) = option {
+                // Check if Observe has already been set.
+                let mut scratch: MaybeUninit<coap_opt_iterator_t> = MaybeUninit::uninit();
+                let cur_option = unsafe { coap_check_option(raw_pdu, optnum, scratch.as_mut_ptr()) };
+                if !cur_option.is_null() {
+                    // Observe has already been set, get value and compare with the one set for this message.
+                    let cur_value = unsafe {
+                        core::slice::from_raw_parts(coap_opt_value(cur_option), coap_opt_length(cur_option) as usize)
+                    };
+                    let cur_value = decode_var_len_u32(cur_value);
+                    // If Observe option values differ, return an appropriate error.
+                    if option != cur_value {
+                        return Err(MessageConversionError::NonRepeatableOptionRepeated(
+                            CoapOptionType::Observe,
+                        ));
+                    }
+                    // Otherwise, skip adding the option value to the optlist to avoid a duplicate.
+                    continue;
+                }
+            }
             let entry = option
                 .into_optlist_entry()
                 .map_err(|e| MessageConversionError::InvalidOptionValue(CoapOptionType::try_from(optnum).ok(), e))?;

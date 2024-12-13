@@ -56,11 +56,21 @@ impl CoapEndpoint {
             Ok(Self { raw_endpoint: endpoint })
         }
     }
+
+    /// Decomposes this endpoint into its raw version.
+    ///
+    /// Note that the caller is now responsible for freeing the endpoint (either by calling
+    /// coap_free_endpoint() or calling coap_free_context() on the associated context).
+    pub(crate) fn into_raw(mut self) -> *mut coap_endpoint_t {
+        std::mem::replace(&mut self.raw_endpoint, std::ptr::null_mut())
+    }
 }
 
 impl Drop for CoapEndpoint {
     fn drop(&mut self) {
         // SAFETY: Raw endpoint is guaranteed to exist for as long as the container exists.
-        unsafe { coap_free_endpoint(self.raw_endpoint) }
+        if !self.raw_endpoint.is_null() {
+            unsafe { coap_free_endpoint(self.raw_endpoint) }
+        }
     }
 }
