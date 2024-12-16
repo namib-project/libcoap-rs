@@ -25,4 +25,4 @@ group_imports = "StdExternalCrate"
 reorder_impl_items = true
 
 # Determines if + or = are wrapped in spaces in the punctuation of types
-type_punctuation_density = "Compressed"
+type_punctuation_density = "Wide"
