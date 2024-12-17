@@ -1,4 +1,4 @@
-name: Code Analysis
+name: Generate and Provide Reports
 
 # WARNING: This Workflow is executed with the workflow_run trigger, which means that 
 #          it is run in the context of the target/upstream repository and granted *write access*
@@ -145,10 +145,8 @@ jobs:
     name: pr-comment
     runs-on: ubuntu-latest
     if: ${{ always() && github.event.workflow_run.event == 'pull_request' }}
-    needs: [ lint, coverage-report, fmt ]
+    needs: [ fmt ]
     env:
-      LINT_OUTPUT: ${{ needs.lint.result }}
-      FMT_OUTPUT: ${{ needs.fmt.result }}
       COV_OUTPUT: ${{ needs.coverage-report.outputs.report }}
     steps:
       # See https://github.com/orgs/community/discussions/25220#discussioncomment-11316244

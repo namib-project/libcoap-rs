@@ -70,7 +70,7 @@ use std::fmt::Debug;
 /// The available enum variants depend on the enabled DTLS features (`dtls-psk`, `dtls-pki`, and/or
 /// `dtls-rpk`).
 #[derive(Clone, Debug)]
-pub enum ClientCryptoContext< 'a > {
+pub enum ClientCryptoContext<'a> {
     /// Context for a client-side DTLS session with pre-shared keys.
     #[cfg(feature = "dtls-psk")]
     Psk(psk::ClientPskContext<'a>),

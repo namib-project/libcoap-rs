@@ -646,7 +646,6 @@ impl Drop for CoapContextInner<'_> {
         // [as_mut_context()] contracts (we check validity of the pointer on construction).
         // Passing a NULL handler/None to coap_register_event_handler() is allowed as per the
         // documentation.
-        let a = 1.clone();
         unsafe {
             coap_register_event_handler(self.raw_context, None);
         }
