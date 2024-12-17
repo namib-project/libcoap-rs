@@ -80,10 +80,6 @@ jobs:
   lint:
     name: lint
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        crate: [ libcoap-sys, libcoap-rs ]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -91,32 +87,16 @@ jobs:
       - uses: reviewdog/action-setup@v1
         with:
           reviewdog_version: latest
-      - uses: dtolnay/rust-toolchain@stable
+      # Nightly required for rustfmt's --emit=checkstyle argument
+      - uses: dtolnay/rust-toolchain@nightly
         with:
-          components: clippy
+          components: clippy, rustfmt
       - uses: baptiste0928/cargo-install@v3
         with:
           crate: clippy-reviewdog-filter
-      - env:
+      - name: Run Linter
+        env:
           REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: reviewdog -reporter=github-pr-check -fail-level=any
+        run: |
+          reviewdog -reporter=github-pr-check -fail-level=any -tee
 
-  fmt:
-    name: rustfmt
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        crate: [ libcoap-sys, libcoap-rs ]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-      - run: cargo fmt -p ${{ matrix.crate }}
-      - name: Generate PR suggestions from rustfmt changes
-        uses: reviewdog/action-suggester@v1
-        with:
-          tool_name: rustfmt
-          fail_on_error: true
-          reviewdog_flags: -reporter=github-pr-check
