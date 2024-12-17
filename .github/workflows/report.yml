@@ -1,0 +1,206 @@
+name: Code Analysis
+
+# WARNING: This Workflow is executed with the workflow_run trigger, which means that 
+#          it is run in the context of the target/upstream repository and granted *write access*
+#          to the target/upstream repository.
+#          It should *only* be used for actions that require write access (e.g., to generate/deploy 
+#          the documentation/coverage report to GitHub Pages or to create a PR comment) and *must 
+#          never* execute code contained in the repository.
+
+on:
+  workflow_run:
+    workflows: ["Test and Analyze"]
+    types:
+      - completed
+
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_TEST_TIME_UNIT: 60,120
+  RUST_TEST_TIME_INTEGRATION: 60,120
+  RUST_TEST_TIME_DOCTEST: 60,120
+
+jobs:
+  #lint:
+  #  name: lint
+  #  runs-on: ubuntu-latest
+  #  env: 
+  #    BRANCH: |-
+  #      ${{
+  #        (github.event.workflow_run.head_repository.owner.login != github.event.workflow_run.repository.owner.login)
+  #          && format('{0}:{1}', github.event.workflow_run.head_repository.owner.login, github.event.workflow_run.head_branch)
+  #          || github.event.workflow_run.head_branch
+  #      }}
+  #  strategy:
+  #    matrix:
+  #      crate: [ libcoap-sys, libcoap-rs ]
+  #  steps:
+  #    - uses: actions/checkout@v4
+  #      with:
+  #        submodules: true
+  #        ref: ${{ env.BRANCH }}
+  #    - uses: reviewdog/action-setup@v1
+  #      with:
+  #        reviewdog_version: latest
+  #    - uses: dtolnay/rust-toolchain@stable
+  #      with:
+  #        components: clippy
+  #    - uses: baptiste0928/cargo-install@v3
+  #      with:
+  #        crate: clippy-reviewdog-filter
+  #    - env:
+  #        REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #      run: reviewdog -reporter=github-pr-check -fail-level=any
+
+  #fmt:
+  #  name: rustfmt
+  #  runs-on: ubuntu-latest
+  #  env: 
+  #    BRANCH: |-
+  #      ${{
+  #        (github.event.workflow_run.head_repository.owner.login != github.event.workflow_run.repository.owner.login)
+  #          && format('{0}:{1}', github.event.workflow_run.head_repository.owner.login, github.event.workflow_run.head_branch)
+  #          || github.event.workflow_run.head_branch
+  #      }}
+  #  strategy:
+  #    fail-fast: false
+  #    matrix:
+  #      crate: [ libcoap-sys, libcoap-rs ]
+  #  steps:
+  #    - uses: actions/checkout@v4
+  #      with:
+  #        ref: ${{ env.BRANCH }}
+  #    - uses: dtolnay/rust-toolchain@stable
+  #      with:
+  #        components: rustfmt
+  #    - run: cargo fmt -p ${{ matrix.crate }}
+  #    - name: Generate PR suggestions from rustfmt changes
+  #      uses: reviewdog/action-suggester@v1
+  #      with:
+  #        tool_name: rustfmt
+  #        fail_on_error: true
+  #        reviewdog_args: -reporter=github-pr-check
+
+  coverage-report:
+    name: coverage-report
+    runs-on: ubuntu-latest
+    env:      
+      LLVM_PROFILE_FILE: './coverage-data/coverage/libcoap-rs-%p-%m.profraw'
+      BRANCH: |-
+        ${{
+          (github.event.workflow_run.head_repository.owner.login != github.event.workflow_run.repository.owner.login)
+            && format('{0}:{1}', github.event.workflow_run.head_repository.owner.login, github.event.workflow_run.head_branch)
+            || github.event.workflow_run.head_branch
+        }}
+    outputs:
+      report: ${{ steps.cov-report.outputs.summary }}
+    permissions:
+      actions: write
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          ref: ${{ env.BRANCH }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: test-coverage-data-*
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          merge-multiple: true
+          path: coverage-data
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: llvm-tools, llvm-tools-preview
+      - uses: baptiste0928/cargo-install@v3
+        with:
+          crate: grcov
+      - run: mkdir -p ./coverage
+      - run: grcov coverage-data/coverage/ -s . --binary-path ./coverage-data/test-binaries --commit-sha ${GITHUB_SHA} --ignore-not-existing --ignore "/*" -t markdown,html --branch --log-level TRACE -o ./coverage/
+      - id: cov-report
+        name: "Set coverage report as job output"
+        run: |
+          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+          {
+            echo "summary<<$EOF"
+            cat ./coverage/markdown.md
+            echo "$EOF"
+          } >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            ./coverage
+      # Deploy to GitHub Pages only if the PR is not from a forked repository.
+      # For security reasons, we don't want PRs from forked PRs to upload coverage data to our GitHub Pages.
+      - if: ${{ github.event.workflow_run.head_repository.owner.login == github.event.workflow_run.repository.owner.login }}
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./coverage/html
+          publish_branch: _gh_pages
+          destination_dir: coverage/${{ env.BRANCH }}
+
+  pr-comment:
+    name: pr-comment
+    runs-on: ubuntu-latest
+    if: ${{ always() && github.event.workflow_run.event == 'pull_request' }}
+    needs: [ lint, coverage-report, fmt ]
+    env:
+      LINT_OUTPUT: ${{ needs.lint.result }}
+      FMT_OUTPUT: ${{ needs.fmt.result }}
+      COV_OUTPUT: ${{ needs.coverage-report.outputs.report }}
+    steps:
+      # See https://github.com/orgs/community/discussions/25220#discussioncomment-11316244
+      - name: 'Get PR context'
+        id: pr-context
+        env:
+          # Token required for GH CLI:
+          GH_TOKEN: ${{ github.token }}
+          # Best practice for scripts is to reference via ENV at runtime. Avoid using the expression syntax in the script content directly:
+          PR_TARGET_REPO: ${{ github.repository }}
+          PR_TARGET_REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+          # If the PR is from a fork, prefix it with `<owner-login>:`, otherwise only the PR branch name is relevant:
+          PR_BRANCH: |-
+            ${{
+              (github.event.workflow_run.head_repository.owner.login != github.event.workflow_run.repository.owner.login)
+                && format('{0}:{1}', github.event.workflow_run.head_repository.owner.login, github.event.workflow_run.head_branch)
+                || github.event.workflow_run.head_branch
+            }}
+        # Query the PR number by repo + branch, then assign to step output:
+        run: |
+          gh pr view --repo "${PR_TARGET_REPO}" "${PR_BRANCH}" \
+             --json 'number' --jq '"number=\(.number)"' \
+             >> "${GITHUB_OUTPUT}"
+      - name: "Generate Markdown Report"
+        run: |
+          # Snippet taken from https://github.com/marocchino/sticky-pull-request-comment#append-after-comment-every-time-it-runs
+          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+          {
+            echo "report<<$EOF"
+            echo "# Workflow Status Report"
+            echo "Generated for commit ${{ github.sha }} on `date -u`."
+            echo ""
+            echo "[![Test and Analyze](${PR_TARGET_REPO_URL}/actions/workflows/test.yml/badge.svg?branch=${GITHUB_HEAD_REF}&hash=${{ github.sha }})](${PR_TARGET_REPO_URL}/actions/workflows/test.yml?query=branch%3A${PR_BRANCH})"
+            echo ""
+            echo "In case of failure, clippy warnings and rustfmt changes (if any) will be indicated as CI check warnings in the file comparison view."
+            echo ""
+            echo "## Code Coverage Report"
+            echo "[![Coverage](https://namib-project.github.io/libcoap-rs/coverage/${{ github.event.workflow_run.head_branch }}/badges/flat.svg?hash=${{ github.sha }})](https://namib-project.github.io/libcoap-rs/coverage/${{ github.event.workflow_run.head_branch }})"
+            echo ""
+            echo "<emph>Coverage target is 80%.</emph>"
+            echo ""
+            echo "Click on the coverage badge to access the full coverage report including a source code view."
+            echo ""
+            echo "<details>"
+            echo "<summary>Expand to view coverage statistics</summary>"
+            echo ""
+            echo "$COV_OUTPUT"
+            echo "</details>"
+            echo "$EOF"
+          } >> "$GITHUB_ENV"
+          
+      - uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          message: ${{ env.report }}
+          number: ${{ steps.pr-context.outputs.number }}
