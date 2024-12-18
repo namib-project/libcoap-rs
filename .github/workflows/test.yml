@@ -21,12 +21,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        crate: [libcoap-rs]
-        dtls_backend: [gnutls]
-        rust_version: [nightly]
-        #crate: [ libcoap-sys, libcoap-rs ]
-        #dtls_backend: [ openssl, gnutls, tinydtls, mbedtls ]
-        #rust_version: [ msrv, stable, nightly ]
+        crate: [ libcoap-sys, libcoap-rs ]
+        dtls_backend: [ openssl, gnutls, tinydtls, mbedtls ]
+        rust_version: [ msrv, stable, nightly ]
     env:
       LLVM_PROFILE_FILE: "${{ github.workspace }}/coverage-data/coverage/libcoap-rs-%p-%m.profraw"
       RUSTFLAGS: "${{ matrix.rust_version == 'nightly' && '-Cinstrument-coverage -Cpanic=abort -Zpanic_abort_tests' || ' ' }}"

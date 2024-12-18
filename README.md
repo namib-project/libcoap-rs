@@ -1,7 +1,10 @@
 # libcoap-rs
 
-[![CI Status](https://github.com/namib-project/libcoap-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/namib-project/libcoap-rs/actions/workflows/ci.yml)
-![Coverage](https://namib-project.github.io/libcoap-rs/coverage/main/badges/flat.svg)
+[![latest release on crates.io](https://img.shields.io/crates/v/libcoap_rs)](https://crates.io/crates/libcoap-rs)
+[![Documentation (latest release)](https://img.shields.io/badge/docs-latest_release-blue)](https://docs.rs/libcoap_rs/)
+[![Documentation (main)](https://img.shields.io/badge/docs-main-blue)](https://namib-project.github.io/libcoap-rs-docs/docs/main/libcoap_rs/)
+[![Test and Analyze CI Status](https://github.com/namib-project/libcoap-rs/actions/workflows/test.yml/badge.svg)](https://github.com/namib-project/libcoap-rs/actions/workflows/test.yml)
+[![Coverage (main)](https://namib-project.github.io/libcoap-rs-docs/coverage/main/badges/flat.svg)](https://namib-project.github.io/libcoap-rs-docs/coverage/main/)
 
 Raw binding and safe wrapper for the [libcoap CoAP libary](https://github.com/obgm/libcoap).
 
