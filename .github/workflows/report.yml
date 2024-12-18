@@ -1,0 +1,224 @@
+name: Docs, Coverage Report and PR updates
+
+# WARNING: This Workflow is executed with the workflow_run trigger, which means that 
+#          it is run in the context of the target/upstream repository and granted *write access*
+#          to the target/upstream repository.
+#          It *should only* be used for actions that require write access (e.g., to generate/deploy 
+#          the documentation/coverage report to GitHub Pages or to create a PR comment) and *must 
+#          never* execute code contained in the repository.
+
+on:
+  workflow_run:
+    workflows: ["Test and Analyze"]
+    types:
+      - completed
+
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_TEST_TIME_UNIT: 60,120
+  RUST_TEST_TIME_INTEGRATION: 60,120
+  RUST_TEST_TIME_DOCTEST: 60,120
+  BRANCH: |-
+    ${{
+      (github.event.workflow_run.head_repository.owner.login != github.event.workflow_run.repository.owner.login)
+        && format('{0}:{1}', github.event.workflow_run.head_repository.owner.login, github.event.workflow_run.head_branch)
+        || github.event.workflow_run.head_branch
+    }}
+  HEAD_REF: ${{ github.event.workflow_run.head_sha }}
+  REPO_URL: "${{ github.server_url }}/${{ github.repository }}"
+
+concurrency:
+  # env context is not available here, so i just copied the code for env.BRANCH.
+  group: ${{ github.workflow }}-${{
+      (github.event.workflow_run.head_repository.owner.login != github.event.workflow_run.repository.owner.login)
+        && format('{0}:{1}', github.event.workflow_run.head_repository.owner.login, github.event.workflow_run.head_branch)
+        || github.event.workflow_run.head_branch
+    }}
+  cancel-in-progress: true
+
+jobs:
+
+  docs:
+    runs-on: ubuntu-latest
+    outputs:
+      docs_dl: ${{ format('{0}/actions/runs/{1}/artifacts/{2}', env.REPO_URL, github.run_id, steps.upload-docs.outputs.artifact-id) }}
+      docs_url: |-
+        ${{
+          (github.event.workflow_run.head_repository.owner.login == github.event.workflow_run.repository.owner.login) 
+          && format('{0}/docs/{1}/libcoap_rs/', vars.DOCS_AND_COV_URL, env.BRANCH) 
+          || '' 
+        }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          ref: ${{ env.HEAD_REF }}
+      # --all-features uses GNUTLS as backend, must provide it.
+      - uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: libgnutls28-dev libgnutls30
+          version: 1.0
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustc
+      - name: Build documentation
+        run: cargo doc --all-features --no-deps --workspace
+      - uses: actions/upload-artifact@v4
+        id: upload-docs
+        with:
+          name: docs
+          path: |
+            ./target/doc
+      # Deploy to GitHub Pages only if the PR is not from a forked repository.
+      # For security reasons, we don't want PRs from forks to upload coverage data to our GitHub Pages.
+      - if: ${{ github.event.workflow_run.head_repository.owner.login == github.event.workflow_run.repository.owner.login }}
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          publish_dir: ./target/doc
+          publish_branch: main
+          external_repository: ${{ vars.DOCS_AND_COV_REPO }}
+          personal_token: ${{ secrets.DOCS_AND_COV_REPO_TOKEN }}
+          destination_dir: docs/${{ env.BRANCH }}
+
+  coverage-report:
+    name: coverage-report
+    runs-on: ubuntu-latest
+    env:
+      LLVM_PROFILE_FILE: './coverage-data/coverage/libcoap-rs-%p-%m.profraw'
+    outputs:
+      report: ${{ steps.cov-report.outputs.summary }}
+      report_dl: ${{ format('{0}/actions/runs/{1}/artifacts/{2}', env.REPO_URL, github.run_id, steps.upload-cov-report.outputs.artifact-id) }}
+      report_url: |-
+        ${{
+          (github.event.workflow_run.head_repository.owner.login == github.event.workflow_run.repository.owner.login) 
+          && format('{0}/coverage/{1}', vars.DOCS_AND_COV_URL, env.BRANCH) 
+          || '' 
+        }}
+      badge_url: ${{ format('{0}/coverage/{1}/badges/flat.svg', vars.DOCS_AND_COV_URL, env.BRANCH) }}
+    permissions:
+      actions: write
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          ref: ${{ env.HEAD_REF }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: test-coverage-data-*
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          merge-multiple: true
+          path: coverage-data
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: llvm-tools, llvm-tools-preview
+      - uses: baptiste0928/cargo-install@v3
+        with:
+          crate: grcov
+      - run: mkdir -p ./coverage
+      - run: grcov coverage-data/coverage/ -s . --binary-path ./coverage-data/test-binaries --commit-sha ${GITHUB_SHA} --ignore-not-existing --ignore "/*" -t markdown,html --branch --log-level TRACE -o ./coverage/
+      - id: cov-report
+        name: "Set coverage report as job output"
+        run: |
+          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+          {
+            echo "summary<<$EOF"
+            cat ./coverage/markdown.md
+            echo "$EOF"
+          } >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        id: upload-cov-report
+        with:
+          name: coverage-report
+          path: |
+            ./coverage
+      # Deploy to GitHub Pages only if the PR is not from a forked repository.
+      # For security reasons, we don't want PRs from forks to upload coverage data to our GitHub Pages.
+      - if: ${{ github.event.workflow_run.head_repository.owner.login == github.event.workflow_run.repository.owner.login }}
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          publish_dir: ./coverage/html
+          publish_branch: main
+          external_repository: ${{ vars.DOCS_AND_COV_REPO }}
+          personal_token: ${{ secrets.DOCS_AND_COV_REPO_TOKEN }}
+          destination_dir: coverage/${{ env.BRANCH }}
+      # For PRs from forks, only upload the generated badge.
+      - if: ${{ github.event.workflow_run.head_repository.owner.login != github.event.workflow_run.repository.owner.login }}
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          publish_dir: ./coverage/html/badges
+          publish_branch: main
+          external_repository: ${{ vars.DOCS_AND_COV_REPO }}
+          personal_token: ${{ secrets.DOCS_AND_COV_REPO_TOKEN }}
+          destination_dir: coverage/${{ env.BRANCH }}/badges
+
+  pr-comment:
+    name: pr-comment
+    runs-on: ubuntu-latest
+    # All other jobs here should also run on a push to main. This one is specific to pull requests, however.
+    if: ${{ always() && github.event.workflow_run.event == 'pull_request' }}
+    needs: [ coverage-report, docs ]
+    env:
+      COV_OUTPUT: ${{ needs.coverage-report.outputs.report }}
+      COV_DL: ${{ needs.coverage-report.outputs.report_dl }}
+      COV_BADGE: ${{ needs.coverage-report.outputs.badge_url }}
+      DOCS_DL: ${{ needs.docs.outputs.docs_dl }}
+      COV_URL: ${{ needs.coverage-report.outputs.report_url }}
+      DOCS_URL: ${{ needs.docs.outputs.docs_url }}
+      # Token required for GH CLI:
+      GH_TOKEN: ${{ github.token }}
+      # Best practice for scripts is to reference via ENV at runtime. Avoid using the expression syntax in the script content directly:
+      PR_TARGET_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      # See https://github.com/orgs/community/discussions/25220#discussioncomment-11316244
+      - name: 'Get PR context'
+        id: pr-context
+        # Query the PR number by repo + branch, then assign to step output:
+        run: |
+          gh pr view --repo "${PR_TARGET_REPO}" "${BRANCH}" \
+             --json 'number' --jq '"number=\(.number)"' \
+             >> "${GITHUB_OUTPUT}"
+      - name: "Generate Markdown Report"
+        run: |
+          # Snippet taken from https://github.com/marocchino/sticky-pull-request-comment#append-after-comment-every-time-it-runs
+          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+          {
+            echo "report<<$EOF"
+            echo "# Workflow Status Report"
+            echo "Generated for commit ${{ github.sha }} on `date -u`."
+            echo ""
+            echo "[![Test and Analyze](${REPO_URL}/actions/workflows/test.yml/badge.svg?branch=${GITHUB_HEAD_REF}&hash=${{ github.sha }})](${REPO_URL}/actions/workflows/test.yml?query=branch%3A${BRANCH})"
+            echo "[![Docs, Coverage Report and PR Updates](${REPO_URL}/actions/workflows/report.yml/badge.svg?branch=${GITHUB_HEAD_REF}&hash=${{ github.sha }})](${REPO_URL}/actions/workflows/report.yml?query=branch%3A${BRANCH})"
+            echo ""
+            echo "In case of failure, clippy warnings and rustfmt changes (if any) will be indicated as CI check warnings in the file comparison view."
+            echo ""
+            echo "Documentation: ${{ (env.DOCS_URL != '') && format('[Read Online]({0})', env.DOCS_URL) || '' }} [Download](${DOCS_DL})"
+            echo ""
+            echo "Coverage Report: ${{ (env.COV_URL != '') && format('[Read Online]({0})', env.COV_URL) || '' }} [Download](${COV_DL})"
+            echo ""
+            echo "Note: Online versions of documentation and coverage reports may not be available indefinitely, especially after the pull request was merged."
+            echo ""
+            echo "## Code Coverage Report"
+            echo "[![Coverage](${COV_BADGE}?hash=${{ github.sha }})](${{ (env.COV_URL == '') && env.COV_DL || env.COV_URL}})"
+            echo ""
+            echo "<emph>Coverage target is 80%.</emph>"
+            echo ""
+            echo "Click on the coverage badge to access the full coverage report including a source code view."
+            echo ""
+            echo "<details>"
+            echo "<summary>Expand to view coverage statistics</summary>"
+            echo ""
+            echo "$COV_OUTPUT"
+            echo "</details>"
+            echo "$EOF"
+          } >> "$GITHUB_ENV"
+          
+      - uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          message: ${{ env.report }}
+          number: ${{ steps.pr-context.outputs.number }}

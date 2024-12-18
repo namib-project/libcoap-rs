@@ -18,6 +18,8 @@ categories = ["external-ffi-bindings", "network-programming", "embedded"]
 keywords = ["coap", "libcoap"]
 exclude = ["src/libcoap/ext/"]
 resolver = "2"
+# Current reason for MSRV (please update when increasing MSRV): Transient dependency "home" requires Rust 1.81.
+rust-version = "1.81.0"
 
 [features]
 # The default features match those of libcoaps configure script, except for dtls, which is disabled here because it

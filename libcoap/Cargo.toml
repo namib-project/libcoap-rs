@@ -16,6 +16,8 @@ authors = ["Hugo Hakim Damer <hdamer@uni-bremen.de>"]
 categories = ["api-bindings", "network-programming", "embedded"]
 keywords = ["coap", "libcoap"]
 resolver = "2"
+# Current reason for MSRV (please update when increasing MSRV): Transient dependency "home" requires Rust 1.81.
+rust-version = "1.81.0"
 
 [features]
 default = ["dtls-psk", "tcp", "dtls_openssl", "vendored", "libcoap-sys/default"]

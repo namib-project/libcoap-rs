@@ -1,0 +1,99 @@
+name: Test and Analyze
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_TEST_TIME_UNIT: 60,120
+  RUST_TEST_TIME_INTEGRATION: 60,120
+  RUST_TEST_TIME_DOCTEST: 60,120
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        crate: [ libcoap-sys, libcoap-rs ]
+        dtls_backend: [ openssl, gnutls, tinydtls, mbedtls ]
+        rust_version: [ msrv, stable, nightly ]
+    env:
+      LLVM_PROFILE_FILE: "${{ github.workspace }}/coverage-data/coverage/libcoap-rs-%p-%m.profraw"
+      RUSTFLAGS: "${{ matrix.rust_version == 'nightly' && '-Cinstrument-coverage -Cpanic=abort -Zpanic_abort_tests' || ' ' }}"
+      RUSTDOCFLAGS: "${{ matrix.rust_version == 'nightly' && '-C instrument-coverage -Cpanic=abort -Zpanic_abort_tests -Z unstable-options --persist-doctests target/debug/doctests' || ' ' }}"
+      LIBRARY_FEATURES: |
+        ${{ (matrix.crate == 'libcoap-rs' && 'tcp,vendored,rand')
+            || (matrix.crate == 'libcoap-sys' && 'default')
+            || 'vendored'
+        }}
+      DTLS_LIBRARY_FEATURES: |
+        ${{ (matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'tinydtls' && 'tcp,dtls-psk,dtls-rpk,dtls_tinydtls_vendored')
+            || (matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'mbedtls' && 'tcp,dtls-psk,dtls-pki,dtls_mbedtls_vendored')
+            || (matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'openssl' && 'tcp,dtls-psk,dtls-pki,dtls_openssl_vendored')
+            || (matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'gnutls' && 'tcp,dtls-psk,dtls-pki,dtls-rpk,dtls_gnutls')
+            || (matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'tinydtls' && 'dtls,dtls_backend_tinydtls,dtls_backend_tinydtls_vendored')
+            || (matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'mbedtls' && 'dtls,dtls_backend_mbedtls,dtls_backend_mbedtls_vendored')
+            || (matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'openssl' && 'dtls,dtls_backend_openssl,dtls_backend_openssl_vendored')
+            || (matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'gnutls' && 'dtls,dtls_backend_gnutls')
+            || 'vendored'
+        }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rust-src, rustc, rust-std, cargo, llvm-tools, llvm-tools-preview
+          toolchain: ${{ matrix.rust_version == 'msrv' && '1.81' || matrix.rust_version }}
+      - if: matrix.dtls_backend == 'gnutls'
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: libgnutls28-dev libgnutls30
+          version: 1.0
+      - run: cargo test -p ${{ matrix.crate }} --no-default-features --features "$LIBRARY_FEATURES" --features "$DTLS_LIBRARY_FEATURES" --no-fail-fast
+      - if: matrix.rust_version == 'nightly'
+        run: |
+          mkdir -p coverage-data/test-binaries
+          mkdir -p target/debug/doctests
+          cp $(cargo test -p ${{ matrix.crate }} --no-run --message-format=json --no-default-features --features "$LIBRARY_FEATURES" --features "$DTLS_LIBRARY_FEATURES" --no-fail-fast  \
+              | jq -r "select(.profile.test == true) | .filenames[]" \
+              | grep -v dSYM -) coverage-data/test-binaries/
+          cp -r target/debug/doctests coverage-data/test-binaries/
+      - if: matrix.rust_version == 'nightly'
+        uses: actions/upload-artifact@v4
+        with:
+          retention-days: 1
+          name: test-coverage-data-${{ matrix.crate }}-${{ matrix.dtls_backend }}
+          path: |
+            coverage-data/
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: reviewdog/action-setup@v1
+        with:
+          reviewdog_version: latest
+      # Nightly required for rustfmt's --emit=checkstyle argument
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: clippy, rustfmt
+      - uses: baptiste0928/cargo-install@v3
+        with:
+          crate: clippy-reviewdog-filter
+      - name: Run Linter
+        env:
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          reviewdog -reporter=github-pr-check -fail-level=any
+

@@ -395,7 +395,7 @@ impl CoapContext<'_> {
     // }
 
     /// Adds the given resource to the resource pool of this context.
-    pub fn add_resource<D: Any+?Sized+Debug>(&mut self, res: CoapResource<D>) {
+    pub fn add_resource<D: Any + ?Sized + Debug>(&mut self, res: CoapResource<D>) {
         let mut inner_ref = self.inner.borrow_mut();
         inner_ref.resources.push(Box::new(res));
         // SAFETY: raw context is valid, raw resource is also guaranteed to be valid as long as
