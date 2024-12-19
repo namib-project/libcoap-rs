@@ -97,3 +97,26 @@ jobs:
         run: |
           reviewdog -reporter=github-pr-check -fail-level=any
 
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          ref: ${{ env.HEAD_REF }}
+      # --all-features uses GNUTLS as backend, must provide it.
+      - uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: libgnutls28-dev libgnutls30
+          version: 1.0
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustc
+      - name: Build documentation
+        run: cargo doc --all-features --no-deps --workspace
+      - uses: actions/upload-artifact@v4
+        id: upload-docs
+        with:
+          name: docs
+          path: |
+            ./target/doc
