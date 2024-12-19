@@ -18,6 +18,7 @@ categories = ["external-ffi-bindings", "network-programming", "embedded"]
 keywords = ["coap", "libcoap"]
 exclude = ["src/libcoap/ext/"]
 resolver = "2"
+build = "build/main.rs"
 # Current reason for MSRV (please update when increasing MSRV): Transient dependency "home" requires Rust 1.81.
 rust-version = "1.81.0"
 
