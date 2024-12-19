@@ -11,14 +11,16 @@ use std::cell::{Ref, RefMut};
 use std::net::SocketAddr;
 
 use libcoap_sys::{
-    coap_new_client_session, coap_proto_t, coap_register_event_handler, coap_session_get_app_data,
-    coap_session_get_context, coap_session_get_type, coap_session_init_token, coap_session_release,
-    coap_session_set_app_data, coap_session_t, coap_session_type_t, COAP_TOKEN_DEFAULT_MAX,
+    coap_context_oscore_server, coap_new_client_session, coap_new_client_session_oscore, coap_new_oscore_conf,
+    coap_proto_t, coap_register_event_handler, coap_session_get_app_data, coap_session_get_context,
+    coap_session_get_type, coap_session_init_token, coap_session_release, coap_session_set_app_data, coap_session_t,
+    coap_session_type_t, coap_str_const_t, COAP_TOKEN_DEFAULT_MAX,
 };
 
 use super::{CoapSessionCommon, CoapSessionInner, CoapSessionInnerProvider};
 use crate::event::event_handler_callback;
 use crate::mem::{CoapFfiRcCell, DropInnerExclusively};
+use crate::oscore::OscoreConf;
 use crate::prng::coap_prng_try_fill;
 use crate::{context::CoapContext, error::SessionCreationError, types::CoapAddress};
 
@@ -183,6 +185,34 @@ impl CoapClientSession<'_> {
             return Err(SessionCreationError::Unknown);
         }
         // SAFETY: Session was just checked for validity.
+        Ok(CoapClientSession {
+            inner: unsafe { CoapClientSessionInner::new(session) },
+        })
+    }
+
+    /// Crteate an encrypted session with the given peer over UDP using OSCORE
+    ///
+    /// Will return a [SessionCreationError] if libcoap was unable to create a session
+    /// (most lokely because it was not possible to bind to a port).
+    pub fn connect_oscore<'a>(
+        ctx: &mut CoapContext<'a>,
+        addr: SocketAddr,
+        conf: OscoreConf,
+    ) -> Result<CoapClientSession<'a>, SessionCreationError> {
+        // TODO: SAFETY
+        let session = unsafe {
+            coap_new_client_session_oscore(
+                ctx.as_mut_raw_context(),
+                std::ptr::null(),
+                CoapAddress::from(addr).as_raw_address(),
+                coap_proto_t::COAP_PROTO_UDP,
+                OscoreConf::from(conf).as_mut_raw_conf(),
+            )
+        };
+        if session.is_null() {
+            return Err(SessionCreationError::Unknown);
+        }
+        // TODO: SAFETY
         Ok(CoapClientSession {
             inner: unsafe { CoapClientSessionInner::new(session) },
         })

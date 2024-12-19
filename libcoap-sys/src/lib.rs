@@ -89,10 +89,10 @@
 use std::ffi::c_void;
 
 #[allow(unused_imports)]
-use libc::{fd_set, memcmp, sa_family_t, sockaddr, sockaddr_in, sockaddr_in6, socklen_t, time_t};
-#[allow(unused_imports)]
 #[cfg(not(target_os = "espidf"))]
 use libc::epoll_event;
+#[allow(unused_imports)]
+use libc::{fd_set, memcmp, sa_family_t, sockaddr, sockaddr_in, sockaddr_in6, socklen_t, time_t};
 // use dtls backend libraries in cases where they set our linker flags, otherwise cargo will
 // optimize them out.
 #[allow(unused_imports)]
@@ -283,7 +283,7 @@ pub fn coap_startup_with_feature_checks() {
             panic!("Required feature \"websockets\" is not supported by libcoap")
         }
     }
-    #[cfg(not(feature_checks_available))]
+    #[cfg(feature_checks_available)]
     {
         println!("WARNING: coap_startup_with_feature_checks() could not assert the availability of features because the linked version of libcoap is too old (< 4.3.5rc3)!")
     }
@@ -300,7 +300,7 @@ mod tests {
         sync::{Arc, Barrier},
     };
 
-    use libc::{AF_INET, AF_INET6, in6_addr, in_addr, sa_family_t, size_t};
+    use libc::{in6_addr, in_addr, sa_family_t, size_t, AF_INET, AF_INET6};
 
     use crate::{
         coap_pdu_code_t::{COAP_REQUEST_CODE_GET, COAP_RESPONSE_CODE_CONTENT},

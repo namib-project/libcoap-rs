@@ -204,6 +204,7 @@ extern crate core;
 
 pub use context::CoapContext;
 pub use event::CoapEventHandler;
+pub use oscore::OscoreConf;
 pub use resource::{CoapRequestHandler, CoapResource};
 
 mod context;
@@ -213,6 +214,7 @@ pub mod error;
 mod event;
 mod mem;
 pub mod message;
+pub mod oscore;
 pub mod prng;
 pub mod protocol;
 mod resource;
