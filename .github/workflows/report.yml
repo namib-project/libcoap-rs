@@ -39,40 +39,44 @@ concurrency:
 
 jobs:
 
-  docs:
+  docs-deploy:
     runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: write
     outputs:
-      docs_dl: ${{ format('{0}/actions/runs/{1}/artifacts/{2}', env.REPO_URL, github.run_id, steps.upload-docs.outputs.artifact-id) }}
+      docs_dl: ${{ format('{0}/actions/runs/{1}/artifacts/{2}', env.REPO_URL, github.event.workflow_run.id, steps.get-artifact-id.outputs.result) }}
       docs_url: |-
         ${{
           (github.event.workflow_run.head_repository.owner.login == github.event.workflow_run.repository.owner.login) 
+          && (vars.DOCS_AND_COV_REPO != '')
           && format('{0}/docs/{1}/libcoap_rs/', vars.DOCS_AND_COV_URL, env.BRANCH) 
           || '' 
         }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
         with:
-          submodules: true
-          ref: ${{ env.HEAD_REF }}
-      # --all-features uses GNUTLS as backend, must provide it.
-      - uses: awalsh128/cache-apt-pkgs-action@latest
+          pattern: docs
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: coverage-data
+      - name: 'Get artifact ID'
+        id: get-artifact-id
+        uses: actions/github-script@v7
         with:
-          packages: libgnutls28-dev libgnutls30
-          version: 1.0
-      - uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: rustc
-      - name: Build documentation
-        run: cargo doc --all-features --no-deps --workspace
-      - uses: actions/upload-artifact@v4
-        id: upload-docs
-        with:
-          name: docs
-          path: |
-            ./target/doc
+          script: |
+            var artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+               owner: context.repo.owner,
+               repo: context.repo.repo,
+               run_id: ${{ github.event.workflow_run.id }},
+            });
+            var matchArtifact = artifacts.data.artifacts.filter((artifact) => {
+              return artifact.name == "docs"
+            })[0];
+            return matchArtifact.id;
       # Deploy to GitHub Pages only if the PR is not from a forked repository.
       # For security reasons, we don't want PRs from forks to upload coverage data to our GitHub Pages.
-      - if: ${{ github.event.workflow_run.head_repository.owner.login == github.event.workflow_run.repository.owner.login }}
+      - if: ${{ (github.event.workflow_run.head_repository.owner.login == github.event.workflow_run.repository.owner.login) && (vars.DOCS_AND_COV_REPO != '') }}
         uses: peaceiris/actions-gh-pages@v4
         with:
           publish_dir: ./target/doc
@@ -92,10 +96,11 @@ jobs:
       report_url: |-
         ${{
           (github.event.workflow_run.head_repository.owner.login == github.event.workflow_run.repository.owner.login) 
+          && (vars.DOCS_AND_COV_REPO != '')
           && format('{0}/coverage/{1}', vars.DOCS_AND_COV_URL, env.BRANCH) 
           || '' 
         }}
-      badge_url: ${{ format('{0}/coverage/{1}/badges/flat.svg', vars.DOCS_AND_COV_URL, env.BRANCH) }}
+      badge_url: ${{ (vars.DOCS_AND_COV_REPO != '') && format('{0}/coverage/{1}/badges/flat.svg', vars.DOCS_AND_COV_URL, env.BRANCH) || '' }}
     permissions:
       actions: write
       contents: write
@@ -136,7 +141,7 @@ jobs:
             ./coverage
       # Deploy to GitHub Pages only if the PR is not from a forked repository.
       # For security reasons, we don't want PRs from forks to upload coverage data to our GitHub Pages.
-      - if: ${{ github.event.workflow_run.head_repository.owner.login == github.event.workflow_run.repository.owner.login }}
+      - if: ${{ github.event.workflow_run.head_repository.owner.login == github.event.workflow_run.repository.owner.login && (vars.DOCS_AND_COV_REPO != '') }}
         uses: peaceiris/actions-gh-pages@v4
         with:
           publish_dir: ./coverage/html
@@ -145,7 +150,7 @@ jobs:
           personal_token: ${{ secrets.DOCS_AND_COV_REPO_TOKEN }}
           destination_dir: coverage/${{ env.BRANCH }}
       # For PRs from forks, only upload the generated badge.
-      - if: ${{ github.event.workflow_run.head_repository.owner.login != github.event.workflow_run.repository.owner.login }}
+      - if: ${{ github.event.workflow_run.head_repository.owner.login != github.event.workflow_run.repository.owner.login && (vars.DOCS_AND_COV_REPO != '') }}
         uses: peaceiris/actions-gh-pages@v4
         with:
           publish_dir: ./coverage/html/badges
@@ -159,14 +164,14 @@ jobs:
     runs-on: ubuntu-latest
     # All other jobs here should also run on a push to main. This one is specific to pull requests, however.
     if: ${{ always() && github.event.workflow_run.event == 'pull_request' }}
-    needs: [ coverage-report, docs ]
+    needs: [ coverage-report, docs-deploy ]
     env:
       COV_OUTPUT: ${{ needs.coverage-report.outputs.report }}
       COV_DL: ${{ needs.coverage-report.outputs.report_dl }}
       COV_BADGE: ${{ needs.coverage-report.outputs.badge_url }}
-      DOCS_DL: ${{ needs.docs.outputs.docs_dl }}
+      DOCS_DL: ${{ needs.docs-deploy.outputs.docs_dl }}
       COV_URL: ${{ needs.coverage-report.outputs.report_url }}
-      DOCS_URL: ${{ needs.docs.outputs.docs_url }}
+      DOCS_URL: ${{ needs.docs-deploy.outputs.docs_url }}
       # Token required for GH CLI:
       GH_TOKEN: ${{ github.token }}
       # Best practice for scripts is to reference via ENV at runtime. Avoid using the expression syntax in the script content directly:
@@ -204,11 +209,9 @@ jobs:
             echo "Note: Online versions of documentation and coverage reports may not be available indefinitely, especially after the pull request was merged."
             echo ""
             echo "## Code Coverage Report"
-            echo "[![Coverage](${COV_BADGE}?hash=${{ github.sha }})](${{ (env.COV_URL == '') && env.COV_DL || env.COV_URL}})"
+            echo "${{ (env.COV_BADGE != '') && format('[![Coverage]({0}?hash={1})]({2})', env.COV_BADGE, github.sha, ((env.COV_URL == '') && env.COV_DL || env.COV_URL)) }} || ''"
             echo ""
             echo "<emph>Coverage target is 80%.</emph>"
-            echo ""
-            echo "Click on the coverage badge to access the full coverage report including a source code view."
             echo ""
             echo "<details>"
             echo "<summary>Expand to view coverage statistics</summary>"
