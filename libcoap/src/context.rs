@@ -21,12 +21,13 @@ use libc::c_uint;
 #[cfg(feature = "dtls-pki")]
 use libcoap_sys::coap_context_set_pki_root_cas;
 use libcoap_sys::{
-    coap_add_resource, coap_can_exit, coap_context_get_csm_max_message_size, coap_context_get_csm_timeout,
-    coap_context_get_max_handshake_sessions, coap_context_get_max_idle_sessions, coap_context_get_session_timeout,
-    coap_context_set_block_mode, coap_context_set_csm_max_message_size, coap_context_set_csm_timeout,
-    coap_context_set_keepalive, coap_context_set_max_handshake_sessions, coap_context_set_max_idle_sessions,
-    coap_context_set_session_timeout, coap_context_t, coap_event_t, coap_free_context, coap_get_app_data,
-    coap_io_process, coap_new_context, coap_proto_t, coap_register_event_handler, coap_register_response_handler,
+    coap_add_resource, coap_bin_const_t, coap_can_exit, coap_context_get_csm_max_message_size,
+    coap_context_get_csm_timeout, coap_context_get_max_handshake_sessions, coap_context_get_max_idle_sessions,
+    coap_context_get_session_timeout, coap_context_oscore_server, coap_context_set_block_mode,
+    coap_context_set_csm_max_message_size, coap_context_set_csm_timeout, coap_context_set_keepalive,
+    coap_context_set_max_handshake_sessions, coap_context_set_max_idle_sessions, coap_context_set_session_timeout,
+    coap_context_t, coap_event_t, coap_free_context, coap_get_app_data, coap_io_process, coap_new_context,
+    coap_new_oscore_recipient, coap_proto_t, coap_register_event_handler, coap_register_response_handler,
     coap_set_app_data, coap_startup_with_feature_checks, COAP_BLOCK_SINGLE_BODY, COAP_BLOCK_USE_LIBCOAP, COAP_IO_WAIT,
 };
 
@@ -41,6 +42,7 @@ use crate::{
     resource::{CoapResource, UntypedCoapResource},
     session::{session_response_handler, CoapServerSession, CoapSession},
     transport::CoapEndpoint,
+    OscoreConf,
 };
 
 static COAP_STARTUP_ONCE: Once = Once::new();
@@ -376,6 +378,23 @@ impl CoapContext<'_> {
     #[cfg(feature = "tcp")]
     pub fn add_endpoint_tcp(&mut self, addr: SocketAddr) -> Result<(), EndpointCreationError> {
         self.add_endpoint(addr, coap_proto_t::COAP_PROTO_TCP)
+    }
+
+    pub fn add_oscore_conf(&self, seq_initial: u64, oscore_conf_file_path: &str) {
+        let mut oscore_conf: OscoreConf = OscoreConf::new(seq_initial, oscore_conf_file_path);
+        unsafe {
+            coap_context_oscore_server(self.inner.borrow().raw_context, oscore_conf.as_mut_raw_conf());
+        }
+    }
+
+    pub fn add_new_oscore_recipient(&self, recipient_id: &str) {
+        let mut recipient = coap_bin_const_t {
+            length: recipient_id.len(),
+            s: recipient_id.as_ptr(),
+        };
+        unsafe {
+            coap_new_oscore_recipient(self.inner.borrow().raw_context, &mut recipient);
+        }
     }
 
     /// Creates a new DTLS endpoint that is bound to the given address.
