@@ -4,7 +4,7 @@ use std::{ffi::CStr, fs, os::raw::c_void};
 // Represents a oscore conf object which stores the underlying
 // coap_oscore_conf_t strcut.
 pub struct OscoreConf {
-    conf: coap_oscore_conf_t,
+    conf: *mut coap_oscore_conf_t,
 }
 
 impl OscoreConf {
@@ -18,15 +18,15 @@ impl OscoreConf {
         let cvoid: *mut c_void = 0 as *const u64 as *mut c_void;
 
         // TODO: SECURITY
-        let oscore_conf = unsafe { coap_new_oscore_conf(conf, seq_func, cvoid, seq_initial) };
+        let mut oscore_conf = unsafe { coap_new_oscore_conf(conf, seq_func, cvoid, seq_initial) };
 
         // TODO: SECURITY
         OscoreConf {
-            conf: unsafe { *oscore_conf },
+            conf: unsafe { oscore_conf },
         }
     }
     // TODO: SECURITY
-    pub fn as_mut_raw_conf(&mut self) -> &mut coap_oscore_conf_t {
-        &mut self.conf
+    pub fn as_mut_raw_conf(&mut self) -> *mut coap_oscore_conf_t {
+        self.conf
     }
 }

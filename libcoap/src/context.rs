@@ -380,20 +380,21 @@ impl CoapContext<'_> {
         self.add_endpoint(addr, coap_proto_t::COAP_PROTO_TCP)
     }
 
-    pub fn add_oscore_conf(&self, seq_initial: u64, oscore_conf_file_path: &str) {
+    pub fn add_oscore_conf(&mut self, seq_initial: u64, oscore_conf_file_path: &str) {
         let mut oscore_conf: OscoreConf = OscoreConf::new(seq_initial, oscore_conf_file_path);
+        let mut inner_ref = self.inner.borrow_mut();
         unsafe {
-            coap_context_oscore_server(self.inner.borrow().raw_context, oscore_conf.as_mut_raw_conf());
-        }
+            coap_context_oscore_server(inner_ref.raw_context, oscore_conf.as_mut_raw_conf());
+        };
     }
 
-    pub fn add_new_oscore_recipient(&self, recipient_id: &str) {
+    pub fn add_new_oscore_recipient(&mut self, recipient_id: &str) {
         let mut recipient = coap_bin_const_t {
             length: recipient_id.len(),
             s: recipient_id.as_ptr(),
         };
         unsafe {
-            coap_new_oscore_recipient(self.inner.borrow().raw_context, &mut recipient);
+            coap_new_oscore_recipient(self.inner.borrow_mut().raw_context, &mut recipient);
         }
     }
 
