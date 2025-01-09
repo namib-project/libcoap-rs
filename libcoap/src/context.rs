@@ -390,12 +390,13 @@ impl CoapContext<'_> {
 
     pub fn add_new_oscore_recipient(&mut self, recipient_id: &str) {
         let mut recipient = coap_bin_const_t {
-            length: recipient_id.len(),
+            length: recipient_id.len()+1, // TODO: Check if this is a valid thing to do
             s: recipient_id.as_ptr(),
         };
+        let mut inner_ref = self.inner.borrow_mut();
         unsafe {
-            coap_new_oscore_recipient(self.inner.borrow_mut().raw_context, &mut recipient);
-        }
+            coap_new_oscore_recipient(inner_ref.raw_context, &mut recipient);
+        };
     }
 
     /// Creates a new DTLS endpoint that is bound to the given address.
