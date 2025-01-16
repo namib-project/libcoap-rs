@@ -1,11 +1,11 @@
 use std::{cell::RefCell, fmt::Debug, rc::Rc};
-
+use std::path::PathBuf;
 use anyhow::{Context, Result};
 use bindgen::{
     callbacks::{IntKind, ParseCallbacks},
     EnumVariation,
 };
-
+use embuild::bindgen::BindgenExt;
 use crate::metadata::{LibcoapDefineInfo, LibcoapFeature};
 
 /// Implementation of bindgen's [ParseCallbacks] that allow reading some meta-information about the
@@ -65,11 +65,14 @@ impl ParseCallbacks for LibcoapDefineParser {
 pub fn generate_libcoap_bindings(
     bindgen_builder_configurator: impl FnOnce(bindgen::Builder) -> Result<bindgen::Builder>,
 ) -> Result<bindgen::Bindings> {
+    let source_root = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR is not set (are we not running as a cargo build script?)"));
     let mut builder = bindgen::Builder::default()
-        .header("src/wrapper.h")
+        .emit_diagnostics()
+        .header(source_root.join("src").join("wrapper.h").to_str().context("unable to convert header path to &str")?.to_string())
         .default_enum_style(EnumVariation::Rust { non_exhaustive: true })
         // Causes invalid syntax for some reason, so we have to disable it.
-        .generate_comments(false)
+        .generate_comments(true)
+        .generate_cstr(true)
         .dynamic_link_require_all(true)
         .allowlist_function("(oscore|coap)_.*")
         .allowlist_type("(oscore|coap)_.*")

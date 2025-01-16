@@ -57,7 +57,18 @@ impl BuildSystem for PkgConfigBuildSystem {
 
     fn generate_bindings(&mut self) -> anyhow::Result<PathBuf> {
         let (define_info, define_parser) = LibcoapDefineParser::new();
-        let bindings = generate_libcoap_bindings(|builder| Ok(builder.parse_callbacks(Box::new(define_parser))))?;
+        let bindings = generate_libcoap_bindings(|builder| {
+            Ok(builder
+                .parse_callbacks(Box::new(define_parser))
+                // If the pkg-config provided include path coincides with a system include directory,
+                // setting the "-I{}" command line argument will not do anything, potentially resulting
+                // in clang using different CoAP headers than provided by pkg-config, e.g., if there
+                // is an old libcoap in /usr/local/include, but the desired one has its headers in /usr/include.
+                // Therefore, we use `-isystem` instead.
+                // See also: https://clang.llvm.org/docs/ClangCommandLineReference.html#cmdoption-clang-I-dir
+                .clang_args(self.library.include_paths.iter().map(|v| format!("-isystem{}", v.display())))
+            )
+        })?;
 
         self.define_info = Some(RefCell::take(&define_info));
 

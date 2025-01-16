@@ -79,7 +79,8 @@ fn main() -> Result<()> {
 
     match build_system.detected_features() {
         Some(detected_features) => {
-            if !bypass_compile_time_feature_checks && !requested_features.is_subset(detected_features) {
+            let compile_time_checkable_features: EnumSet<LibcoapFeature> = requested_features.iter().filter(|feat| feat.define_name().is_some()).collect();
+            if !bypass_compile_time_feature_checks && !compile_time_checkable_features.is_subset(detected_features) {
                 let missing_features = requested_features.difference(detected_features);
                 bail!(
                     concat!(
