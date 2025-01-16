@@ -50,8 +50,10 @@ impl OscoreConf {
             s: oscore_conf_file.as_ptr(),
         };
 
-        // TODO: see function decleration
-        let seq_initial: uint64_t = OscoreConf::read_initial_sequence_number(seq_initial);
+        let seq_initial = match OscoreConf::read_initial_sequence_number() {
+            Some(num) => num,
+            None => seq_initial,
+        };
 
         // TODO: SECURITY
         let mut oscore_conf = unsafe { coap_new_oscore_conf(conf, Some(save_seq_num), ptr::null_mut(), seq_initial) };
@@ -66,20 +68,21 @@ impl OscoreConf {
         self.conf
     }
 
-    // TODO: refactor this, maybe we can return an optional instead
-    fn read_initial_sequence_number(specified_seq_initial: uint64_t) -> uint64_t {
+    fn read_initial_sequence_number() -> Option<u64> {
         let file = match File::open(OSCORE_SEQ_SAFE_FILE_PATH) {
             Ok(f) => f,
-            Err(_) => return specified_seq_initial,
+            Err(_) => return None,
         };
 
         let mut reader = BufReader::new(file);
 
         let mut line = String::new();
         if reader.read_line(&mut line).is_ok() {
-            line.trim().parse().unwrap_or(specified_seq_initial)
-        } else {
-            specified_seq_initial
+            return match line.trim().parse() {
+                Ok(num) => Some(num),
+                Err(_) => None,
+            };
         }
+        None
     }
 }
