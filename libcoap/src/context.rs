@@ -26,9 +26,10 @@ use libcoap_sys::{
     coap_context_get_session_timeout, coap_context_oscore_server, coap_context_set_block_mode,
     coap_context_set_csm_max_message_size, coap_context_set_csm_timeout, coap_context_set_keepalive,
     coap_context_set_max_handshake_sessions, coap_context_set_max_idle_sessions, coap_context_set_session_timeout,
-    coap_context_t, coap_event_t, coap_free_context, coap_get_app_data, coap_io_process, coap_new_context,
-    coap_new_oscore_recipient, coap_proto_t, coap_register_event_handler, coap_register_response_handler,
-    coap_set_app_data, coap_startup_with_feature_checks, COAP_BLOCK_SINGLE_BODY, COAP_BLOCK_USE_LIBCOAP, COAP_IO_WAIT,
+    coap_context_t, coap_delete_oscore_recipient, coap_event_t, coap_free_context, coap_get_app_data, coap_io_process,
+    coap_new_context, coap_new_oscore_recipient, coap_proto_t, coap_register_event_handler,
+    coap_register_response_handler, coap_set_app_data, coap_startup_with_feature_checks, COAP_BLOCK_SINGLE_BODY,
+    COAP_BLOCK_USE_LIBCOAP, COAP_IO_WAIT,
 };
 
 #[cfg(any(feature = "dtls-rpk", feature = "dtls-pki"))]
@@ -388,15 +389,28 @@ impl CoapContext<'_> {
         };
     }
 
+    // TODO: currenctly broken due to lifetimes?
     pub fn add_new_oscore_recipient(&mut self, recipient_id: &str) {
         let mut recipient = coap_bin_const_t {
-            length: recipient_id.len()+1, // TODO: Check if this is a valid thing to do
-            s: recipient_id.as_ptr(),
+            length: recipient_id.len(),
+            s: recipient_id.as_ptr(), // <-  TODO: this
         };
         let mut inner_ref = self.inner.borrow_mut();
         unsafe {
             coap_new_oscore_recipient(inner_ref.raw_context, &mut recipient);
         };
+    }
+
+    // TODO: same as above
+    pub fn delete_oscore_recipient(&mut self, recipient_id: &str) {
+        let mut recipient = coap_bin_const_t {
+            length: recipient_id.len(),
+            s: recipient_id.as_ptr(), // <-  TODO: and this
+        };
+        let mut inner_ref = self.inner.borrow_mut();
+        unsafe {
+            coap_delete_oscore_recipient(inner_ref.raw_context, &mut recipient);
+        }
     }
 
     /// Creates a new DTLS endpoint that is bound to the given address.
