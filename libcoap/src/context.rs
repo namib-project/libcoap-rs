@@ -381,8 +381,7 @@ impl CoapContext<'_> {
         self.add_endpoint(addr, coap_proto_t::COAP_PROTO_TCP)
     }
 
-    pub fn add_oscore_conf(&mut self, seq_initial: u64, oscore_conf_file_path: &str) {
-        let mut oscore_conf: OscoreConf = OscoreConf::new(seq_initial, oscore_conf_file_path);
+    pub fn add_oscore_conf(&mut self, mut oscore_conf: OscoreConf) {
         let mut inner_ref = self.inner.borrow_mut();
         unsafe {
             coap_context_oscore_server(inner_ref.raw_context, oscore_conf.as_mut_raw_conf());
