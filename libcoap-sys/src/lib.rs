@@ -89,10 +89,10 @@
 use std::ffi::c_void;
 
 #[allow(unused_imports)]
-use libc::{fd_set, memcmp, sa_family_t, sockaddr, sockaddr_in, sockaddr_in6, socklen_t, time_t};
-#[allow(unused_imports)]
 #[cfg(not(target_os = "espidf"))]
 use libc::epoll_event;
+#[allow(unused_imports)]
+use libc::{fd_set, memcmp, sa_family_t, sockaddr, sockaddr_in, sockaddr_in6, socklen_t, time_t};
 // use dtls backend libraries in cases where they set our linker flags, otherwise cargo will
 // optimize them out.
 #[allow(unused_imports)]
@@ -105,16 +105,7 @@ use openssl_sys as _;
 #[cfg(feature = "dtls_backend_tinydtls")]
 use tinydtls_sys as _;
 
-#[cfg(target_family = "windows")]
-include!(concat!(env!("OUT_DIR"), "\\bindings.rs"));
-#[cfg(not(target_family = "windows"))]
-include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
-
-#[inline]
-#[cfg(not(non_inlined_coap_send_rst))]
-pub unsafe fn coap_send_rst(session: *mut coap_session_t, request: *const coap_pdu_t) -> coap_mid_t {
-    coap_send_message_type(session, request, crate::coap_pdu_type_t::COAP_MESSAGE_RST)
-}
+include!(env!("BINDINGS_FILE"));
 
 /// Compares instances of coap_str_const_t and/or coap_string_t.
 ///
@@ -300,16 +291,15 @@ mod tests {
         sync::{Arc, Barrier},
     };
 
-    use libc::{AF_INET, AF_INET6, in6_addr, in_addr, sa_family_t, size_t};
+    use libc::{in6_addr, in_addr, sa_family_t, size_t, AF_INET, AF_INET6};
 
+    use super::*;
     use crate::{
         coap_pdu_code_t::{COAP_REQUEST_CODE_GET, COAP_RESPONSE_CODE_CONTENT},
         coap_proto_t::COAP_PROTO_UDP,
         coap_request_t::COAP_REQUEST_GET,
         coap_response_t::COAP_RESPONSE_OK,
     };
-
-    use super::*;
 
     const COAP_TEST_RESOURCE_URI: &str = "test";
     const COAP_TEST_RESOURCE_RESPONSE: &str = "Hello World!";

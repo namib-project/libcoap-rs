@@ -152,6 +152,8 @@ pkg-config = "^0.3.24"
 regex = "1.10.5"
 embuild = { version = "0.32.0", features = ["bindgen", "espidf", "cmake"] }
 version-compare = "0.2.0"
+anyhow = "1.0.94"
+enumset = "1.1.5"
 
 [package.metadata.docs.rs]
 features = ["dtls", "dtls_backend_openssl", "vendored"]
