@@ -39,17 +39,20 @@ default = ["oscore", "ipv4", "ipv6", "af-unix", "tcp", "websockets", "async", "o
 # https://github.com/obgm/libcoap/blob/develop/configure.ac#L494 (gnutls > openssl > mbedtls > tinydtls).
 
 
-# Corresponding libcoap configure flag: --with-openssl
-dtls_backend_openssl = ["dtls", "dep:openssl-sys"]
-dtls_backend_openssl_vendored = ["dtls_backend_openssl", "openssl-sys/vendored"]
-# Corresponding libcoap configure flag: --with-gnutls
-dtls_backend_gnutls = ["dtls"]
-# Corresponding libcoap configure flag: --with-mbedtls
-dtls_backend_mbedtls = ["dtls"] # can't use mbedtls-sys-auto to generate linker flags here, as the crate doesn't support mbedtls >= 3.0.0
-dtls_backend_mbedtls_vendored = ["dep:mbedtls-sys-auto", "dtls_backend_mbedtls"]
-# Corresponding libcoap configure flags: --with-tinydtls --without-submodule-tinydtls
-dtls_backend_tinydtls = ["dtls", "dep:tinydtls-sys", "tinydtls-sys/ecc", "tinydtls-sys/psk"]
-dtls_backend_tinydtls_vendored = ["dtls_backend_tinydtls", "tinydtls-sys/vendored"]
+# Allows using the version of OpenSSL provided by openssl-sys instead of a system-provided one.
+# Note that this does not enforce the use of OpenSSL in libcoap, see the crate-level documentation for more info.
+dtls-openssl-sys = ["dep:openssl-sys"]
+# Tell the openssl-sys version that is possibly used by libcoap-sys to use the vendored version of its library.
+dtls-openssl-sys-vendored = ["dtls-openssl-sys", "openssl-sys/vendored"]
+# Allows using the version of MbedTLS provided by mbedtls-sys-auto instead of a system-provided one.
+# Note that this does not enforce the use of MbedTLS in libcoap, see the crate-level documentation for more info.
+dtls-mbedtls-sys = ["dep:mbedtls-sys-auto"]
+# Allows using the version of TinyDTLS provided by tinydtls-sys instead of a system-provided one.
+# Note that this does not enforce the use of TinyDTLS in libcoap, see the crate-level documentation for more info.
+dtls-tinydtls-sys = ["dep:tinydtls-sys", "tinydtls-sys/ecc", "tinydtls-sys/psk"]
+# Tell the tinydtls-sys version that is possibly used by libcoap-sys to use the vendored version of its library.
+dtls-tinydtls-sys-vendored = ["dtls-tinydtls-sys", "tinydtls-sys/vendored"]
+
 # Enabling this feature will force libcoap-sys to be built with and statically linked to a vendored version of libcoap,
 # which will be built by the build-script before building libcoap-sys.
 # This way, it is no longer required to have libcoap installed to use this crate.
@@ -142,7 +145,7 @@ libc = "^0.2.126"
 tinydtls-sys = { version = "^0.2.0", default-features = false, optional = true }
 
 [target.'cfg(target_os="espidf")'.dependencies]
-esp-idf-sys = { version = "0.35.0" }
+esp-idf-sys = { version = ">0.35.0" }
 
 [build-dependencies]
 bindgen = { version = "0.71.1", features = ["experimental"] }
@@ -150,7 +153,7 @@ autotools = "^0.2.3"
 fs_extra = "^1.2"
 pkg-config = "^0.3.24"
 regex = "1.10.5"
-embuild = { version = "0.32.0", features = ["bindgen", "espidf", "cmake"] }
+embuild = { version = ">0.32.0", features = ["bindgen", "espidf", "cmake"] }
 version-compare = "0.2.0"
 anyhow = "1.0.94"
 enumset = "1.1.5"

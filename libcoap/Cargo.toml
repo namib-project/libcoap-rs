@@ -20,14 +20,7 @@ resolver = "2"
 rust-version = "1.81.0"
 
 [features]
-default = ["dtls-psk", "tcp", "dtls_openssl", "vendored", "libcoap-sys/default"]
-dtls_tinydtls = ["libcoap-sys/dtls_backend_tinydtls"]
-dtls_tinydtls_vendored = ["dtls_tinydtls", "libcoap-sys/dtls_backend_tinydtls_vendored"]
-dtls_openssl = ["libcoap-sys/dtls_backend_openssl"]
-dtls_openssl_vendored = ["dtls_openssl", "libcoap-sys/dtls_backend_openssl_vendored"]
-dtls_gnutls = ["libcoap-sys/dtls_backend_gnutls"]
-dtls_mbedtls = ["libcoap-sys/dtls_backend_mbedtls"]
-dtls_mbedtls_vendored = ["dtls_mbedtls", "libcoap-sys/dtls_backend_mbedtls_vendored"]
+default = ["dtls-psk", "tcp", "vendored", "libcoap-sys/default"]
 dtls-psk = ["libcoap-sys/dtls", "libcoap-sys/dtls-psk"]
 dtls-pki = ["libcoap-sys/dtls", "libcoap-sys/dtls-pki"]
 dtls-rpk = ["libcoap-sys/dtls", "libcoap-sys/dtls-rpk"]

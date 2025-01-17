@@ -101,7 +101,7 @@ impl LibcoapFeature {
         match self {
             LibcoapFeature::AfUnix => Some("af-unix"),
             LibcoapFeature::Async => Some("async"),
-            LibcoapFeature::Client => Some("client"),
+            LibcoapFeature::Client => Some("client-mode"),
             LibcoapFeature::SmallStack => Some("small-stack"),
             LibcoapFeature::Tcp => Some("tcp"),
             LibcoapFeature::Epoll => Some("epoll"),
@@ -109,7 +109,7 @@ impl LibcoapFeature {
             LibcoapFeature::Ipv6 => Some("ipv6"),
             LibcoapFeature::Oscore => Some("oscore"),
             LibcoapFeature::QBlock => Some("q-block"),
-            LibcoapFeature::Server => Some("server"),
+            LibcoapFeature::Server => Some("server-mode"),
             LibcoapFeature::ThreadRecursiveLockDetection => Some("thread-recursive-lock-detection"),
             LibcoapFeature::ThreadSafe => Some("thread-safe"),
             LibcoapFeature::Dtls => Some("dtls"),
@@ -152,7 +152,7 @@ impl LibcoapFeature {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, EnumSetType)]
 pub enum DtlsBackend {
     GnuTls,
     OpenSsl,

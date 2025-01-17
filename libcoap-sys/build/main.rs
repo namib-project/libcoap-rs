@@ -8,12 +8,16 @@ use crate::{
     build_system::{pkgconfig::PkgConfigBuildSystem, BuildSystem},
     metadata::{DtlsBackend, LibcoapFeature, MINIMUM_LIBCOAP_VERSION},
 };
+use crate::build_system::vendored::VendoredBuildSystem;
 
 mod bindings;
 mod build_system;
 mod metadata;
 
 fn main() -> Result<()> {
+    println!("cargo:rerun-if-env-changed=LIBCOAP_RS_DTLS_BACKEND");
+    println!("cargo:rerun-if-env-changed=LIBCOAP_RS_BUILD_SYSTEM");
+    println!("cargo:rerun-if-env-changed=LIBCOAP_RS_BYPASS_COMPILE_FEATURE_CHECKS");
     let out_dir = PathBuf::from(
         env::var_os("OUT_DIR").expect("no OUT_DIR was provided (are we not running as a cargo build script?)"),
     );
@@ -122,7 +126,7 @@ fn link_libcoap_unix(
 ) -> Result<Box<dyn BuildSystem>> {
     // For unix-like systems: Use pkg-config.
     if cfg!(feature = "vendored") {
-        todo!()
+        VendoredBuildSystem::build_libcoap(out_dir, requested_features, requested_dtls_backend).map(|v| Box::<dyn BuildSystem>::from(Box::new(v)))
     } else {
         PkgConfigBuildSystem::link_with_libcoap(out_dir, requested_dtls_backend)
             .map(|v| Box::<dyn BuildSystem>::from(Box::new(v)))

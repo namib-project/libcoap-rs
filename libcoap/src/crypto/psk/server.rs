@@ -46,7 +46,6 @@ impl<'a> ServerPskContextBuilder<'a> {
                 raw_cfg: Box::new(coap_dtls_spsk_t {
                     version: COAP_DTLS_SPSK_SETUP_VERSION as u8,
                     reserved: Default::default(),
-                    #[cfg(dtls_ec_jpake_support)]
                     ec_jpake: 0,
                     validate_id_call_back: None,
                     id_call_back_arg: std::ptr::null_mut(),

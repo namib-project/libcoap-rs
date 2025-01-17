@@ -41,9 +41,7 @@ impl<'a> ClientPskContextBuilder<'a> {
                 raw_cfg: Box::new(coap_dtls_cpsk_t {
                     version: COAP_DTLS_CPSK_SETUP_VERSION as u8,
                     reserved: Default::default(),
-                    #[cfg(dtls_ec_jpake_support)]
                     ec_jpake: 0,
-                    #[cfg(dtls_cid_support)]
                     use_cid: 0,
                     validate_ih_call_back: None,
                     ih_call_back_arg: std::ptr::null_mut(),

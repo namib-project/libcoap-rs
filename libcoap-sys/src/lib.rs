@@ -96,13 +96,13 @@ use libc::{fd_set, memcmp, sa_family_t, sockaddr, sockaddr_in, sockaddr_in6, soc
 // use dtls backend libraries in cases where they set our linker flags, otherwise cargo will
 // optimize them out.
 #[allow(unused_imports)]
-#[cfg(feature = "dtls_backend_mbedtls_vendored")]
+#[cfg(feature = "dtls-mbedtls-sys")]
 use mbedtls_sys as _;
 #[allow(unused_imports)]
-#[cfg(feature = "dtls_backend_openssl")]
+#[cfg(feature = "dtls-openssl-sys")]
 use openssl_sys as _;
 #[allow(unused_imports)]
-#[cfg(feature = "dtls_backend_tinydtls")]
+#[cfg(feature = "dtls-tinydtls-sys")]
 use tinydtls_sys as _;
 
 include!(env!("BINDINGS_FILE"));
