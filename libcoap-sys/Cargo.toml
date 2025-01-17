@@ -144,7 +144,7 @@ libc = "^0.2.126"
 tinydtls-sys = { version = "^0.2.0", default-features = false, optional = true }
 
 [target.'cfg(target_os="espidf")'.dependencies]
-esp-idf-sys = { version = ">0.35.0" }
+esp-idf-sys = { version = "0.36.1" }
 
 [build-dependencies]
 bindgen = { version = "0.71.1", features = ["experimental"] }
@@ -155,10 +155,11 @@ regex = "1.10.5"
 version-compare = "0.2.0"
 anyhow = { version = "1.0.94", features = ["backtrace"] }
 enumset = "1.1.5"
+syn = { version = "2.0.96", features = ["full"] }
 
 [package.metadata.docs.rs]
 features = ["dtls", "dtls_backend_openssl", "vendored"]
 
 [[package.metadata.esp-idf-sys.extra_components]]
-remote_component = { name = "espressif/coap", version = "4.3.4~3" }
+remote_component = { name = "espressif/coap", version = "4.3.5~3" }
 bindings_header = "src/wrapper.h"

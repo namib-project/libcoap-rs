@@ -72,7 +72,8 @@ fn main() -> Result<()> {
         bindings_file.canonicalize()?.display()
     );
 
-    if build_system.version() < Version::from(MINIMUM_LIBCOAP_VERSION) {
+    let version = build_system.version();
+    if version.is_none() || version < Version::from(MINIMUM_LIBCOAP_VERSION) {
         println!("cargo:warning=The linked version of libcoap is lower than the minimal version required for libcoap-sys ({}), this will most likely cause errors.", MINIMUM_LIBCOAP_VERSION);
     }
 
@@ -121,7 +122,7 @@ fn link_libcoap_explicit(
 ) -> Result<Box<dyn BuildSystem>> {
     match requested_build_system {
         "vendored" if target_os == "espidf" => {
-            EspIdfBuildSystem::new(out_dir).map(|v| Box::<dyn BuildSystem>::from(Box::new(v)))
+            EspIdfBuildSystem::new(out_dir, requested_dtls_backend).map(|v| Box::<dyn BuildSystem>::from(Box::new(v)))
         },
         "vendored" => VendoredBuildSystem::build_libcoap(out_dir, requested_features, requested_dtls_backend)
             .map(|v| Box::<dyn BuildSystem>::from(Box::new(v))),
@@ -148,7 +149,9 @@ fn vendored_libcoap_build(
     //       Windows).
     //       See: https://github.com/obgm/libcoap/blob/develop/BUILDING
     match target_os {
-        "espidf" => EspIdfBuildSystem::new(out_dir).map(|v| Box::<dyn BuildSystem>::from(Box::new(v))),
+        "espidf" => {
+            EspIdfBuildSystem::new(out_dir, requested_dtls_backend).map(|v| Box::<dyn BuildSystem>::from(Box::new(v)))
+        },
         _ => VendoredBuildSystem::build_libcoap(out_dir, requested_features, requested_dtls_backend)
             .map(|v| Box::<dyn BuildSystem>::from(Box::new(v))),
     }
@@ -164,7 +167,7 @@ fn link_libcoap_auto(
     // Try vendored build first if the feature is enabled and supported by the host.
     // If the vendored build fails on a supported target, do not try anything else (we assume that
     // the user wanted to use the vendored library for a reason).
-    if cfg!(feature = "vendored") {
+    if cfg!(feature = "vendored") || target_os == "espidf" {
         return vendored_libcoap_build(target_os, out_dir, requested_features, requested_dtls_backend);
     }
     PkgConfigBuildSystem::link_with_libcoap(out_dir.clone(), requested_dtls_backend)
@@ -173,15 +176,15 @@ fn link_libcoap_auto(
             errors.push(("pkgconfig", e));
             ManualBuildSystem::link_with_libcoap(out_dir).map(|v| Box::<dyn BuildSystem>::from(Box::new(v)))
         })
-        .or_else(|e| {
+        .map_err(|e| {
             errors.push(("manual", e));
-            Err(anyhow!(
+            anyhow!(
                 "unable to find a version of libcoap to link with:\n{}",
                 errors
                     .iter()
                     .map(|(k, v)| format!("Build system {k} failed with error: {v:?}"))
                     .collect::<Vec<String>>()
                     .join("\n")
-            ))
+            )
         })
 }
