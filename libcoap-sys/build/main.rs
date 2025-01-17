@@ -1,14 +1,15 @@
-use std::{env, env::VarError, path::PathBuf};
+use std::{collections::HashMap, env, env::VarError, path::PathBuf};
 
 use anyhow::{anyhow, bail, Context, Result};
 use enumset::EnumSet;
 use version_compare::Version;
 
+use crate::build_system::esp_idf::EspIdfBuildSystem;
+use crate::build_system::vendored::VendoredBuildSystem;
 use crate::{
-    build_system::{pkgconfig::PkgConfigBuildSystem, BuildSystem},
+    build_system::{manual::ManualBuildSystem, pkgconfig::PkgConfigBuildSystem, BuildSystem},
     metadata::{DtlsBackend, LibcoapFeature, MINIMUM_LIBCOAP_VERSION},
 };
-use crate::build_system::vendored::VendoredBuildSystem;
 
 mod bindings;
 mod build_system;
@@ -22,6 +23,12 @@ fn main() -> Result<()> {
     let out_dir = PathBuf::from(
         env::var_os("OUT_DIR").expect("no OUT_DIR was provided (are we not running as a cargo build script?)"),
     );
+
+    let target = env::var("TARGET").expect("unable to parse TARGET env variable");
+    let target_env = env::var("CARGO_CFG_TARGET_ENV").expect("unable to parse CARGO_CFG_TARGET_ENV env variable");
+    let target_os = env::var("CARGO_CFG_TARGET_OS").expect("unable to parse CARGO_CFG_TARGET_OS env variable");
+    let target_family =
+        env::var("CARGO_CFG_TARGET_FAMILY").expect("unable to parse CARGO_CFG_TARGET_FAMILY env variable");
 
     let requested_features: EnumSet<LibcoapFeature> = EnumSet::<LibcoapFeature>::all()
         .iter()
@@ -49,27 +56,14 @@ fn main() -> Result<()> {
     }?;
 
     let mut build_system: Box<dyn BuildSystem> = match chosen_build_system.as_ref().map(String::as_str) {
-        Some("pkgconfig") => PkgConfigBuildSystem::link_with_libcoap(out_dir, requested_dtls_backend)
-            .context("unable to link libcoap using force-configured build system pkgconfig")
-            .map(|v| Box::<dyn BuildSystem>::from(Box::new(v))),
-        Some(v) => Err(anyhow!("unknown build system {v}")),
-        None => {
-            #[cfg(target_os = "espidf")]
-            {
-                link_libcoap_espidf()
-            }
-            #[cfg(not(target_os = "espidf"))]
-            {
-                #[cfg(unix)]
-                {
-                    link_libcoap_unix(out_dir, requested_features, requested_dtls_backend)
-                }
-                #[cfg(windows)]
-                {
-                    link_libcoap_windows()
-                }
-            }
-        },
+        Some(requested_build_system) => link_libcoap_explicit(
+            requested_build_system,
+            &target_os,
+            out_dir,
+            requested_features,
+            requested_dtls_backend,
+        ),
+        None => link_libcoap_auto(&target_os, out_dir, requested_features, requested_dtls_backend),
     }?;
 
     let bindings_file = build_system.generate_bindings()?;
@@ -84,7 +78,10 @@ fn main() -> Result<()> {
 
     match build_system.detected_features() {
         Some(detected_features) => {
-            let compile_time_checkable_features: EnumSet<LibcoapFeature> = requested_features.iter().filter(|feat| feat.define_name().is_some()).collect();
+            let compile_time_checkable_features: EnumSet<LibcoapFeature> = requested_features
+                .iter()
+                .filter(|feat| feat.define_name().is_some())
+                .collect();
             if !bypass_compile_time_feature_checks && !compile_time_checkable_features.is_subset(detected_features) {
                 let missing_features = requested_features.difference(detected_features);
                 bail!(
@@ -103,6 +100,8 @@ fn main() -> Result<()> {
                         .collect::<Vec<&str>>()
                         .join(", ")
                 );
+            } else if bypass_compile_time_feature_checks {
+                println!("cargo:warning=You have bypassed the libcoap-sys compile-time feature check.")
             }
         },
         None => {
@@ -113,29 +112,76 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-#[cfg(target_os = "espidf")]
-fn link_libcoap_espidf() -> Result<impl BuildSystem> {
-    // For ESP-IDF: Use esp-idf tooling.
-    todo!()
-}
-
-#[cfg(unix)]
-fn link_libcoap_unix(
+fn link_libcoap_explicit(
+    requested_build_system: &str,
+    target_os: &str,
     out_dir: PathBuf,
     requested_features: EnumSet<LibcoapFeature>,
     requested_dtls_backend: Option<DtlsBackend>,
 ) -> Result<Box<dyn BuildSystem>> {
-    // For unix-like systems: Use pkg-config.
-    if cfg!(feature = "vendored") {
-        VendoredBuildSystem::build_libcoap(out_dir, requested_features, requested_dtls_backend).map(|v| Box::<dyn BuildSystem>::from(Box::new(v)))
-    } else {
-        PkgConfigBuildSystem::link_with_libcoap(out_dir, requested_dtls_backend)
-            .map(|v| Box::<dyn BuildSystem>::from(Box::new(v)))
+    match requested_build_system {
+        "vendored" if target_os == "espidf" => {
+            EspIdfBuildSystem::new(out_dir).map(|v| Box::<dyn BuildSystem>::from(Box::new(v)))
+        },
+        "vendored" => VendoredBuildSystem::build_libcoap(out_dir, requested_features, requested_dtls_backend)
+            .map(|v| Box::<dyn BuildSystem>::from(Box::new(v))),
+        "pkgconfig" if target_os != "espidf" => {
+            PkgConfigBuildSystem::link_with_libcoap(out_dir, requested_dtls_backend)
+                .map(|v| Box::<dyn BuildSystem>::from(Box::new(v)))
+        },
+        "manual" => ManualBuildSystem::link_with_libcoap(out_dir).map(|v| Box::<dyn BuildSystem>::from(Box::new(v))),
+        v => Err(anyhow!("build system {v} is unknown or unsupported for this target")),
+    }
+    .context(format!(
+        "unable to link libcoap using force-configured build system {requested_build_system}"
+    ))
+}
+
+fn vendored_libcoap_build(
+    target_os: &str,
+    out_dir: PathBuf,
+    requested_features: EnumSet<LibcoapFeature>,
+    requested_dtls_backend: Option<DtlsBackend>,
+) -> Result<Box<dyn BuildSystem>> {
+    // TODO: Later on, we'll probably want to use the CMake based build system for any host+target
+    //       combination that the libcoap build documentation recommends CMake for (most notably:
+    //       Windows).
+    //       See: https://github.com/obgm/libcoap/blob/develop/BUILDING
+    match target_os {
+        "espidf" => EspIdfBuildSystem::new(out_dir).map(|v| Box::<dyn BuildSystem>::from(Box::new(v))),
+        _ => VendoredBuildSystem::build_libcoap(out_dir, requested_features, requested_dtls_backend)
+            .map(|v| Box::<dyn BuildSystem>::from(Box::new(v))),
     }
 }
 
-#[cfg(windows)]
-fn link_libcoap_windows() -> Result<impl BuildSystem> {
-    // For Windows, we currently only support manual setup (cmake would be a possible alternative).
-    todo!()
+fn link_libcoap_auto(
+    target_os: &str,
+    out_dir: PathBuf,
+    requested_features: EnumSet<LibcoapFeature>,
+    requested_dtls_backend: Option<DtlsBackend>,
+) -> Result<Box<dyn BuildSystem>> {
+    let mut errors = Vec::<(&'static str, anyhow::Error)>::new();
+    // Try vendored build first if the feature is enabled and supported by the host.
+    // If the vendored build fails on a supported target, do not try anything else (we assume that
+    // the user wanted to use the vendored library for a reason).
+    if cfg!(feature = "vendored") {
+        return vendored_libcoap_build(target_os, out_dir, requested_features, requested_dtls_backend);
+    }
+    PkgConfigBuildSystem::link_with_libcoap(out_dir.clone(), requested_dtls_backend)
+        .map(|v| Box::<dyn BuildSystem>::from(Box::new(v)))
+        .or_else(|e| {
+            errors.push(("pkgconfig", e));
+            ManualBuildSystem::link_with_libcoap(out_dir).map(|v| Box::<dyn BuildSystem>::from(Box::new(v)))
+        })
+        .or_else(|e| {
+            errors.push(("manual", e));
+            Err(anyhow!(
+                "unable to find a version of libcoap to link with:\n{}",
+                errors
+                    .iter()
+                    .map(|(k, v)| format!("Build system {k} failed with error: {v:?}"))
+                    .collect::<Vec<String>>()
+                    .join("\n")
+            ))
+        })
 }

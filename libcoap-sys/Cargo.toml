@@ -25,7 +25,7 @@ rust-version = "1.81.0"
 [features]
 # The default features match those of libcoaps configure script, except for dtls, which is disabled here because it
 # requires a backend to be set manually.
-default = ["oscore", "ipv4", "ipv6", "af-unix", "tcp", "websockets", "async", "observe-persist", "q-block", "thread-safe", "thread-recursive-lock-detection", "server", "client", "epoll", "vendored", "static"]
+default = ["oscore", "ipv4", "ipv6", "af-unix", "tcp", "websockets", "async", "observe-persist", "q-block", "thread-safe", "thread-recursive-lock-detection", "server", "client", "epoll", "vendored"]
 # While not specified here due to limitations in Cargo's syntax, the DTLS feature depends on one of the DTLS backends
 # being enabled.
 # If you are developing a library based on libcoap-sys and do not care about the DTLS backend, enable the dtls feature
@@ -55,10 +55,9 @@ dtls-tinydtls-sys-vendored = ["dtls-tinydtls-sys", "tinydtls-sys/vendored"]
 
 # Enabling this feature will force libcoap-sys to be built with and statically linked to a vendored version of libcoap,
 # which will be built by the build-script before building libcoap-sys.
+# which will be built by the build-script before building libcoap-sys.
 # This way, it is no longer required to have libcoap installed to use this crate.
-vendored = ["static"]
-# Enable this feature to use static linking to libcoap instead of dynamic linking.
-static = []
+vendored = []
 # --- FEATURE FLAGS ---
 # Note that setting the feature flags currently has no effect on the generated Rust code, because the libcoap headers do
 # not use these feature flags. They only affect the features built into the vendored C library (if enabled).
@@ -153,9 +152,8 @@ autotools = "^0.2.3"
 fs_extra = "^1.2"
 pkg-config = "^0.3.24"
 regex = "1.10.5"
-embuild = { version = ">0.32.0", features = ["bindgen", "espidf", "cmake"] }
 version-compare = "0.2.0"
-anyhow = "1.0.94"
+anyhow = { version = "1.0.94", features = ["backtrace"] }
 enumset = "1.1.5"
 
 [package.metadata.docs.rs]

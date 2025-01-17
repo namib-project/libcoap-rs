@@ -28,6 +28,11 @@ tcp = ["libcoap-sys/tcp"]
 tls = ["libcoap-sys/tls"]
 rand = ["dep:rand", "dep:rand_core"]
 vendored = ["libcoap-sys/vendored"]
+dtls-openssl-sys = ["libcoap-sys/dtls-openssl-sys"]
+dtls-mbedtls-sys = ["libcoap-sys/dtls-mbedtls-sys"]
+dtls-tinydtls-sys = ["libcoap-sys/dtls-tinydtls-sys"]
+dtls-openssl-sys-vendored = ["libcoap-sys/dtls-openssl-sys-vendored"]
+dtls-tinydtls-sys-vendored = ["libcoap-sys/dtls-tinydtls-sys-vendored"]
 
 [dependencies]
 libcoap-sys = { version = "^0.2.2", path = "../libcoap-sys", default-features = false, features = ["client", "server"] }

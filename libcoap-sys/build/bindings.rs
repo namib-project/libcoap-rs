@@ -1,11 +1,11 @@
-use std::{cell::RefCell, fmt::Debug, rc::Rc};
-use std::path::PathBuf;
+use std::{cell::RefCell, fmt::Debug, path::PathBuf, rc::Rc};
+
 use anyhow::{Context, Result};
 use bindgen::{
     callbacks::{IntKind, ParseCallbacks},
     EnumVariation,
 };
-use embuild::bindgen::BindgenExt;
+
 use crate::metadata::{LibcoapDefineInfo, LibcoapFeature};
 
 /// Implementation of bindgen's [ParseCallbacks] that allow reading some meta-information about the
@@ -65,9 +65,19 @@ impl ParseCallbacks for LibcoapDefineParser {
 pub fn generate_libcoap_bindings(
     bindgen_builder_configurator: impl FnOnce(bindgen::Builder) -> Result<bindgen::Builder>,
 ) -> Result<bindgen::Bindings> {
-    let source_root = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR is not set (are we not running as a cargo build script?)"));
+    let source_root = PathBuf::from(
+        std::env::var_os("CARGO_MANIFEST_DIR")
+            .expect("CARGO_MANIFEST_DIR is not set (are we not running as a cargo build script?)"),
+    );
     let mut builder = bindgen::Builder::default()
-        .header(source_root.join("src").join("wrapper.h").to_str().context("unable to convert header path to &str")?.to_string())
+        .header(
+            source_root
+                .join("src")
+                .join("wrapper.h")
+                .to_str()
+                .context("unable to convert header path to &str")?
+                .to_string(),
+        )
         .default_enum_style(EnumVariation::Rust { non_exhaustive: true })
         // Causes invalid syntax for some reason, so we have to disable it.
         .generate_comments(true)
