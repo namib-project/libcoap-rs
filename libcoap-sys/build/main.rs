@@ -18,6 +18,7 @@ fn main() -> Result<()> {
     println!("cargo:rerun-if-env-changed=LIBCOAP_RS_DTLS_BACKEND");
     println!("cargo:rerun-if-env-changed=LIBCOAP_RS_BUILD_SYSTEM");
     println!("cargo:rerun-if-env-changed=LIBCOAP_RS_BYPASS_COMPILE_FEATURE_CHECKS");
+    println!("cargo:rustc-check-cfg=cfg(used_dtls_crate, values(\"mbedtls\", \"tinydtls\", \"openssl\"))");
     let out_dir = PathBuf::from(
         env::var_os("OUT_DIR").expect("no OUT_DIR was provided (are we not running as a cargo build script?)"),
     );

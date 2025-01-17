@@ -67,7 +67,6 @@ pub fn generate_libcoap_bindings(
 ) -> Result<bindgen::Bindings> {
     let source_root = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR is not set (are we not running as a cargo build script?)"));
     let mut builder = bindgen::Builder::default()
-        .emit_diagnostics()
         .header(source_root.join("src").join("wrapper.h").to_str().context("unable to convert header path to &str")?.to_string())
         .default_enum_style(EnumVariation::Rust { non_exhaustive: true })
         // Causes invalid syntax for some reason, so we have to disable it.

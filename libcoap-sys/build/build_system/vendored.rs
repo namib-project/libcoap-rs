@@ -147,28 +147,32 @@ impl VendoredBuildSystem {
             }
 
             // Choose a DTLS backend.
-            // If we are not using one of the DTLS libraries already linked by another rust crate,
-            // we need to link the DTLS library as well. Set a boolean variable to keep track of this.
-            let dtls_library_already_linked = if let Some(requested_dtls_backend) = requested_dtls_backend {
+            let selected_dtls_backend = if let Some(requested_dtls_backend) = requested_dtls_backend {
                 // If one has been explicitly requested by the user, use that one.
-                build_config = build_config.with(requested_dtls_backend.as_str(), None);
-                dtls_libraries_linked_by_other_crates.contains(requested_dtls_backend)
-            } else {
+                Some(requested_dtls_backend)
+            } else if cfg!(feature = "dtls-openssl-sys") {
                 // If we do have a library already linked via a rust dependency, prefer those, but
                 // maintain the order also used in libcoap itself.
-                if cfg!(feature = "dtls-openssl-sys") {
-                    build_config.with(DtlsBackend::OpenSsl.as_str(), None);
-                    dtls_libraries_linked_by_other_crates.contains(DtlsBackend::OpenSsl)
-                } else if cfg!(feature = "dtls-mbedtls-sys") {
-                    build_config.with(DtlsBackend::MbedTls.as_str(), None);
-                    dtls_libraries_linked_by_other_crates.contains(DtlsBackend::MbedTls)
-                } else if cfg!(feature = "dtls-tinydtls-sys") {
-                    build_config.with(DtlsBackend::TinyDtls.as_str(), None);
-                    dtls_libraries_linked_by_other_crates.contains(DtlsBackend::TinyDtls)
-                } else {
-                    // Otherwise, we will rely on libcoap to find us a suitable DTLS library.
-                    false
+                Some(DtlsBackend::OpenSsl)
+            } else if cfg!(feature = "dtls-mbedtls-sys") {
+                Some(DtlsBackend::MbedTls)
+            } else if cfg!(feature = "dtls-tinydtls-sys") {
+                Some(DtlsBackend::TinyDtls)
+            } else {
+                // Otherwise, we will rely on libcoap to find us a suitable DTLS library.
+                None
+            };
+
+            // If we are not using one of the DTLS libraries already linked by another rust crate,
+            // we need to link the DTLS library as well. Set a boolean variable to keep track of this.
+            let dtls_library_already_linked = if let Some(selected_dtls_backend) = selected_dtls_backend {
+                build_config = build_config.with(selected_dtls_backend.as_str(), None);
+                if dtls_libraries_linked_by_other_crates.contains(selected_dtls_backend) {
+                    println!("cargo:rustc-cfg=used_dtls_crate=\"{}\"", selected_dtls_backend.as_str())
                 }
+                dtls_libraries_linked_by_other_crates.contains(selected_dtls_backend)
+            } else {
+                false
             };
 
             !dtls_library_already_linked

@@ -93,16 +93,16 @@ use std::ffi::c_void;
 use libc::epoll_event;
 #[allow(unused_imports)]
 use libc::{fd_set, memcmp, sa_family_t, sockaddr, sockaddr_in, sockaddr_in6, socklen_t, time_t};
-// use dtls backend libraries in cases where they set our linker flags, otherwise cargo will
-// optimize them out.
+// use dtls backend libraries in cases where they set our linker flags, otherwise rustc will
+// optimize them out, resulting in missing symbols.
 #[allow(unused_imports)]
-#[cfg(feature = "dtls-mbedtls-sys")]
+#[cfg(used_dtls_crate = "mbedtls")]
 use mbedtls_sys as _;
 #[allow(unused_imports)]
-#[cfg(feature = "dtls-openssl-sys")]
+#[cfg(used_dtls_crate = "openssl")]
 use openssl_sys as _;
 #[allow(unused_imports)]
-#[cfg(feature = "dtls-tinydtls-sys")]
+#[cfg(used_dtls_crate = "tinydtls")]
 use tinydtls_sys as _;
 
 include!(env!("BINDINGS_FILE"));
