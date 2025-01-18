@@ -129,7 +129,7 @@ fn link_libcoap_explicit(
             PkgConfigBuildSystem::link_with_libcoap(out_dir, requested_dtls_backend)
                 .map(|v| Box::<dyn BuildSystem>::from(Box::new(v)))
         },
-        "manual" => ManualBuildSystem::link_with_libcoap(out_dir).map(|v| Box::<dyn BuildSystem>::from(Box::new(v))),
+        "manual" => ManualBuildSystem::link_with_libcoap(out_dir, requested_dtls_backend).map(|v| Box::<dyn BuildSystem>::from(Box::new(v))),
         v => Err(anyhow!("build system {v} is unknown or unsupported for this target")),
     }
     .context(format!(
@@ -173,7 +173,7 @@ fn link_libcoap_auto(
         .map(|v| Box::<dyn BuildSystem>::from(Box::new(v)))
         .or_else(|e| {
             errors.push(("pkgconfig", e));
-            ManualBuildSystem::link_with_libcoap(out_dir).map(|v| Box::<dyn BuildSystem>::from(Box::new(v)))
+            ManualBuildSystem::link_with_libcoap(out_dir, requested_dtls_backend).map(|v| Box::<dyn BuildSystem>::from(Box::new(v)))
         })
         .map_err(|e| {
             errors.push(("manual", e));

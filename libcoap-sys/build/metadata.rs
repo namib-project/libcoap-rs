@@ -218,7 +218,7 @@ impl Display for DtlsBackend {
 impl DtlsBackend {
     /// Returns the suffix that has to be appended to libcoap-3-<DTLS library> to find a library
     /// version linked against the right DTLS library.
-    pub fn pkg_config_suffix(&self) -> &'static str {
+    pub fn library_suffix(&self) -> &'static str {
         // just keeping this here in case we ever need to change this definition to something
         // different than self.as_str() for some libraries.
         self.as_str()

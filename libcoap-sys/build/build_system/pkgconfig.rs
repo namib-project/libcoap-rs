@@ -28,7 +28,7 @@ impl PkgConfigBuildSystem {
             .env_metadata(true);
         let library = if let Some(requested_dtls_backend) = requested_dtls_backend {
             // Use the libcoap version corresponding to the requested DTLS library, if one has been set.
-            prober.probe(&format!("libcoap-3-{}", requested_dtls_backend.pkg_config_suffix()))
+            prober.probe(&format!("libcoap-3-{}", requested_dtls_backend.library_suffix()))
         } else {
             // Otherwise, use the "default" version.
             prober.probe("libcoap-3")
