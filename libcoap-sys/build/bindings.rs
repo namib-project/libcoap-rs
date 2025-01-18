@@ -6,7 +6,7 @@ use bindgen::{
     EnumVariation,
 };
 
-use crate::metadata::{LibcoapDefineInfo, LibcoapFeature};
+use crate::metadata::{DtlsBackend, LibcoapDefineInfo, LibcoapFeature};
 
 /// Implementation of bindgen's [ParseCallbacks] that allow reading some meta-information about the
 /// used libcoap version from its defines (package version, supported features, ...)
@@ -31,34 +31,21 @@ impl LibcoapDefineParser {
 
 impl ParseCallbacks for LibcoapDefineParser {
     fn int_macro(&self, name: &str, value: i64) -> Option<IntKind> {
-        self.defines.borrow_mut().supported_features |= LibcoapFeature::features_from_define(name, value);
+        let mut defines = self.defines.borrow_mut();
+        defines.supported_features |= LibcoapFeature::features_from_define(name, value);
+        if let Some(dtls_backend) = DtlsBackend::library_from_define(name, value) {
+            if let Some(old_backend) = defines.dtls_backend.replace(dtls_backend) {
+                println!("cargo:warning=The libcoap header files indicate that more than one DTLS library is active at the same time ({dtls_backend} and {old_backend}), which should not be possible. Are the header paths misconfigured?");
+            }
+        }
         None
     }
 
     fn str_macro(&self, name: &str, value: &[u8]) {
-        /*// Will allow this here, as we might want to add additional cfg flags later on.
-        #[allow(clippy::single_match)]
-        match name {
-            "LIBCOAP_PACKAGE_VERSION" => {
-                let version_str = String::from_utf8_lossy(value);
-                println!("cargo:rustc-cfg=libcoap_version=\"{}\"", version_str.as_ref());
-                println!("cargo:libcoap_version={}", version_str.as_ref());
-                let version = Version::from(version_str.as_ref()).expect("invalid libcoap version");
-                match version.compare(Version::from("4.3.4").unwrap()) {
-                    Cmp::Gt => println!("cargo:rustc-cfg=non_inlined_coap_send_rst"),
-                    _ => {},
-                }
-                self.defines.borrow_mut().package_version = version.to_string();
-            },
-            _ => {},
-        }*/
-    }
-
-    fn include_file(&self, filename: &str) {
-        /*let header_path = Path::new(filename);
-        if header_path.file_name().eq(&Some(OsStr::new("coap_defines.h"))) {
-            self.defines.borrow_mut().feature_defines_available = true;
-        }*/
+        if name == "LIBCOAP_PACKAGE_VERSION" {
+            let version_str = String::from_utf8_lossy(value);
+            self.defines.borrow_mut().version = Some(version_str.to_string())
+        }
     }
 }
 

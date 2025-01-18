@@ -2,7 +2,6 @@ use std::cell::RefCell;
 use std::env;
 use std::env::VarError;
 use std::ffi::OsString;
-use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use anyhow::{anyhow, ensure, Context, Result};
@@ -10,7 +9,7 @@ use enumset::EnumSet;
 use version_compare::Version;
 use crate::bindings::{generate_libcoap_bindings, LibcoapDefineParser};
 use crate::build_system::BuildSystem;
-use crate::metadata::{DtlsBackend, LibcoapDefineInfo, LibcoapFeature, MINIMUM_LIBCOAP_VERSION};
+use crate::metadata::{DtlsBackend, LibcoapDefineInfo, LibcoapFeature};
 
 const VENDORED_LIBCOAP_VERSION: &str = "4.3.5";
 
@@ -98,6 +97,8 @@ impl VendoredBuildSystem {
             // For each one, set the appropriate PKG_CONFIG_PATHs, CFLAGS and/or LIBS to use them
             // instead of system versions if they are going to be used.
             let mut additional_pkg_config_paths: Vec<PathBuf> = vec![];
+            // May be unused if none of the DTLS crate features has been enabled.
+            #[allow(unused_mut)]
             let mut dtls_libraries_linked_by_other_crates = EnumSet::<DtlsBackend>::empty();
             #[cfg(feature = "dtls-tinydtls-sys")]
             {
@@ -246,7 +247,6 @@ impl VendoredBuildSystem {
             // Add TinyDTLS's pkg-config directory to the path for version checking.
             Ok((
                 Some(PathBuf::from(tinydtls_libs)
-                    // TODO: Isn't this already the lib subdirectory?
                     .join("lib")
                     .join("pkgconfig")), true))
         }
@@ -361,6 +361,12 @@ impl BuildSystem for VendoredBuildSystem {
         })?;
 
         self.define_info = Some(RefCell::take(&define_info));
+
+        if let Some(version) = &self.define_info.as_ref().unwrap().version {
+            if Version::from(VENDORED_LIBCOAP_VERSION) != Version::from(version) {
+                return Err(anyhow!("The library version indicated by the headers does not match the vendored version that should be in use. Are the include paths misconfigured?"))
+            }
+        }
 
         let out_path = self.out_dir.join("bindings.rs");
         bindings

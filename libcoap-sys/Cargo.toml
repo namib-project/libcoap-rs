@@ -155,7 +155,8 @@ regex = "1.10.5"
 version-compare = "0.2.0"
 anyhow = { version = "1.0.94", features = ["backtrace"] }
 enumset = "1.1.5"
-syn = { version = "2.0.96", features = ["full"] }
+syn = { version = "2.0.96" }
+embuild = { version = "0.33.0", features = ["espidf"] }
 
 [package.metadata.docs.rs]
 features = ["dtls", "dtls_backend_openssl", "vendored"]

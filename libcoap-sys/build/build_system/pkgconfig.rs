@@ -1,6 +1,6 @@
 use std::{cell::RefCell, path::PathBuf};
 
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use enumset::EnumSet;
 use pkg_config::Library;
 use version_compare::Version;
@@ -71,6 +71,12 @@ impl BuildSystem for PkgConfigBuildSystem {
         })?;
 
         self.define_info = Some(RefCell::take(&define_info));
+
+        if let Some(version) = &self.define_info.as_ref().unwrap().version {
+            if Version::from(&self.library.version) != Version::from(version) {
+                return Err(anyhow!("The library version indicated by pkg-config does not match the one indicated by the headers. Are the include paths misconfigured?"))
+            }
+        }
 
         let out_path = self.out_dir.join("bindings.rs");
         bindings

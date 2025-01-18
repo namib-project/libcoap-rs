@@ -1,5 +1,5 @@
 use std::{
-    fmt::{Display, Formatter, Write},
+    fmt::{Display, Formatter},
     str::FromStr,
 };
 
@@ -11,6 +11,7 @@ pub const MINIMUM_LIBCOAP_VERSION: &str = "4.3.5";
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct LibcoapDefineInfo {
     pub version: Option<String>,
+    pub dtls_backend: Option<DtlsBackend>,
     pub supported_features: EnumSet<LibcoapFeature>,
 }
 
@@ -42,30 +43,37 @@ pub enum LibcoapFeature {
 }
 
 impl LibcoapFeature {
+    /// Returns the name of the #define in `coap_defines.h` that corresponds to the given feature,
+    /// or None if there is no direct correspondence to such a #define.
     pub fn define_name(&self) -> Option<&'static str> {
         match self {
             LibcoapFeature::AfUnix => Some("COAP_AF_UNIX_SUPPORT"),
             LibcoapFeature::Async => Some("COAP_ASYNC_SUPPORT"),
             LibcoapFeature::Client => Some("COAP_CLIENT_SUPPORT"),
             LibcoapFeature::SmallStack => Some("COAP_CONSTRAINED_STACK"),
-            LibcoapFeature::Tcp => Some("COAP_DISABLE_TCP"), // TODO invert
+            LibcoapFeature::Tcp => Some("COAP_DISABLE_TCP"),
             LibcoapFeature::Epoll => Some("COAP_EPOLL_SUPPORT"),
             LibcoapFeature::Ipv4 => Some("COAP_IPV4_SUPPORT"),
             LibcoapFeature::Ipv6 => Some("COAP_IPV6_SUPPORT"),
             LibcoapFeature::Oscore => Some("COAP_OSCORE_SUPPORT"),
-            // TODO proxy support?
             LibcoapFeature::QBlock => Some("COAP_Q_BLOCK_SUPPORT"),
             LibcoapFeature::Server => Some("COAP_SERVER_SUPPORT"),
             LibcoapFeature::ThreadRecursiveLockDetection => Some("COAP_THREAD_RECURSIVE_CHECK"),
             LibcoapFeature::ThreadSafe => Some("COAP_THREAD_SAFE"),
-            LibcoapFeature::Dtls => None, // TODO has multiple defines
             LibcoapFeature::ObservePersist => Some("COAP_WITH_OBSERVE_PERSIST"),
             LibcoapFeature::WebSockets => Some("COAP_WS_SUPPORT"),
             _ => None,
         }
     }
 
+    /// Returns the set of features that are supposedly enabled if the #define with the name
+    /// `define_name` is set to `define_value` in `coap_defines.h`, or an empty set if the provided
+    /// define does not correspond to such a feature.
     pub fn features_from_define(define_name: &str, define_value: i64) -> EnumSet<Self> {
+        // Only consider values != 0.
+        if define_name != "COAP_DISABLE_TCP" && define_value == 0 {
+            return EnumSet::empty();
+        }
         match define_name {
             "COAP_AF_UNIX_SUPPORT" => EnumSet::from(LibcoapFeature::AfUnix),
             "COAP_ASYNC_SUPPORT" => EnumSet::from(LibcoapFeature::Async),
@@ -97,6 +105,8 @@ impl LibcoapFeature {
         }
     }
 
+    /// Return the configure argument name (--enable-<NAME>) that can be provided to libcoap's
+    /// configure-script to enable the given feature (or None if no such flag is available).
     pub fn configure_flag_name(&self) -> Option<&'static str> {
         match self {
             LibcoapFeature::AfUnix => Some("af-unix"),
@@ -119,7 +129,30 @@ impl LibcoapFeature {
         }
     }
 
-    pub fn cargo_feature_var_name(&self) -> String {
+    /// Return the ESP-IDF sdkconfig option name that must be set to enable this feature, or None
+    /// if no configuration option is available.
+    /// Reference: https://github.com/espressif/idf-extra-components/blob/master/coap/Kconfig
+    pub fn sdkconfig_flag_name(&self) -> Option<&'static str> {
+        match self {
+            LibcoapFeature::DtlsPsk => Some("COAP_MBEDTLS_PSK"),
+            LibcoapFeature::DtlsPki => Some("COAP_MBEDTLS_PKI"),
+            LibcoapFeature::Tcp => Some("COAP_TCP_SUPPORT"),
+            LibcoapFeature::Oscore => Some("COAP_OSCORE_SUPPORT"),
+            LibcoapFeature::ObservePersist => Some("COAP_OBSERVE_PERSIST"),
+            LibcoapFeature::QBlock => Some("COAP_Q_BLOCK"),
+            LibcoapFeature::Async => Some("COAP_ASYNC_SUPPORT"),
+            LibcoapFeature::ThreadSafe => Some("COAP_THREAD_SAFE"),
+            LibcoapFeature::ThreadRecursiveLockDetection => Some("COAP_THREAD_RECURSIVE_CHECK"),
+            LibcoapFeature::WebSockets => Some("COAP_WEBSOCKETS"),
+            LibcoapFeature::Client => Some("COAP_CLIENT_SUPPORT"),
+            LibcoapFeature::Server => Some("COAP_SERVER_SUPPORT"),
+            _ => None,
+        }
+    }
+
+    /// Returns the suffix of the CARGO_FEATURE_<FEATURE> environment variable that must be set
+    /// during build script execution if the feature has been enabled.
+    pub fn cargo_feature_var_suffix(&self) -> String {
         self.as_str().to_uppercase().replace('-', "_")
     }
 
@@ -152,7 +185,7 @@ impl LibcoapFeature {
     }
 }
 
-#[derive(Debug, EnumSetType)]
+#[derive(Debug, EnumSetType, Hash)]
 pub enum DtlsBackend {
     GnuTls,
     OpenSsl,
@@ -183,8 +216,11 @@ impl Display for DtlsBackend {
 }
 
 impl DtlsBackend {
+    /// Returns the suffix that has to be appended to libcoap-3-<DTLS library> to find a library
+    /// version linked against the right DTLS library.
     pub fn pkg_config_suffix(&self) -> &'static str {
-        // just keeping this here in case we ever need to change this definition for some libraries.
+        // just keeping this here in case we ever need to change this definition to something
+        // different than self.as_str() for some libraries.
         self.as_str()
     }
 
@@ -195,6 +231,23 @@ impl DtlsBackend {
             DtlsBackend::MbedTls => "mbedtls",
             DtlsBackend::TinyDtls => "tinydtls",
             DtlsBackend::WolfSsl => "wolfssl",
+        }
+    }
+
+    /// Returns the DTLS library that is supposedly enabled if the #define with the name
+    /// `define_name` is set to `define_value` in `coap_defines.h`, or None if the provided
+    /// define does not correspond to a DTLS library.
+    pub fn library_from_define(define_name: &str, define_value: i64) -> Option<DtlsBackend> {
+        if define_value == 0 {
+            return None
+        }
+        match define_name {
+            "COAP_WITH_LIBGNUTLS" => Some(DtlsBackend::GnuTls),
+            "COAP_WITH_LIBMBEDTLS" => Some(DtlsBackend::MbedTls),
+            "COAP_WITH_LIBOPENSSL" => Some(DtlsBackend::OpenSsl),
+            "COAP_WITH_LIBTINYDTLS" => Some(DtlsBackend::TinyDtls),
+            "COAP_WITH_LIBWOLFSSL" => Some(DtlsBackend::WolfSsl),
+            _ => None,
         }
     }
 }

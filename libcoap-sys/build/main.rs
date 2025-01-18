@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, env::VarError, path::PathBuf};
+use std::{env, env::VarError, path::PathBuf};
 
 use anyhow::{anyhow, bail, Context, Result};
 use enumset::EnumSet;
@@ -24,15 +24,11 @@ fn main() -> Result<()> {
         env::var_os("OUT_DIR").expect("no OUT_DIR was provided (are we not running as a cargo build script?)"),
     );
 
-    let target = env::var("TARGET").expect("unable to parse TARGET env variable");
-    let target_env = env::var("CARGO_CFG_TARGET_ENV").expect("unable to parse CARGO_CFG_TARGET_ENV env variable");
     let target_os = env::var("CARGO_CFG_TARGET_OS").expect("unable to parse CARGO_CFG_TARGET_OS env variable");
-    let target_family =
-        env::var("CARGO_CFG_TARGET_FAMILY").expect("unable to parse CARGO_CFG_TARGET_FAMILY env variable");
 
     let requested_features: EnumSet<LibcoapFeature> = EnumSet::<LibcoapFeature>::all()
         .iter()
-        .filter(|feat| std::env::var_os(format!("CARGO_FEATURE_{}", feat.cargo_feature_var_name())).is_some())
+        .filter(|feat| env::var_os(format!("CARGO_FEATURE_{}", feat.cargo_feature_var_suffix())).is_some())
         .collect();
 
     let requested_dtls_backend: Option<DtlsBackend> = match env::var("LIBCOAP_RS_DTLS_BACKEND") {
@@ -50,12 +46,12 @@ fn main() -> Result<()> {
 
     let bypass_compile_time_feature_checks = match env::var("LIBCOAP_RS_BYPASS_COMPILE_FEATURE_CHECKS") {
         Ok(v) if v == "0" => Ok(false),
-        Ok(v) => Ok(true),
+        Ok(_v) => Ok(true),
         Err(VarError::NotPresent) => Ok(false),
         Err(e) => Err(e).context("unable to parse environment variable LIBCOAP_RS_BYPASS_COMPILE_FEATURE_CHECKS"),
     }?;
 
-    let mut build_system: Box<dyn BuildSystem> = match chosen_build_system.as_ref().map(String::as_str) {
+    let mut build_system: Box<dyn BuildSystem> = match chosen_build_system.as_deref() {
         Some(requested_build_system) => link_libcoap_explicit(
             requested_build_system,
             &target_os,
@@ -73,8 +69,10 @@ fn main() -> Result<()> {
     );
 
     let version = build_system.version();
-    if version.is_none() || version < Version::from(MINIMUM_LIBCOAP_VERSION) {
+    if version.is_some() && version < Version::from(MINIMUM_LIBCOAP_VERSION) {
         println!("cargo:warning=The linked version of libcoap is lower than the minimal version required for libcoap-sys ({}), this will most likely cause errors.", MINIMUM_LIBCOAP_VERSION);
+    } else if version.is_none() {
+        println!("cargo:warning=Unable to automatically detect the linked version of libcoap, please manually ensure that the used version is at least {}.", MINIMUM_LIBCOAP_VERSION);
     }
 
     match build_system.detected_features() {
@@ -122,8 +120,9 @@ fn link_libcoap_explicit(
 ) -> Result<Box<dyn BuildSystem>> {
     match requested_build_system {
         "vendored" if target_os == "espidf" => {
-            EspIdfBuildSystem::new(out_dir, requested_dtls_backend).map(|v| Box::<dyn BuildSystem>::from(Box::new(v)))
+            EspIdfBuildSystem::new(out_dir, requested_features, requested_dtls_backend).map(|v| Box::<dyn BuildSystem>::from(Box::new(v)))
         },
+        "vendored" if cfg!(not(feature = "vendored")) => Err(anyhow!("LIBCOAP_RS_BUILD_SYSTEM has been set to \"vendored\", but the corresponding crate feature \"vendored\" has not been enabled.")),
         "vendored" => VendoredBuildSystem::build_libcoap(out_dir, requested_features, requested_dtls_backend)
             .map(|v| Box::<dyn BuildSystem>::from(Box::new(v))),
         "pkgconfig" if target_os != "espidf" => {
@@ -150,7 +149,7 @@ fn vendored_libcoap_build(
     //       See: https://github.com/obgm/libcoap/blob/develop/BUILDING
     match target_os {
         "espidf" => {
-            EspIdfBuildSystem::new(out_dir, requested_dtls_backend).map(|v| Box::<dyn BuildSystem>::from(Box::new(v)))
+            EspIdfBuildSystem::new(out_dir, requested_features, requested_dtls_backend).map(|v| Box::<dyn BuildSystem>::from(Box::new(v)))
         },
         _ => VendoredBuildSystem::build_libcoap(out_dir, requested_features, requested_dtls_backend)
             .map(|v| Box::<dyn BuildSystem>::from(Box::new(v))),
