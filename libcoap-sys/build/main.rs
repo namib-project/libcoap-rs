@@ -68,11 +68,17 @@ fn main() -> Result<()> {
         bindings_file.canonicalize()?.display()
     );
 
-    let version = build_system.version();
-    if version.is_some() && version < Version::from(MINIMUM_LIBCOAP_VERSION) {
-        println!("cargo:warning=The linked version of libcoap is lower than the minimal version required for libcoap-sys ({}), this will most likely cause errors.", MINIMUM_LIBCOAP_VERSION);
-    } else if version.is_none() {
-        println!("cargo:warning=Unable to automatically detect the linked version of libcoap, please manually ensure that the used version is at least {}.", MINIMUM_LIBCOAP_VERSION);
+    if let Some(version) = build_system.version() {
+        if version < Version::from(MINIMUM_LIBCOAP_VERSION).unwrap() {
+            println!("cargo:warning=The linked version of libcoap is lower than the minimal version required for libcoap-sys ({}), this will most likely cause errors.", MINIMUM_LIBCOAP_VERSION);
+        }
+        println!("cargo::metadata=libcoap_version={}", version.as_str())
+    } else {
+        println!("cargo:warning=Unable to automatically detect the linked version of libcoap, please manually ensure that the used version is at least {} for libcoap-sys to work as expected.", MINIMUM_LIBCOAP_VERSION);
+    }
+
+    if let Some(dtls_backend) = build_system.detected_dtls_backend() {
+        println!("cargo::metadata=dtls_backend={}", dtls_backend.as_str());
     }
 
     match build_system.detected_features() {
@@ -148,9 +154,8 @@ fn vendored_libcoap_build(
     //       Windows).
     //       See: https://github.com/obgm/libcoap/blob/develop/BUILDING
     match target_os {
-        "espidf" => {
-            EspIdfBuildSystem::new(out_dir, requested_features, requested_dtls_backend).map(|v| Box::<dyn BuildSystem>::from(Box::new(v)))
-        },
+        "espidf" => EspIdfBuildSystem::new(out_dir, requested_features, requested_dtls_backend)
+            .map(|v| Box::<dyn BuildSystem>::from(Box::new(v))),
         _ => VendoredBuildSystem::build_libcoap(out_dir, requested_features, requested_dtls_backend)
             .map(|v| Box::<dyn BuildSystem>::from(Box::new(v))),
     }
@@ -173,7 +178,8 @@ fn link_libcoap_auto(
         .map(|v| Box::<dyn BuildSystem>::from(Box::new(v)))
         .or_else(|e| {
             errors.push(("pkgconfig", e));
-            ManualBuildSystem::link_with_libcoap(out_dir, requested_dtls_backend).map(|v| Box::<dyn BuildSystem>::from(Box::new(v)))
+            ManualBuildSystem::link_with_libcoap(out_dir, requested_dtls_backend)
+                .map(|v| Box::<dyn BuildSystem>::from(Box::new(v)))
         })
         .map_err(|e| {
             errors.push(("manual", e));

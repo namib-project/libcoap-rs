@@ -7,9 +7,9 @@ use anyhow::{Context, Result};
 use enumset::EnumSet;
 use version_compare::Version;
 
-use crate::{build_system::BuildSystem, metadata::LibcoapFeature};
 use crate::bindings::{generate_libcoap_bindings, LibcoapDefineParser};
 use crate::metadata::{DtlsBackend, LibcoapDefineInfo};
+use crate::{build_system::BuildSystem, metadata::LibcoapFeature};
 
 pub struct ManualBuildSystem {
     out_dir: PathBuf,
@@ -25,17 +25,31 @@ impl ManualBuildSystem {
         println!("cargo:rerun-if-env-changed=LIBCOAP_RS_ADDITIONAL_LIBRARIES");
 
         // Parse environment variables.
-        let include_dirs: Vec<PathBuf> = env::var("LIBCOAP_RS_INCLUDE_DIRS").context("LIBCOAP_RS_INCLUDE_DIRS has not been set or is not valid unicode")?.split(":").map(PathBuf::from).collect();
-        let lib_dirs: Vec<PathBuf> = env::var("LIBCOAP_RS_LIB_DIRS").context("LIBCOAP_RS_LIB_DIRS has not been set or is not valid unicode")?.split(":").map(PathBuf::from).collect();
+        let include_dirs: Vec<PathBuf> = env::var("LIBCOAP_RS_INCLUDE_DIRS")
+            .context("LIBCOAP_RS_INCLUDE_DIRS has not been set or is not valid unicode")?
+            .split(":")
+            .map(PathBuf::from)
+            .collect();
+        let lib_dirs: Vec<PathBuf> = env::var("LIBCOAP_RS_LIB_DIRS")
+            .context("LIBCOAP_RS_LIB_DIRS has not been set or is not valid unicode")?
+            .split(":")
+            .map(PathBuf::from)
+            .collect();
         let additional_libraries: Vec<String> = match env::var("LIBCOAP_RS_ADDITIONAL_LIBRARIES") {
             Ok(v) => v.split(":").map(ToString::to_string).collect(),
             Err(VarError::NotPresent) => vec![],
-            Err(e) => return Err(e).context("Unable to parse LIBCOAP_RS_ADDITIONAL_LIBRARIES environment variable.")
+            Err(e) => return Err(e).context("Unable to parse LIBCOAP_RS_ADDITIONAL_LIBRARIES environment variable."),
         };
         let use_static = match env::var("LIBCOAP_RS_STATIC") {
-            Ok(v) => { if v == "0" || v == "" { false } else { true } },
+            Ok(v) => {
+                if v == "0" || v == "" {
+                    false
+                } else {
+                    true
+                }
+            },
             Err(VarError::NotPresent) => false,
-            Err(e) => return Err(e).context("Unable to parse LIBCOAP_RS_STATIC environment variable.")
+            Err(e) => return Err(e).context("Unable to parse LIBCOAP_RS_STATIC environment variable."),
         };
 
         // Determine name of libcoap library.
@@ -50,7 +64,11 @@ impl ManualBuildSystem {
             println!("cargo:rustc-link-search={}", lib_dir.display());
         }
         // Instruct rustc to link with the desired version of libcoap.
-        println!("cargo:rustc-link-lib={}{}", if use_static { "static=" } else { "" }, library_name);
+        println!(
+            "cargo:rustc-link-lib={}{}",
+            if use_static { "static=" } else { "" },
+            library_name
+        );
 
         // Instruct rustc to link with additional libraries (note that this *must* happen *after*
         // linking with libcoap, at least with some linkers).
@@ -71,8 +89,14 @@ impl BuildSystem for ManualBuildSystem {
         self.define_info.as_ref().map(|v| v.supported_features)
     }
 
+    fn detected_dtls_backend(&self) -> Option<DtlsBackend> {
+        self.define_info.as_ref().and_then(|v| v.dtls_backend)
+    }
+
     fn version(&self) -> Option<Version> {
-        self.define_info.as_ref().and_then(|i| i.version.as_ref().map(|v| Version::from(v.as_str())))
+        self.define_info
+            .as_ref()
+            .and_then(|i| i.version.as_ref().map(|v| Version::from(v.as_str())))
             .expect("unable to parse version string obtained from coap_defines.h")
     }
 
@@ -87,8 +111,7 @@ impl BuildSystem for ManualBuildSystem {
                 // is an old libcoap in /usr/local/include, but the desired one has its headers in /usr/include.
                 // Therefore, we use `-isystem` instead.
                 // See also: https://clang.llvm.org/docs/ClangCommandLineReference.html#cmdoption-clang-I-dir
-                .clang_args(self.include_dirs.iter().map(|v| format!("-isystem{}", v.display())))
-            )
+                .clang_args(self.include_dirs.iter().map(|v| format!("-isystem{}", v.display()))))
         })?;
 
         self.define_info = Some(RefCell::take(&define_info));

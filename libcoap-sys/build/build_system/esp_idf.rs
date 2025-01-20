@@ -17,7 +17,11 @@ pub struct EspIdfBuildSystem {
 }
 
 impl EspIdfBuildSystem {
-    pub fn new(out_dir: PathBuf, requested_features: EnumSet<LibcoapFeature>, requested_dtls_backend: Option<DtlsBackend>) -> Result<Self> {
+    pub fn new(
+        out_dir: PathBuf,
+        requested_features: EnumSet<LibcoapFeature>,
+        requested_dtls_backend: Option<DtlsBackend>,
+    ) -> Result<Self> {
         embuild::espidf::sysenv::output();
         let esp_idf_bindings_file = env::var_os("DEP_ESP_IDF_ROOT")
             .map(PathBuf::from)
@@ -33,7 +37,7 @@ impl EspIdfBuildSystem {
         Ok(Self {
             out_dir,
             esp_idf_bindings_file,
-            requested_features
+            requested_features,
         })
     }
 }
@@ -47,12 +51,24 @@ impl BuildSystem for EspIdfBuildSystem {
 
         // However, do warn the user if features are requested that cannot be checked this way, but
         // would be checkable if the defines-based checker was used.
-        let uncheckable_features: EnumSet<LibcoapFeature> = self.requested_features.iter().filter(|v| v.define_name().is_some() && v.sdkconfig_flag_name().is_none()).collect();
+        let uncheckable_features: EnumSet<LibcoapFeature> = self
+            .requested_features
+            .iter()
+            .filter(|v| v.define_name().is_some() && v.sdkconfig_flag_name().is_none())
+            .collect();
         if !uncheckable_features.is_empty() {
             println!("cargo:warning=When building for ESP-IDF, the availability of the following requested features that usually can be checked during compile time can only be checked during runtime instead: {}", uncheckable_features.iter().map(|v| v.as_str()).collect::<Vec<&'static str>>().join(", "))
         }
 
         Some(self.requested_features)
+    }
+
+    fn detected_dtls_backend(&self) -> Option<DtlsBackend> {
+        // If DTLS is a requested feature, we check during compile time whether MbedTLS is
+        // supposed to be enabled.
+        self.requested_features
+            .contains(LibcoapFeature::Dtls)
+            .then_some(DtlsBackend::MbedTls)
     }
 
     fn version(&self) -> Option<Version> {
@@ -106,18 +122,28 @@ impl BuildSystem for EspIdfBuildSystem {
 
         // Add check whether the libcoap component is enabled in ESP-IDF to generated bindings file.
         println!("cargo::rustc-check-cfg=cfg(esp_idf_comp_espressif__coap_enabled)");
-        writeln!(&mut libcoap_bindings_file, "#[cfg(not(esp_idf_comp_espressif__coap_enabled))]")
-            .context("unable to write to bindings file")?;
+        writeln!(
+            &mut libcoap_bindings_file,
+            "#[cfg(not(esp_idf_comp_espressif__coap_enabled))]"
+        )
+        .context("unable to write to bindings file")?;
         writeln!(&mut libcoap_bindings_file, "compile_error!(\"You are building libcoap-sys for an ESP-IDF target, but have not added the espressif/coap remote component (see the libcoap-sys documentation for more information)\");")
             .context("unable to write to bindings file")?;
 
-
-        for (feature_name, feature_flag) in self.requested_features.iter().filter_map(|v| v.sdkconfig_flag_name().map(|flag| (v.as_str(), flag))) {
-
+        for (feature_name, feature_flag) in self
+            .requested_features
+            .iter()
+            .filter_map(|v| v.sdkconfig_flag_name().map(|flag| (v.as_str(), flag)))
+        {
             // For some reason, embuild adds expected cfg flags for some, but not all feature-related sdkconfig flags, causing warnings if we don't do this.
             println!("cargo::rustc-check-cfg=cfg(esp_idf_{})", feature_flag.to_lowercase());
 
-            writeln!(&mut libcoap_bindings_file, "#[cfg(not(esp_idf_{}))]", feature_flag.to_lowercase()).context("unable to write to bindings file")?;
+            writeln!(
+                &mut libcoap_bindings_file,
+                "#[cfg(not(esp_idf_{}))]",
+                feature_flag.to_lowercase()
+            )
+            .context("unable to write to bindings file")?;
             writeln!(&mut libcoap_bindings_file, "compile_error!(\"Requested feature \\\"{feature_name}\\\" is not enabled in ESP-IDF sdkconfig.defaults (set `CONFIG_{feature_flag}=y` to fix this)\");")
                 .context("unable to write to bindings file")?;
         }

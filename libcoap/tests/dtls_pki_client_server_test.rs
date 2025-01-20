@@ -75,9 +75,9 @@ pub fn dtls_pki_asn1_file_client_server_request() {
         // For some inexplicable reason, setting the CA cert fails _only_ with ASN1 files using the
         // OpenSSL library.
         // I'm pretty sure this is a libcoap issue, so we'll not set the CA cert there for now.
-        #[cfg(not(feature = "dtls_openssl"))]
+        #[cfg(not(dtls_backend = "openssl"))]
         Some(key_storage.join("./ca/ca.crt.der")),
-        #[cfg(feature = "dtls_openssl")]
+        #[cfg(dtls_backend = "openssl")]
         None::<DerFileKeyComponent>,
         key_storage.join("./server/server.crt.der"),
         key_storage.join("./server/server.key.der"),
@@ -93,7 +93,7 @@ pub fn dtls_pki_asn1_file_client_server_request() {
 #[test]
 // GnuTLS does not like DER-encoded EC keys from memory (for some reason. Loading them from files as
 // done in the test above works fine).
-#[cfg(not(feature = "dtls_gnutls"))]
+#[cfg_attr(dtls_backend = "gnutls", ignore)]
 pub fn dtls_pki_asn1_memory_client_server_request() {
     const DER_CA_CERT: &[u8] = include_bytes!("../resources/test-keys/ca/ca.crt.der");
     const DER_CLIENT_PUBLIC_CERT: &[u8] = include_bytes!("../resources/test-keys/client/client.crt.der");

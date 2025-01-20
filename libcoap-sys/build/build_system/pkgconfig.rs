@@ -49,6 +49,10 @@ impl BuildSystem for PkgConfigBuildSystem {
         self.define_info.as_ref().map(|v| v.supported_features)
     }
 
+    fn detected_dtls_backend(&self) -> Option<DtlsBackend> {
+        self.define_info.as_ref().and_then(|v| v.dtls_backend)
+    }
+
     fn version(&self) -> Option<Version> {
         Version::from(&self.library.version)
             .map(Some)
@@ -66,15 +70,19 @@ impl BuildSystem for PkgConfigBuildSystem {
                 // is an old libcoap in /usr/local/include, but the desired one has its headers in /usr/include.
                 // Therefore, we use `-isystem` instead.
                 // See also: https://clang.llvm.org/docs/ClangCommandLineReference.html#cmdoption-clang-I-dir
-                .clang_args(self.library.include_paths.iter().map(|v| format!("-isystem{}", v.display())))
-            )
+                .clang_args(
+                    self.library
+                        .include_paths
+                        .iter()
+                        .map(|v| format!("-isystem{}", v.display())),
+                ))
         })?;
 
         self.define_info = Some(RefCell::take(&define_info));
 
         if let Some(version) = &self.define_info.as_ref().unwrap().version {
             if Version::from(&self.library.version) != Version::from(version) {
-                return Err(anyhow!("The library version indicated by pkg-config does not match the one indicated by the headers. Are the include paths misconfigured?"))
+                return Err(anyhow!("The library version indicated by pkg-config does not match the one indicated by the headers. Are the include paths misconfigured?"));
             }
         }
 

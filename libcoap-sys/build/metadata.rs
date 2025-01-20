@@ -6,6 +6,10 @@ use std::{
 use anyhow::anyhow;
 use enumset::{EnumSet, EnumSetType};
 
+/// Minimum required version of libcoap in order to build the bindgen-generated bindings.
+///
+/// Note that this is *not* the minimum supported version of the safe wrapper, and should only be
+/// increased if building on older versions causes issues with libcoap-sys specifically.
 pub const MINIMUM_LIBCOAP_VERSION: &str = "4.3.5";
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
@@ -239,7 +243,7 @@ impl DtlsBackend {
     /// define does not correspond to a DTLS library.
     pub fn library_from_define(define_name: &str, define_value: i64) -> Option<DtlsBackend> {
         if define_value == 0 {
-            return None
+            return None;
         }
         match define_name {
             "COAP_WITH_LIBGNUTLS" => Some(DtlsBackend::GnuTls),

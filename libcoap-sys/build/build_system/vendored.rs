@@ -1,15 +1,15 @@
+use crate::bindings::{generate_libcoap_bindings, LibcoapDefineParser};
+use crate::build_system::BuildSystem;
+use crate::metadata::{DtlsBackend, LibcoapDefineInfo, LibcoapFeature};
+use anyhow::{anyhow, ensure, Context, Result};
+use enumset::EnumSet;
 use std::cell::RefCell;
 use std::env;
 use std::env::VarError;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use anyhow::{anyhow, ensure, Context, Result};
-use enumset::EnumSet;
 use version_compare::Version;
-use crate::bindings::{generate_libcoap_bindings, LibcoapDefineParser};
-use crate::build_system::BuildSystem;
-use crate::metadata::{DtlsBackend, LibcoapDefineInfo, LibcoapFeature};
 
 const VENDORED_LIBCOAP_VERSION: &str = "4.3.5";
 
@@ -22,7 +22,11 @@ pub struct VendoredBuildSystem {
 impl VendoredBuildSystem {
     /// Obtain some built version of libcoap and set the appropriate linker flags to link with it
     /// (and its dependencies, if any).
-    pub fn build_libcoap(out_dir: PathBuf, requested_features: EnumSet<LibcoapFeature>, requested_dtls_backend: Option<DtlsBackend>) -> Result<Self> {
+    pub fn build_libcoap(
+        out_dir: PathBuf,
+        requested_features: EnumSet<LibcoapFeature>,
+        requested_dtls_backend: Option<DtlsBackend>,
+    ) -> Result<Self> {
         println!("cargo:rerun-if-changed=src/libcoap");
 
         let libcoap_src_dir = out_dir.join("libcoap");
@@ -47,12 +51,16 @@ impl VendoredBuildSystem {
             &out_dir,
             &copy_options,
         )
-            .context("unable to prepare libcoap build source directory")?;
+        .context("unable to prepare libcoap build source directory")?;
 
         env::set_current_dir(&libcoap_src_dir).expect("unable to change to libcoap build dir");
-        ensure!(Command::new(libcoap_src_dir.join("autogen.sh"))
-            .status()
-            .context("unable to execute autogen.sh")?.success(), "autogen.sh returned an error code");
+        ensure!(
+            Command::new(libcoap_src_dir.join("autogen.sh"))
+                .status()
+                .context("unable to execute autogen.sh")?
+                .success(),
+            "autogen.sh returned an error code"
+        );
 
         let mut build_config = autotools::Config::new(&libcoap_src_dir);
 
@@ -92,7 +100,6 @@ impl VendoredBuildSystem {
         let pkg_config_path_bak = env::var_os("PKG_CONFIG_PATH");
 
         let link_using_pkgconfig = if requested_features.contains(LibcoapFeature::Dtls) {
-
             // Check if we have any DTLS libraries already added as a Rust dependency.
             // For each one, set the appropriate PKG_CONFIG_PATHs, CFLAGS and/or LIBS to use them
             // instead of system versions if they are going to be used.
@@ -136,16 +143,33 @@ impl VendoredBuildSystem {
             additional_pkg_config_paths.push(libcoap_build_prefix.join("lib").join("pkgconfig"));
 
             let pkg_config_path = match env::var("PKG_CONFIG_PATH") {
-                Ok(v) => { format!("{}:{}", additional_pkg_config_paths.iter().map(|v| v.to_str().ok_or(anyhow!("unable to convert PKG_CONFIG_PATH value to UTF-8"))).collect::<Result<Vec<&str>>>()?.join(":"), v) }
-                Err(VarError::NotPresent) => { additional_pkg_config_paths.iter().map(|v| v.to_str().ok_or(anyhow!("unable to convert PKG_CONFIG_PATH value to UTF-8"))).collect::<Result<Vec<&str>>>()?.join(":") },
-                Err(e) => Err(e).context("PKG_CONFIG_PATH is not a valid UTF-8 string")?
+                Ok(v) => {
+                    format!(
+                        "{}:{}",
+                        additional_pkg_config_paths
+                            .iter()
+                            .map(|v| v
+                                .to_str()
+                                .ok_or(anyhow!("unable to convert PKG_CONFIG_PATH value to UTF-8")))
+                            .collect::<Result<Vec<&str>>>()?
+                            .join(":"),
+                        v
+                    )
+                },
+                Err(VarError::NotPresent) => additional_pkg_config_paths
+                    .iter()
+                    .map(|v| {
+                        v.to_str()
+                            .ok_or(anyhow!("unable to convert PKG_CONFIG_PATH value to UTF-8"))
+                    })
+                    .collect::<Result<Vec<&str>>>()?
+                    .join(":"),
+                Err(e) => Err(e).context("PKG_CONFIG_PATH is not a valid UTF-8 string")?,
             };
             build_config.env("PKG_CONFIG_PATH", &pkg_config_path);
 
             // SAFETY: We are single-threaded here.
-            unsafe {
-                env::set_var("PKG_CONFIG_PATH", pkg_config_path)
-            }
+            unsafe { env::set_var("PKG_CONFIG_PATH", pkg_config_path) }
 
             // Choose a DTLS backend.
             let selected_dtls_backend = if let Some(requested_dtls_backend) = requested_dtls_backend {
@@ -189,9 +213,7 @@ impl VendoredBuildSystem {
             let library = pkg_config::Config::new().statik(true).exactly_version(VENDORED_LIBCOAP_VERSION).probe("libcoap-3").context("unable to link against build version of libcoap using pkg-config (which is necessary if you're not using a Rust dependency to link the DTLS library)")?;
 
             // SAFETY: We are still single-threaded here.
-            unsafe {
-                env::set_var("PKG_CONFIG_PATH", pkg_config_path_bak.unwrap_or(OsString::new()))
-            }
+            unsafe { env::set_var("PKG_CONFIG_PATH", pkg_config_path_bak.unwrap_or(OsString::new())) }
             Ok(Self {
                 out_dir,
                 define_info: None,
@@ -199,10 +221,14 @@ impl VendoredBuildSystem {
             })
         } else {
             // SAFETY: We are still single-threaded here.
-            unsafe {
-                env::set_var("PKG_CONFIG_PATH", pkg_config_path_bak.unwrap_or(OsString::new()))
-            }
-            println!("cargo:rustc-link-search={}", libcoap_build_prefix.join("lib").to_str().context("unable to convert OUT_DIR to a valid UTF-8 string.")?);
+            unsafe { env::set_var("PKG_CONFIG_PATH", pkg_config_path_bak.unwrap_or(OsString::new())) }
+            println!(
+                "cargo:rustc-link-search={}",
+                libcoap_build_prefix
+                    .join("lib")
+                    .to_str()
+                    .context("unable to convert OUT_DIR to a valid UTF-8 string.")?
+            );
             println!("cargo:rustc-link-lib=static=coap-3");
             Ok(Self {
                 out_dir,
@@ -222,33 +248,37 @@ impl VendoredBuildSystem {
             println!("cargo:warning=Note that attempting to link more than one version of the same library at once may cause unexpected issues and/or cryptic compilation errors, especially if both versions are statically linked.");
             Ok((None, false))
         } else {
-            let tinydtls_include = env::var_os("DEP_TINYDTLS_INCLUDE").expect("tinydtls-sys dependency has been added, but DEP_TINYDTLS_INCLUDE has not been set");
-            let tinydtls_libs = env::var_os("DEP_TINYDTLS_LIBS").expect("tinydtls-sys dependency has been added, but DEP_TINYDTLS_LIBS has not been set");
-            build_config = build_config.env("TinyDTLS_CFLAGS",
-                                            format!(
-                                                "-I{} -I{}",
-                                                tinydtls_include
-                                                    .to_str()
-                                                    .context("DEP_TINYDTLS_INCLUDE path is not a valid UTF-8 string")?,
-                                                Path::new(&tinydtls_include)
-                                                    .join("tinydtls")
-                                                    .to_str()
-                                                    .context("DEP_TINYDTLS_INCLUDE path is not a valid UTF-8 string")?
-                                            ));
+            let tinydtls_include = env::var_os("DEP_TINYDTLS_INCLUDE")
+                .expect("tinydtls-sys dependency has been added, but DEP_TINYDTLS_INCLUDE has not been set");
+            let tinydtls_libs = env::var_os("DEP_TINYDTLS_LIBS")
+                .expect("tinydtls-sys dependency has been added, but DEP_TINYDTLS_LIBS has not been set");
+            build_config = build_config.env(
+                "TinyDTLS_CFLAGS",
+                format!(
+                    "-I{} -I{}",
+                    tinydtls_include
+                        .to_str()
+                        .context("DEP_TINYDTLS_INCLUDE path is not a valid UTF-8 string")?,
+                    Path::new(&tinydtls_include)
+                        .join("tinydtls")
+                        .to_str()
+                        .context("DEP_TINYDTLS_INCLUDE path is not a valid UTF-8 string")?
+                ),
+            );
 
             // Need to set TinyDTLS_LIBS explicitly to force static linking (TinyDTLS also builds a shared version of the library).
             build_config = build_config.env(
                 "TinyDTLS_LIBS",
                 format!(
                     "-L{} -l:libtinydtls.a",
-                    tinydtls_libs.to_str().context("DEP_TINYDTLS_LIBS path is not a valid UTF-8 string")?
-                ));
+                    tinydtls_libs
+                        .to_str()
+                        .context("DEP_TINYDTLS_LIBS path is not a valid UTF-8 string")?
+                ),
+            );
 
             // Add TinyDTLS's pkg-config directory to the path for version checking.
-            Ok((
-                Some(PathBuf::from(tinydtls_libs)
-                    .join("lib")
-                    .join("pkgconfig")), true))
+            Ok((Some(PathBuf::from(tinydtls_libs).join("lib").join("pkgconfig")), true))
         }
     }
 
@@ -262,12 +292,12 @@ impl VendoredBuildSystem {
             println!("cargo:warning=Note that attempting to link more than one version of the same library at once may cause unexpected issues and/or cryptic compilation errors, especially if both versions are statically linked.");
             Ok((None, false))
         } else {
-            let openssl_include = env::var_os("DEP_OPENSSL_INCLUDE").expect("openssl-sys dependency has been added, but DEP_OPENSSL_INCLUDE has not been set");
-            let openssl_libs =
-                Path::new(openssl_include.as_os_str())
-                    .parent()
-                    .context("DEP_OPENSSL_INCLUDE has no parent directory")?
-                    .join("lib");
+            let openssl_include = env::var_os("DEP_OPENSSL_INCLUDE")
+                .expect("openssl-sys dependency has been added, but DEP_OPENSSL_INCLUDE has not been set");
+            let openssl_libs = Path::new(openssl_include.as_os_str())
+                .parent()
+                .context("DEP_OPENSSL_INCLUDE has no parent directory")?
+                .join("lib");
 
             // Just add the OpenSSL directory to the PKG_CONFIG_PATH, that way libcoap will find it.
             Ok((Some(openssl_libs.join("pkgconfig")), true))
@@ -275,7 +305,10 @@ impl VendoredBuildSystem {
     }
 
     #[cfg(feature = "dtls-mbedtls-sys")]
-    fn configure_mbedtls_sys(out_dir: &Path, mut build_config: &mut autotools::Config) -> Result<(Option<PathBuf>, bool)> {
+    fn configure_mbedtls_sys(
+        out_dir: &Path,
+        mut build_config: &mut autotools::Config,
+    ) -> Result<(Option<PathBuf>, bool)> {
         if env::var_os("MbedTLS_CFLAGS").is_some() || env::var_os("MbedTLS_LIBS").is_some() {
             // Do not use tinydtls-sys if the user manually set either the corresponding LIBS or
             // CFLAGS variable.
@@ -284,7 +317,8 @@ impl VendoredBuildSystem {
             println!("cargo:warning=Note that attempting to link more than one version of the same library at once may cause unexpected issues and/or cryptic compilation errors, especially if both versions are statically linked.");
             Ok((None, false))
         } else {
-            let mbedtls_include = env::var_os("DEP_MBEDTLS_INCLUDE").expect("mbedtls-sys dependency has been added, but DEP_MBEDTLS_INCLUDE has not been set");
+            let mbedtls_include = env::var_os("DEP_MBEDTLS_INCLUDE")
+                .expect("mbedtls-sys dependency has been added, but DEP_MBEDTLS_INCLUDE has not been set");
 
             // Can't use pkg-config here, as pkg-config was only added to MbedTLS recently.
 
@@ -341,6 +375,10 @@ impl BuildSystem for VendoredBuildSystem {
         self.define_info.as_ref().map(|v| v.supported_features)
     }
 
+    fn detected_dtls_backend(&self) -> Option<DtlsBackend> {
+        self.define_info.as_ref().and_then(|v| v.dtls_backend)
+    }
+
     fn version(&self) -> Option<Version> {
         Version::from(VENDORED_LIBCOAP_VERSION)
     }
@@ -356,15 +394,14 @@ impl BuildSystem for VendoredBuildSystem {
                 // is an old libcoap in /usr/local/include, but the desired one has its headers in /usr/include.
                 // Therefore, we use `-isystem` instead.
                 // See also: https://clang.llvm.org/docs/ClangCommandLineReference.html#cmdoption-clang-I-dir
-                .clang_args(self.include_paths.iter().map(|v| format!("-isystem{}", v.display())))
-            )
+                .clang_args(self.include_paths.iter().map(|v| format!("-isystem{}", v.display()))))
         })?;
 
         self.define_info = Some(RefCell::take(&define_info));
 
         if let Some(version) = &self.define_info.as_ref().unwrap().version {
             if Version::from(VENDORED_LIBCOAP_VERSION) != Version::from(version) {
-                return Err(anyhow!("The library version indicated by the headers does not match the vendored version that should be in use. Are the include paths misconfigured?"))
+                return Err(anyhow!("The library version indicated by the headers does not match the vendored version that should be in use. Are the include paths misconfigured?"));
             }
         }
 
