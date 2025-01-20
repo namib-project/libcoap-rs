@@ -104,10 +104,12 @@ impl ServerPskContextBuilder<'_> {
     /// Enables or disables support for EC JPAKE ([RFC 8236](https://datatracker.ietf.org/doc/html/rfc8236))
     /// key exchanges in (D)TLS.
     ///
+    /// Note: At the time of writing (based on libcoap 4.3.5), this is only supported on MbedTLS,
+    /// enabling EC JPAKE on other DTLS backends has no effect.
+    ///
     /// # Implementation details (informative, not covered by semver guarantees)
     ///
     /// Equivalent to setting `ec_jpake` in the underlying [`coap_dtls_spsk_t`] structure.
-    #[cfg(dtls_ec_jpake_support)]
     pub fn ec_jpake(mut self, ec_jpake: bool) -> Self {
         self.ctx.raw_cfg.ec_jpake = ec_jpake.into();
         self

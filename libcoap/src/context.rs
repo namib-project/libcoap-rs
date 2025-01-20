@@ -11,7 +11,7 @@
 
 #[cfg(feature = "dtls-pki")]
 use std::ffi::CString;
-#[cfg(dtls)]
+#[cfg(feature = "dtls")]
 use std::ptr::NonNull;
 use std::{any::Any, ffi::c_void, fmt::Debug, net::SocketAddr, ops::Sub, sync::Once, time::Duration};
 #[cfg(all(feature = "dtls-pki", unix))]
@@ -382,7 +382,7 @@ impl CoapContext<'_> {
     ///
     /// Note that in order to actually connect to DTLS clients, you need to set a crypto provider
     /// using [CoapContext::set_psk_context] and/or [CoapContext::set_pki_rpk_context].
-    #[cfg(dtls)]
+    #[cfg(feature = "dtls")]
     pub fn add_endpoint_dtls(&mut self, addr: SocketAddr) -> Result<(), EndpointCreationError> {
         self.add_endpoint(addr, coap_proto_t::COAP_PROTO_DTLS)
     }

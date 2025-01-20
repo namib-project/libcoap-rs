@@ -207,7 +207,7 @@ pub use event::CoapEventHandler;
 pub use resource::{CoapRequestHandler, CoapResource};
 
 mod context;
-#[cfg(dtls)]
+#[cfg(feature = "dtls")]
 pub mod crypto;
 pub mod error;
 mod event;

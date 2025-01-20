@@ -31,7 +31,7 @@ use libcoap_sys::coap_uri_scheme_t::{COAP_URI_SCHEME_COAPS_WS, COAP_URI_SCHEME_C
 use libcoap_sys::{
     coap_address_t, coap_delete_optlist, coap_mid_t, coap_proto_t,
     coap_proto_t::{COAP_PROTO_DTLS, COAP_PROTO_NONE, COAP_PROTO_TCP, COAP_PROTO_TLS, COAP_PROTO_UDP},
-    coap_split_proxy_uri, coap_split_uri, coap_str_const_t, coap_string_equal, coap_uri_into_options,
+    coap_split_proxy_uri, coap_split_uri, coap_str_const_t, coap_string_equal, coap_uri_into_optlist,
     coap_uri_scheme_t,
     coap_uri_scheme_t::{
         COAP_URI_SCHEME_COAP, COAP_URI_SCHEME_COAPS, COAP_URI_SCHEME_COAPS_TCP, COAP_URI_SCHEME_COAP_TCP,
@@ -589,48 +589,12 @@ impl CoapUri {
         // TODO this is a lot of copying around, however, fixing that would require an entire
         //      rewrite of the option handling code, so it's better kept for a separate PR.
 
-        // Set size of temporary buffer for option storage.
-        // TODO remove when updating minimum libcoap version to 4.3.5, as this buffer is no longer
-        //      used there.
-        #[cfg(coap_uri_buf_unused)]
-        let mut buf = [];
-        #[cfg(not(coap_uri_buf_unused))]
-        let mut buf = {
-            let buf_len =
-                // Length of UriHost option (length of host + max. 5 bytes of option header)
-                self.host().map(|v| v.len()+5).unwrap_or(0)
-                // Length of UriPort option (max. 2 bytes for the port number + max. 5 bytes of
-                // option header)
-                + self.port().map(|v| 7).unwrap_or(0)
-                // Length of path segment
-                + self.path().map(|v| v.len()).unwrap_or(0)
-                // Length of option headers for path segments.
-                // Each path segment has its own header, which can be up to 5 bytes in size.
-                + self.path().map(|v| (v.iter().filter(|c| **c as char == '/').count()+1)*5).unwrap_or(0)
-                // Length of query segment
-                + self.query().map(|v| v.len()).unwrap_or(0)
-                // Length of option headers for query segments.
-                // Each query segment has its own header, which can be up to 5 bytes in size.
-                + self.query().map(|v| (v.iter().filter(|c| **c as char == '?' || **c as char == '&').count()+1)*5).unwrap_or(0);
-            vec![0u8; buf_len]
-        };
-
         let mut optlist = std::ptr::null_mut();
         // SAFETY: self.raw_uri is always valid after construction. The destination may be a null
         //         pointer, optlist may be a null pointer at the start (it will be set to a valid
         //         pointer by this call). Buf and create_port_host_opt are set according to the
         //         libcoap documentation.
-        if unsafe {
-            coap_uri_into_options(
-                &self.raw_uri,
-                std::ptr::null(),
-                &mut optlist,
-                1,
-                buf.as_mut_ptr(),
-                buf.len(),
-            )
-        } < 0
-        {
+        if unsafe { coap_uri_into_optlist(&self.raw_uri, std::ptr::null(), &mut optlist, 1) } < 0 {
             // We have already parsed this URI. If converting it into options fails, something went
             // terribly wrong.
             panic!("could not convert valid coap URI into options");
