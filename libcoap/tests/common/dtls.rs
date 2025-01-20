@@ -7,6 +7,8 @@ use libcoap_rs::message::CoapMessageCommon;
 use libcoap_rs::protocol::{CoapMessageCode, CoapResponseCode};
 use libcoap_rs::session::{CoapClientSession, CoapSessionCommon};
 use libcoap_rs::CoapContext;
+use libcoap_sys::{coap_get_tls_library_version, coap_package_version, coap_tls_library_t};
+use std::ffi::CStr;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -23,6 +25,21 @@ pub fn dtls_client_server_request_common<KTY: KeyType, FC, FS>(
     ServerPkiRpkCryptoContext<'static>: From<PkiRpkContext<'static, KTY>>,
     ClientCryptoContext<'static>: From<PkiRpkContext<'static, KTY>>,
 {
+    let tls_library = match unsafe { *coap_get_tls_library_version() }.type_ {
+        coap_tls_library_t::COAP_TLS_LIBRARY_NOTLS => "notls",
+        coap_tls_library_t::COAP_TLS_LIBRARY_TINYDTLS => "tinydtls",
+        coap_tls_library_t::COAP_TLS_LIBRARY_OPENSSL => "openssl",
+        coap_tls_library_t::COAP_TLS_LIBRARY_GNUTLS => "gnutls",
+        coap_tls_library_t::COAP_TLS_LIBRARY_MBEDTLS => "mbedtls",
+        coap_tls_library_t::COAP_TLS_LIBRARY_WOLFSSL => "wolfssl",
+        _ => "unknown",
+    };
+    println!(
+        "Libcoap-Version: {}, DTLS library: {}",
+        unsafe { CStr::from_ptr(coap_package_version()) }.to_string_lossy(),
+        tls_library
+    );
+
     let server_address = common::get_unused_server_addr();
     let client_crypto_ctx = client_ctx_setup(PkiRpkContextBuilder::<'static, KTY, NonCertVerifying>::new(client_key));
     let server_handle = common::spawn_test_server(move |mut context: CoapContext| {
