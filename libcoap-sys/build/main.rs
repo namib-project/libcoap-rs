@@ -19,7 +19,16 @@ fn main() -> Result<()> {
     println!("cargo:rerun-if-env-changed=LIBCOAP_RS_DTLS_BACKEND");
     println!("cargo:rerun-if-env-changed=LIBCOAP_RS_BUILD_SYSTEM");
     println!("cargo:rerun-if-env-changed=LIBCOAP_RS_BYPASS_COMPILE_FEATURE_CHECKS");
+    // On ESP-IDF builds, this indicates whether the libcoap component has been enabled.
+    println!("cargo::rustc-check-cfg=cfg(esp_idf_comp_espressif__coap_enabled)");
+    // Indicates the DTLS library crate that was linked against, if a library version vendored by
+    // another crate was used.
     println!("cargo:rustc-check-cfg=cfg(used_dtls_crate, values(\"mbedtls\", \"tinydtls\", \"openssl\"))");
+    // Indicates the DTLS backend used, if any.
+    println!("cargo:rustc-check-cfg=cfg(dtls_backend, values(\"mbedtls\", \"tinydtls\", \"openssl\", \"gnutls\", \"wolfssl\"))");
+    // The detected libcoap version, if any.
+    println!("cargo::rustc-check-cfg=cfg(libcoap_version, values(any()))");
+
     let out_dir = PathBuf::from(
         env::var_os("OUT_DIR").expect("no OUT_DIR was provided (are we not running as a cargo build script?)"),
     );
@@ -72,13 +81,15 @@ fn main() -> Result<()> {
         if version < Version::from(MINIMUM_LIBCOAP_VERSION).unwrap() {
             println!("cargo:warning=The linked version of libcoap is lower than the minimal version required for libcoap-sys ({}), this will most likely cause errors.", MINIMUM_LIBCOAP_VERSION);
         }
-        println!("cargo::metadata=libcoap_version={}", version.as_str())
+        println!("cargo::metadata=libcoap_version={}", version.as_str());
+        println!("cargo::rustc-cfg=libcoap_version=\"{}\"", version.as_str());
     } else {
         println!("cargo:warning=Unable to automatically detect the linked version of libcoap, please manually ensure that the used version is at least {} for libcoap-sys to work as expected.", MINIMUM_LIBCOAP_VERSION);
     }
 
     if let Some(dtls_backend) = build_system.detected_dtls_backend() {
         println!("cargo::metadata=dtls_backend={}", dtls_backend.as_str());
+        println!("cargo::rustc-cfg=dtls_backend=\"{}\"", dtls_backend.as_str());
     }
 
     match build_system.detected_features() {

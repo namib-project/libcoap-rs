@@ -120,16 +120,6 @@ impl BuildSystem for EspIdfBuildSystem {
             }
         }
 
-        // Add check whether the libcoap component is enabled in ESP-IDF to generated bindings file.
-        println!("cargo::rustc-check-cfg=cfg(esp_idf_comp_espressif__coap_enabled)");
-        writeln!(
-            &mut libcoap_bindings_file,
-            "#[cfg(not(esp_idf_comp_espressif__coap_enabled))]"
-        )
-        .context("unable to write to bindings file")?;
-        writeln!(&mut libcoap_bindings_file, "compile_error!(\"You are building libcoap-sys for an ESP-IDF target, but have not added the espressif/coap remote component (see the libcoap-sys documentation for more information)\");")
-            .context("unable to write to bindings file")?;
-
         for (feature_name, feature_flag) in self
             .requested_features
             .iter()
@@ -140,7 +130,9 @@ impl BuildSystem for EspIdfBuildSystem {
 
             writeln!(
                 &mut libcoap_bindings_file,
-                "#[cfg(not(esp_idf_{}))]",
+                // Only show these errors if the coap component is enabled at all (in order to only
+                // show the relevant compilation error).
+                "#[cfg(all(esp_idf_comp_espressif__coap_enabled, not(esp_idf_{})))]",
                 feature_flag.to_lowercase()
             )
             .context("unable to write to bindings file")?;

@@ -105,6 +105,13 @@ use openssl_sys as _;
 #[cfg(used_dtls_crate = "tinydtls")]
 use tinydtls_sys as _;
 
+// Add check whether the libcoap component is enabled when building for the ESP-IDF.
+#[cfg(all(target_os = "espidf", not(esp_idf_comp_espressif__coap_enabled)))]
+compile_error!(concat!(
+    "You are building libcoap-sys for an ESP-IDF target, but have not added the\n",
+    "espressif/coap remote component (see the libcoap-sys documentation for more information)"
+));
+
 include!(env!("BINDINGS_FILE"));
 
 /// Compares instances of coap_str_const_t and/or coap_string_t.
@@ -142,134 +149,121 @@ pub unsafe fn coap_string_equal_internal(
                 && memcmp(str1_ptr as *const c_void, str2_ptr as *const c_void, str1_len) == 0)
 }
 
+/// Execute feature check function and panic with an error message if the feature is not supported.
+///
+/// SAFETY: check_fn will be called, make sure to wrap this macro in unsafe if the function is
+/// unsafe.
+#[cfg(any(not(target_os = "espidf"), esp_idf_comp_espressif__coap_enabled))]
+macro_rules! feature_check {
+    ($feature:literal, $check_fn:ident) => {
+        #[cfg(feature = $feature)]
+        // SAFETY: Function is always safe to call.
+        if $check_fn() != 1 {
+            panic!("Required feature \"{}\" is not supported by libcoap", $feature)
+        }
+    };
+    ( $(($feature:literal, $check_fn:ident)),* ) => {
+        $(
+            feature_check!($feature, $check_fn);
+        )*
+    }
+}
+
+#[cfg(any(not(target_os = "espidf"), esp_idf_comp_espressif__coap_enabled))]
+macro_rules! dtls_backend_string {
+    ($backend:ident) => {
+        match $backend {
+            coap_tls_library_t::COAP_TLS_LIBRARY_OPENSSL => "openssl",
+            coap_tls_library_t::COAP_TLS_LIBRARY_GNUTLS => "gnutls",
+            coap_tls_library_t::COAP_TLS_LIBRARY_MBEDTLS => "mbedtls",
+            coap_tls_library_t::COAP_TLS_LIBRARY_TINYDTLS => "tinydtls",
+            coap_tls_library_t::COAP_TLS_LIBRARY_WOLFSSL => "wolfssl",
+            coap_tls_library_t::COAP_TLS_LIBRARY_NOTLS => "notls",
+        }
+    };
+}
+
+#[cfg(any(not(target_os = "espidf"), esp_idf_comp_espressif__coap_enabled))]
+macro_rules! panic_wrong_dtls {
+    ($presumed_backend:ident, $detected_backend:ident) => {
+        panic!(
+            concat!(
+                "compile-time detected DTLS backend \"{}\" does not match run-time detected DTLS backend \"{}\".\n",
+                "This almost certainly means that libcoap-sys was linked against a different version of \n",
+                "libcoap than the one whose headers were used for binding generation."
+            ),
+            dtls_backend_string!($presumed_backend),
+            dtls_backend_string!($detected_backend)
+        )
+    };
+}
+
 /// Initialize the CoAP library and additionally perform runtime checks to ensure that required
 /// features (as enabled in `Cargo.toml`) are available.
 ///
 /// You *should* prefer using this function over [coap_startup], as without calling this function
 /// some of the features enabled using the Cargo features may not actually be available.
-/// (NOTE: However, see the below section on safety).
 ///
 /// Either this function or [coap_startup] must be run once before any libcoap function is called.
 ///
 /// If you are absolutely 100% certain that all features you require are always available (or are
 /// prepared to deal with error return values/different behavior on your own if they aren't), you
 /// may use [coap_startup] instead.
-///
-/// # SAFETY WARNING
-/// In order to preserve backwards compatibility, this method may (for now) skip the feature checks
-/// altogether if they aren't provided by libcoap (which may be the case for libcoap < 4.3.5rc3).
-///
-/// If you want to be absolutely certain that a given feature is available, you *must* also check
-/// the libcoap version to ensure that it is at least 4.3.5rc3.
-///
-/// This behavior will be changed as soon as libcoap 4.3.5 is released, after which libcoap 4.3.5
-/// will become the minimum supported version and these checks will be mandatory.
+// Make sure that if we're compiling for the ESP-IDF, this function is only compiled if the
+// libcoap component is installed in the ESP-IDF.
+// This way, these function calls will not cause missing function or struct definition errors that
+// clutter up the error log, and the only error message will be the way more descriptive
+// compile_error macro invocation at the start of this file.
+#[cfg(any(not(target_os = "espidf"), esp_idf_comp_espressif__coap_enabled))]
 pub fn coap_startup_with_feature_checks() {
-    #[cfg(feature = "af-unix")]
-    // SAFETY: Function is always safe to call.
-    if unsafe { coap_af_unix_is_supported() != 1 } {
-        panic!("Required feature \"af-unix\" is not supported by libcoap")
+    unsafe {
+        feature_check!(
+            ("af-unix", coap_af_unix_is_supported),
+            ("async", coap_async_is_supported),
+            ("client", coap_client_is_supported),
+            ("dtls", coap_dtls_is_supported),
+            ("dtls-cid", coap_dtls_cid_is_supported),
+            ("dtls-psk", coap_dtls_psk_is_supported),
+            ("dtls-pki", coap_dtls_pki_is_supported),
+            ("dtls-pkcs11", coap_dtls_pkcs11_is_supported),
+            ("dtls-rpk", coap_dtls_rpk_is_supported),
+            ("epoll", coap_epoll_is_supported),
+            ("ipv4", coap_ipv4_is_supported),
+            ("ipv6", coap_ipv6_is_supported),
+            ("observe-persist", coap_observe_persist_is_supported),
+            ("oscore", coap_oscore_is_supported),
+            ("q-block", coap_q_block_is_supported),
+            ("server", coap_server_is_supported),
+            ("tcp", coap_tcp_is_supported),
+            ("thread-safe", coap_threadsafe_is_supported),
+            ("tls", coap_tls_is_supported),
+            ("websockets", coap_ws_is_supported),
+            ("secure-websockets", coap_wss_is_supported)
+        );
     }
-    #[cfg(feature = "async")]
-    // SAFETY: Function is always safe to call.
-    if unsafe { coap_async_is_supported() != 1 } {
-        panic!("Required feature \"async\" is not supported by libcoap")
+
+    let presumed_dtls_backend = if cfg!(dtls_backend = "openssl") {
+        coap_tls_library_t::COAP_TLS_LIBRARY_OPENSSL
+    } else if cfg!(dtls_backend = "gnutls") {
+        coap_tls_library_t::COAP_TLS_LIBRARY_GNUTLS
+    } else if cfg!(dtls_backend = "mbedtls") {
+        coap_tls_library_t::COAP_TLS_LIBRARY_MBEDTLS
+    } else if cfg!(dtls_backend = "tinydtls") {
+        coap_tls_library_t::COAP_TLS_LIBRARY_TINYDTLS
+    } else if cfg!(dtls_backend = "wolfssl") {
+        coap_tls_library_t::COAP_TLS_LIBRARY_WOLFSSL
+    } else {
+        coap_tls_library_t::COAP_TLS_LIBRARY_NOTLS
+    };
+
+    let actual_dtls_backend = unsafe { *coap_get_tls_library_version() }.type_;
+
+    if presumed_dtls_backend != coap_tls_library_t::COAP_TLS_LIBRARY_NOTLS
+        && actual_dtls_backend != presumed_dtls_backend
+    {
+        panic_wrong_dtls!(presumed_dtls_backend, actual_dtls_backend);
     }
-    #[cfg(feature = "client")]
-    // SAFETY: Function is always safe to call.
-    if unsafe { coap_client_is_supported() != 1 } {
-        panic!("Required feature \"ipv4\" is not supported by libcoap")
-    }
-    #[cfg(feature = "dtls")]
-    // SAFETY: Function is always safe to call.
-    if unsafe { coap_dtls_is_supported() != 1 } {
-        panic!("Required feature \"dtls\" is not supported by libcoap")
-    }
-    #[cfg(feature = "dtls-cid")]
-    // SAFETY: Function is always safe to call.
-    if unsafe { coap_dtls_cid_is_supported() != 1 } {
-        panic!("Required feature \"dtls-cid\" is not supported by libcoap")
-    }
-    #[cfg(feature = "dtls-psk")]
-    // SAFETY: Function is always safe to call.
-    if unsafe { coap_dtls_psk_is_supported() != 1 } {
-        panic!("Required feature \"dtls-psk\" is not supported by libcoap")
-    }
-    #[cfg(feature = "dtls-pki")]
-    // SAFETY: Function is always safe to call.
-    if unsafe { coap_dtls_pki_is_supported() != 1 } {
-        panic!("Required feature \"dtls-pki\" is not supported by libcoap")
-    }
-    #[cfg(feature = "dtls-pkcs11")]
-    // SAFETY: Function is always safe to call.
-    if !unsafe { coap_dtls_pkcs11_is_supported() == 1 } {
-        panic!("Required feature \"dtls-pkcs11\" is not supported by libcoap")
-    }
-    #[cfg(feature = "dtls-rpk")]
-    // SAFETY: Function is always safe to call.
-    if unsafe { coap_dtls_rpk_is_supported() != 1 } {
-        panic!("Required feature \"dtls-rpk\" is not supported by libcoap")
-    }
-    #[cfg(feature = "epoll")]
-    // SAFETY: Function is always safe to call.
-    if unsafe { coap_epoll_is_supported() != 1 } {
-        panic!("Required feature \"epoll\" is not supported by libcoap")
-    }
-    #[cfg(feature = "ipv4")]
-    // SAFETY: Function is always safe to call.
-    if !unsafe { coap_ipv4_is_supported() == 1 } {
-        panic!("Required feature \"ipv4\" is not supported by libcoap")
-    }
-    #[cfg(feature = "ipv6")]
-    // SAFETY: Function is always safe to call.
-    if !unsafe { coap_ipv6_is_supported() == 1 } {
-        panic!("Required feature \"ipv6\" is not supported by libcoap")
-    }
-    #[cfg(feature = "observe-persist")]
-    // SAFETY: Function is always safe to call.
-    if unsafe { coap_observe_persist_is_supported() != 1 } {
-        panic!("Required feature \"ipv4\" is not supported by libcoap")
-    }
-    #[cfg(feature = "oscore")]
-    // SAFETY: Function is always safe to call.
-    if unsafe { coap_oscore_is_supported() != 1 } {
-        panic!("Required feature \"oscore\" is not supported by libcoap")
-    }
-    #[cfg(feature = "q-block")]
-    // SAFETY: Function is always safe to call.
-    if unsafe { coap_q_block_is_supported() != 1 } {
-        panic!("Required feature \"q-block\" is not supported by libcoap")
-    }
-    #[cfg(feature = "server")]
-    // SAFETY: Function is always safe to call.
-    if unsafe { coap_server_is_supported() != 1 } {
-        panic!("Required feature \"ipv4\" is not supported by libcoap")
-    }
-    #[cfg(feature = "tcp")]
-    // SAFETY: Function is always safe to call.
-    if unsafe { coap_tcp_is_supported() != 1 } {
-        panic!("Required feature \"tcp\" is not supported by libcoap")
-    }
-    #[cfg(feature = "thread-safe")]
-    // SAFETY: Function is always safe to call.
-    if unsafe { coap_threadsafe_is_supported() != 1 } {
-        panic!("Required feature \"thread-safe\" is not supported by libcoap")
-    }
-    #[cfg(feature = "tls")]
-    // SAFETY: Function is always safe to call.
-    if unsafe { coap_tls_is_supported() != 1 } {
-        panic!("Required feature \"tls\" is not supported by libcoap")
-    }
-    #[cfg(feature = "websockets")]
-    // SAFETY: Function is always safe to call.
-    if unsafe { coap_ws_is_supported() != 1 } {
-        panic!("Required feature \"websockets\" is not supported by libcoap")
-    }
-    #[cfg(feature = "secure-websockets")]
-    // SAFETY: Function is always safe to call.
-    if unsafe { coap_wss_is_supported() != 1 } {
-        panic!("Required feature \"websockets\" is not supported by libcoap")
-    }
+
     // SAFETY: Function is always safe to call.
     unsafe { coap_startup() }
 }
@@ -453,6 +447,7 @@ mod tests {
     /// Test case that creates a basic coap server and makes a request to it from a separate context
     #[test]
     fn test_coap_client_server_basic() {
+        coap_startup_with_feature_checks();
         // This will give us a SocketAddress with a port in the local port range automatically
         // assigned by the operating system.
         // Because the UdpSocket goes out of scope, the Port will be free for usage by libcoap.

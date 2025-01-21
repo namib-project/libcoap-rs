@@ -147,11 +147,10 @@ tinydtls-sys = { version = "^0.2.0", default-features = false, optional = true }
 esp-idf-sys = { version = "0.36.1" }
 
 [build-dependencies]
-bindgen = { version = "0.71.1", features = ["experimental"] }
+bindgen = { version = "0.71.1" }
 autotools = "^0.2.3"
 fs_extra = "^1.2"
 pkg-config = "^0.3.24"
-regex = "1.10.5"
 version-compare = "0.2.0"
 anyhow = { version = "1.0.94", features = ["backtrace"] }
 enumset = "1.1.5"

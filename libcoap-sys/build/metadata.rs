@@ -140,6 +140,8 @@ impl LibcoapFeature {
         match self {
             LibcoapFeature::DtlsPsk => Some("COAP_MBEDTLS_PSK"),
             LibcoapFeature::DtlsPki => Some("COAP_MBEDTLS_PKI"),
+            // Should be implied by mbedtls being enabled.
+            LibcoapFeature::DtlsCid => Some("COAP_MBEDTLS_PSK"),
             LibcoapFeature::Tcp => Some("COAP_TCP_SUPPORT"),
             LibcoapFeature::Oscore => Some("COAP_OSCORE_SUPPORT"),
             LibcoapFeature::ObservePersist => Some("COAP_OBSERVE_PERSIST"),
