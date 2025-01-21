@@ -1,4 +1,4 @@
-use libcoap_sys as _;
+use libcoap_rs::CoapContext;
 
 fn main() {
     // It is necessary to call this function once. Otherwise some patches to the runtime
@@ -9,4 +9,6 @@ fn main() {
     esp_idf_svc::log::EspLogger::initialize_default();
 
     log::info!("Hello, world!");
+
+    let context = CoapContext::new().unwrap();
 }

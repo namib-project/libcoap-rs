@@ -1,5 +1,5 @@
 [package]
-name = "libcoap-sys-esp-idf-example"
+name = "libcoap-esp-idf-example"
 version = "0.1.0"
 authors = ["Hugo Hakim Damer <hdamer@uni-bremen.de>"]
 edition = "2021"
@@ -7,7 +7,7 @@ resolver = "2"
 rust-version = "1.77"
 
 [[bin]]
-name = "libcoap-sys-esp-idf-example"
+name = "libcoap-esp-idf-example"
 harness = false # do not use the built in cargo test harness -> resolve rust-analyzer errors
 
 [profile.release]
@@ -26,7 +26,7 @@ experimental = ["esp-idf-svc/experimental"]
 log = "0.4"
 esp-idf-svc = { version = "0.51", features = ["critical-section", "embassy-time-driver", "embassy-sync"] }
 esp-idf-sys = { version = "0.36.1" }
-libcoap-sys = { version = "*", path = "../../" }
+libcoap-rs = { version = "*", path = "../../" }
 
 [build-dependencies]
 embuild = "0.33"
