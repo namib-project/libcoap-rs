@@ -67,8 +67,15 @@ fn main() -> Result<()> {
             out_dir,
             requested_features,
             requested_dtls_backend,
+            bypass_compile_time_feature_checks,
         ),
-        None => link_libcoap_auto(&target_os, out_dir, requested_features, requested_dtls_backend),
+        None => link_libcoap_auto(
+            &target_os,
+            out_dir,
+            requested_features,
+            requested_dtls_backend,
+            bypass_compile_time_feature_checks,
+        ),
     }?;
 
     let bindings_file = build_system.generate_bindings()?;
@@ -134,10 +141,11 @@ fn link_libcoap_explicit(
     out_dir: PathBuf,
     requested_features: EnumSet<LibcoapFeature>,
     requested_dtls_backend: Option<DtlsBackend>,
+    bypass_compile_time_feature_checks: bool,
 ) -> Result<Box<dyn BuildSystem>> {
     match requested_build_system {
         "vendored" if target_os == "espidf" => {
-            EspIdfBuildSystem::new(out_dir, requested_features, requested_dtls_backend).map(|v| Box::<dyn BuildSystem>::from(Box::new(v)))
+            EspIdfBuildSystem::new(out_dir, requested_features, requested_dtls_backend, bypass_compile_time_feature_checks).map(|v| Box::<dyn BuildSystem>::from(Box::new(v)))
         },
         "vendored" if cfg!(not(feature = "vendored")) => Err(anyhow!("LIBCOAP_RS_BUILD_SYSTEM has been set to \"vendored\", but the corresponding crate feature \"vendored\" has not been enabled.")),
         "vendored" => VendoredBuildSystem::build_libcoap(out_dir, requested_features, requested_dtls_backend)
@@ -159,14 +167,20 @@ fn vendored_libcoap_build(
     out_dir: PathBuf,
     requested_features: EnumSet<LibcoapFeature>,
     requested_dtls_backend: Option<DtlsBackend>,
+    bypass_compile_time_feature_checks: bool,
 ) -> Result<Box<dyn BuildSystem>> {
     // TODO: Later on, we'll probably want to use the CMake based build system for any host+target
     //       combination that the libcoap build documentation recommends CMake for (most notably:
     //       Windows).
     //       See: https://github.com/obgm/libcoap/blob/develop/BUILDING
     match target_os {
-        "espidf" => EspIdfBuildSystem::new(out_dir, requested_features, requested_dtls_backend)
-            .map(|v| Box::<dyn BuildSystem>::from(Box::new(v))),
+        "espidf" => EspIdfBuildSystem::new(
+            out_dir,
+            requested_features,
+            requested_dtls_backend,
+            bypass_compile_time_feature_checks,
+        )
+        .map(|v| Box::<dyn BuildSystem>::from(Box::new(v))),
         _ => VendoredBuildSystem::build_libcoap(out_dir, requested_features, requested_dtls_backend)
             .map(|v| Box::<dyn BuildSystem>::from(Box::new(v))),
     }
@@ -177,13 +191,20 @@ fn link_libcoap_auto(
     out_dir: PathBuf,
     requested_features: EnumSet<LibcoapFeature>,
     requested_dtls_backend: Option<DtlsBackend>,
+    bypass_compile_time_feature_checks: bool,
 ) -> Result<Box<dyn BuildSystem>> {
     let mut errors = Vec::<(&'static str, anyhow::Error)>::new();
     // Try vendored build first if the feature is enabled and supported by the host.
     // If the vendored build fails on a supported target, do not try anything else (we assume that
     // the user wanted to use the vendored library for a reason).
     if cfg!(feature = "vendored") || target_os == "espidf" {
-        return vendored_libcoap_build(target_os, out_dir, requested_features, requested_dtls_backend);
+        return vendored_libcoap_build(
+            target_os,
+            out_dir,
+            requested_features,
+            requested_dtls_backend,
+            bypass_compile_time_feature_checks,
+        );
     }
     PkgConfigBuildSystem::link_with_libcoap(out_dir.clone(), requested_dtls_backend)
         .map(|v| Box::<dyn BuildSystem>::from(Box::new(v)))

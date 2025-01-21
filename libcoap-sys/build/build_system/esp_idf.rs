@@ -14,6 +14,7 @@ pub struct EspIdfBuildSystem {
     out_dir: PathBuf,
     esp_idf_bindings_file: PathBuf,
     requested_features: EnumSet<LibcoapFeature>,
+    bypass_compile_time_feature_checks: bool,
 }
 
 impl EspIdfBuildSystem {
@@ -21,6 +22,7 @@ impl EspIdfBuildSystem {
         out_dir: PathBuf,
         requested_features: EnumSet<LibcoapFeature>,
         requested_dtls_backend: Option<DtlsBackend>,
+        bypass_compile_time_feature_checks: bool,
     ) -> Result<Self> {
         embuild::espidf::sysenv::output();
         let esp_idf_bindings_file = env::var_os("DEP_ESP_IDF_ROOT")
@@ -38,6 +40,7 @@ impl EspIdfBuildSystem {
             out_dir,
             esp_idf_bindings_file,
             requested_features,
+            bypass_compile_time_feature_checks,
         })
     }
 }
@@ -80,7 +83,7 @@ impl BuildSystem for EspIdfBuildSystem {
         let esp_bindings_file =
             std::fs::read_to_string(&self.esp_idf_bindings_file).context("unable to read ESP-IDF bindings file")?;
         let parsed_esp_bindings_file =
-            syn::parse_file(&esp_bindings_file).context("unable to parse ESP-IDF bidnings file")?;
+            syn::parse_file(&esp_bindings_file).context("unable to parse ESP-IDF bindings file")?;
 
         // Create file for our own bindings.
         let bindings_file_path = self.out_dir.join("bindings.rs");
@@ -120,24 +123,34 @@ impl BuildSystem for EspIdfBuildSystem {
             }
         }
 
-        for (feature_name, feature_flag) in self
-            .requested_features
-            .iter()
-            .filter_map(|v| v.sdkconfig_flag_name().map(|flag| (v.as_str(), flag)))
-        {
-            // For some reason, embuild adds expected cfg flags for some, but not all feature-related sdkconfig flags, causing warnings if we don't do this.
-            println!("cargo::rustc-check-cfg=cfg(esp_idf_{})", feature_flag.to_lowercase());
+        if !self.bypass_compile_time_feature_checks {
+            for (feature_name, feature_flag) in self
+                .requested_features
+                .iter()
+                .filter_map(|v| v.sdkconfig_flag_name().map(|flag| (v.as_str(), flag)))
+            {
+                // For some reason, embuild adds expected cfg flags for some, but not all
+                // feature-related sdkconfig flags, causing warnings if we don't do this.
+                println!("cargo::rustc-check-cfg=cfg(esp_idf_{})", feature_flag.to_lowercase());
 
-            writeln!(
-                &mut libcoap_bindings_file,
-                // Only show these errors if the coap component is enabled at all (in order to only
-                // show the relevant compilation error).
-                "#[cfg(all(esp_idf_comp_espressif__coap_enabled, not(esp_idf_{})))]",
-                feature_flag.to_lowercase()
-            )
-            .context("unable to write to bindings file")?;
-            writeln!(&mut libcoap_bindings_file, "compile_error!(\"Requested feature \\\"{feature_name}\\\" is not enabled in ESP-IDF sdkconfig.defaults (set `CONFIG_{feature_flag}=y` to fix this)\");")
+                writeln!(
+                    &mut libcoap_bindings_file,
+                    // Only show these errors if the coap component is enabled at all (in order to
+                    // only show the relevant compilation error).
+                    "#[cfg(all(esp_idf_comp_espressif__coap_enabled, not(esp_idf_{})))]",
+                    feature_flag.to_lowercase()
+                )
                 .context("unable to write to bindings file")?;
+                writeln!(
+                    &mut libcoap_bindings_file,
+                    concat!(
+                        "compile_error!(\"Requested feature \\\"{}\\\" is not enabled\n",
+                        "in ESP-IDF sdkconfig.defaults (set `CONFIG_{}=y` to fix this)\");"
+                    ),
+                    feature_flag, feature_name
+                )
+                .context("unable to write to bindings file")?;
+            }
         }
 
         Ok(bindings_file_path)
