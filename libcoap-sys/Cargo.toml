@@ -23,9 +23,26 @@ build = "build/main.rs"
 rust-version = "1.81.0"
 
 [features]
-# The default features match those of libcoaps configure script, except for dtls, which is disabled here because it
-# requires a backend to be set manually.
-default = ["oscore", "ipv4", "ipv6", "af-unix", "tcp", "websockets", "async", "observe-persist", "q-block", "thread-safe", "thread-recursive-lock-detection", "server", "client", "epoll", "vendored"]
+# The default features match those of libcoap's configure script for
+# the minimum supported version.
+default = [
+    "dtls",
+    "oscore",
+    "ipv4",
+    "ipv6",
+    "af-unix",
+    "tcp",
+    "websockets",
+    "async",
+    "observe-persist",
+    "q-block",
+    "thread-safe",
+    "thread-recursive-lock-detection",
+    "server",
+    "client",
+    "epoll"
+    # TODO add proxy
+]
 # While not specified here due to limitations in Cargo's syntax, the DTLS feature depends on one of the DTLS backends
 # being enabled.
 # If you are developing a library based on libcoap-sys and do not care about the DTLS backend, enable the dtls feature

@@ -14,71 +14,78 @@
 //! made in this library are generated automatically using bindgen, for further documentation on how
 //! to use them, refer to the [libcoap documentation](https://libcoap.net/documentation.html).
 //!
-//! In most cases you probably want to use the safe wrapper provided by the libcoap crate (or
-//! another coap library written in pure rust such as [coap-rs](https://github.com/covertness/coap-rs))
+//! In most cases you probably want to use the safe wrapper provided by the libcoap-rs crate or
+//! another coap library written in pure Rust such as [coap-rs](https://github.com/covertness/coap-rs)
 //! instead.
+//!
+//! The TLDR for building libcoap-sys (and resolving the most common Build Issues)
+//! ------------------------------------------------------------------------------
+//! It is strongly recommended that you read the remainder of this page in order to fully understand
+//! the build process and possible causes of errors, especially if you're cross-compiling or
+//! building for embedded targets.
+//!
+//! However, if you lack the time to do so, the following instructions should work in most cases:
+//!
+//! 1. Add a dependency to this crate and add all features you need for your crate to work.
+//!    Call [`coap_startup_with_feature_checks()`] instead of [`coap_startup()`] during
+//!    initialization to ensure that all of these features are actually available in the linked
+//!    version of `libcoap`.
+//!
+//! 2. If you require DTLS support and run into `Required feature "dtls-(psk|pki|rpk|...)" is not
+//!    supported by libcoap` errors, manually select a DTLS library that supports all of your
+//!    required DTLS features by setting the `LIBCOAP_RS_DTLS_BACKEND` environment variable to your
+//!    desired choice (the library name in all-lowercase should work).
+//!
+//! 3. If you're building a binary crate (or tests, examples, ...) and are getting non-DTLS-related
+//!    `Required feature "<FEATURE>" is not supported by libcoap` errors, enable the `vendored`
+//!    feature to build and statically link a version of libcoap that supports exactly the features
+//!    you requested.
+//!
+//! 4. Inspect your dependency tree to determine whether you already have a DTLS library's sys-crate
+//!    (`openssl-sys`, `tinydtls-sys` or `mbedtls-sys-auto`) in your dependency tree.
+//!    If this is the case, enable the `dtls-<LIBRARY NAME>-sys` feature for all of them.
+//!    This may resolve issues related to linking multiple versions of the same library at once, and
+//!    could also help in reducing binary size.
+//!    
+//! If you're still unable to compile `libcoap-sys`, refer to the documentation below.
+//! If the documentation below does not solve your issue, feel free to open an issue
+//! [on GitHub](https://github.com/namib-project/libcoap-rs/) and ask for help.
 //!
 //! Cargo Features
 //! --------------
-//! We currently define a number of features that affect the functionality provided by this wrapper
-//! and required by the linked libcoap library.
+//! Most features specified in this crate's Cargo.toml directly correspond to a feature that can be
+//! enabled or disabled in libcoap's configure-script and/or CMake configuration, refer to the
+//! libcoap documentation for more details on these features.
 //!
-//! Features affecting functionality:
-//! - `dtls`: Enable usage of DTLS for transport security. Supports a number of different backends.
+//! The `default` feature should match the default features enabled in the configure script of the
+//! minimum supported version of libcoap.
 //!
-//!   Note that while not specified here due to limitations in Cargo's syntax, the DTLS feature
-//!   depends on one of the DTLS backends being enabled, and failing to enable a DTLS backend will
-//!   result in a build failure.
-//!   
-//!   If you are developing a library based on libcoap-sys and do not care about the DTLS backend,
-//!   enable the dtls feature and let the user decide on the backend to use, either by
-//!   re-exporting these features (see [the Cargo Book](https://doc.rust-lang.org/cargo/reference/features.html#dependency-features))
-//!   or by assuming that the user will use libcoap-sys as a dependency and enable the
-//!   corresponding backend feature themselves, relying on Cargo's feature unification to enable
-//!   it for your crate as well.
-//!   
-//!   Also note that the backends are **mutually exclusive** due to the C library having these
-//!   backends as mutually exclusive features. If multiple backends are enabled (e.g. because
-//!   multiple dependencies use libcoap-sys and use different backends), we select one based on
-//!   the auto-detection order specified in [the libcoap configure script](https://github.com/obgm/libcoap/blob/develop/configure.ac#L494)
-//!   (gnutls > openssl > mbedtls > tinydtls).
-//!   - `dtls_backend_(openssl|gnutls|mbedtls|tinydtls)`: Enable the corresponding DTLS backend.
-//!      
-//!      Note that enabling the OpenSSL, GnuTLS, TinyDTLS or MbedTLS backend will also require the
-//!      appropriate library to be available (hence the dependency on the corresponding sys-crate).
-//!      The TinyDTLS backend is built using a vendored (and statically linked) version of TinyDTLS
-//!      by default, see the tinydtls-sys crate for more info.
-//!      Choosing a DTLS backend also means that the license terms of these libraries may apply to
-//!      you. See the relevant parts of the [libcoap license file](https://github.com/obgm/libcoap/blob/develop/LICENSE)
-//!      for more information.
-//! - `tcp` (default): Enable CoAP over TCP support
-//! - `async` (default): Enable async functionality.
-//!   
-//!   Note that this async functionality is not translated to Rust's async language functionality,
-//!   but instead adds functionality to the underlying C library to allow for making asynchronous
-//!   requests (i.e. function calls that return before the response has arrived).
+//! Depending on the build system and linked version of libcoap, the features actually provided may
+//! differ from the ones indicated by the crate features.
+//! If you want to ensure that all features that are enabled for this crate are actually supported
+//! by the linked version of libcoap, you may call [coap_startup_with_feature_checks].
 //!
-//!   Integrating libcoap into Rusts async language features is out of scope for this crate, but
-//!   might be implemented later on in the libcoap (safe abstraction) crate.
-//! - `server` (default): Enable code related to server functionality
-//! - `client` (default): Enable code related to client functionality
-//! - `epoll` (default): Allow the underlying C library to perform IO operations using epoll.
+//! Aside from the features relating to libcoap functionality, the following features may also be
+//! enabled for this crate:
+//! - `vendored`: Build and statically link against a version of libcoap bundled with this crate
+//!     instead of using a system-provided one[^1].
+//! - `dtls-<LIBRARY NAME>-sys`: Allows the [vendored](#TODO) libcoap version to link against the
+//!     same version of a DTLS library that is used by the corresponding <LIBRARY NAME>-sys
+//!     crate[^2].
+//!     Note, however, that this does not imply that this DTLS library *will* be used, it
+//!     should  
+//! - `dtls-<LIBRARY NAME>-sys-vendored` instructs the sys-crate of the DTLS library corresponding
+//!     to the feature name to use a vendored version of the underlying library (implies
+//!     `dtls-<LIBRARY NAME>-sys`).
 //!
-//! Other features:
-//! - `vendored` (default): Use a vendored version of libcoap instead of the system-provided one.
-//!   Note that `vendored` implies `static`.
-//! - `static` (default): Perform static linking to the libcoap C library.
+//! [^1]: Note that when building for the ESP-IDF, this feature will be a no-op, as the version
+//!       provided by the ESP-IDF will always be used.
+//! [^2]: In the case of `mbedtls`, `mbedtls-sys-auto` is used instead, as `mbedtls-sys` is
+//!       unmaintained.
 //!
-//! ### Note on features affecting functionality
-//! The features that add or remove functionality do not change the generated bindings as libcoap's
-//! headers (unlike the source files themselves) are not affected by the corresponding `#define`s.
-//!
-//! For library users that link to a shared version of libcoap, this means that the feature flags
-//! do not have any effect and the supported features will correspond directly to the features
-//! enabled during the build of the shared libcoap instance (using the configure-script).
-//!
-//! For users of the vendored version of libcoap (see the `vendored` feature), the supported
-//! features of the vendored libcoap will be set to match the cargo features during build.
+//! Build Process
+//! -------------
+//! [TODO]
 
 // Bindgen translates the C headers, clippy's and rustfmt's recommendations are not applicable here.
 #![allow(clippy::all)]
