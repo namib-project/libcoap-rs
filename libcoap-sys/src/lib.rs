@@ -85,14 +85,24 @@
 #![allow(non_camel_case_types)]
 #![allow(deref_nullptr)]
 #![allow(non_snake_case)]
+#![allow(non_upper_case_globals)]
 
-use std::ffi::c_void;
+use core::ffi::c_void;
 
-#[allow(unused_imports)]
+/// Re-export of the crate that provides libc data types used by libcoap.
+///
+/// In most cases, this will be libc, but on the ESP-IDF, it will be esp_idf_sys.
+#[cfg(target_os = "espidf")]
+pub use esp_idf_sys as c_stdlib;
+/// Re-export of the crate that provides libc data types used by libcoap.
+///
+/// In most cases, this will be libc, but on the ESP-IDF, it will be esp_idf_sys.
 #[cfg(not(target_os = "espidf"))]
-use libc::epoll_event;
-#[allow(unused_imports)]
-use libc::{fd_set, memcmp, sa_family_t, sockaddr, sockaddr_in, sockaddr_in6, socklen_t, time_t};
+pub use libc as c_stdlib;
+
+
+use c_stdlib::{epoll_event, fd_set, memcmp, sa_family_t, sockaddr, sockaddr_in, sockaddr_in6, socklen_t, time_t};
+
 // use dtls backend libraries in cases where they set our linker flags, otherwise rustc will
 // optimize them out, resulting in missing symbols.
 #[allow(unused_imports)]
@@ -146,7 +156,7 @@ pub unsafe fn coap_string_equal_internal(
         && (str1_len == 0
             || !str1_ptr.is_null()
                 && !str2_ptr.is_null()
-                && memcmp(str1_ptr as *const c_void, str2_ptr as *const c_void, str1_len) == 0)
+                && memcmp(str1_ptr as *const c_void, str2_ptr as *const c_void, str1_len as _) == 0)
 }
 
 /// Execute feature check function and panic with an error message if the feature is not supported.
@@ -173,12 +183,13 @@ macro_rules! feature_check {
 macro_rules! dtls_backend_string {
     ($backend:ident) => {
         match $backend {
-            coap_tls_library_t::COAP_TLS_LIBRARY_OPENSSL => "openssl",
-            coap_tls_library_t::COAP_TLS_LIBRARY_GNUTLS => "gnutls",
-            coap_tls_library_t::COAP_TLS_LIBRARY_MBEDTLS => "mbedtls",
-            coap_tls_library_t::COAP_TLS_LIBRARY_TINYDTLS => "tinydtls",
-            coap_tls_library_t::COAP_TLS_LIBRARY_WOLFSSL => "wolfssl",
-            coap_tls_library_t::COAP_TLS_LIBRARY_NOTLS => "notls",
+            coap_tls_library_t_COAP_TLS_LIBRARY_OPENSSL => "openssl",
+            coap_tls_library_t_COAP_TLS_LIBRARY_GNUTLS => "gnutls",
+            coap_tls_library_t_COAP_TLS_LIBRARY_MBEDTLS => "mbedtls",
+            coap_tls_library_t_COAP_TLS_LIBRARY_TINYDTLS => "tinydtls",
+            coap_tls_library_t_COAP_TLS_LIBRARY_WOLFSSL => "wolfssl",
+            coap_tls_library_t_COAP_TLS_LIBRARY_NOTLS => "notls",
+            _ => "unknown",
         }
     };
 }
@@ -242,26 +253,30 @@ pub fn coap_startup_with_feature_checks() {
         );
     }
 
-    let presumed_dtls_backend = if cfg!(dtls_backend = "openssl") {
-        coap_tls_library_t::COAP_TLS_LIBRARY_OPENSSL
-    } else if cfg!(dtls_backend = "gnutls") {
-        coap_tls_library_t::COAP_TLS_LIBRARY_GNUTLS
-    } else if cfg!(dtls_backend = "mbedtls") {
-        coap_tls_library_t::COAP_TLS_LIBRARY_MBEDTLS
-    } else if cfg!(dtls_backend = "tinydtls") {
-        coap_tls_library_t::COAP_TLS_LIBRARY_TINYDTLS
-    } else if cfg!(dtls_backend = "wolfssl") {
-        coap_tls_library_t::COAP_TLS_LIBRARY_WOLFSSL
-    } else {
-        coap_tls_library_t::COAP_TLS_LIBRARY_NOTLS
-    };
-
-    let actual_dtls_backend = unsafe { *coap_get_tls_library_version() }.type_;
-
-    if presumed_dtls_backend != coap_tls_library_t::COAP_TLS_LIBRARY_NOTLS
-        && actual_dtls_backend != presumed_dtls_backend
+    // ESP-IDF is missing the coap_tls_library_t type.
+    #[cfg(not(target_os = "espidf"))]
     {
-        panic_wrong_dtls!(presumed_dtls_backend, actual_dtls_backend);
+        let presumed_dtls_backend = if cfg!(dtls_backend = "openssl") {
+            coap_tls_library_t_COAP_TLS_LIBRARY_OPENSSL
+        } else if cfg!(dtls_backend = "gnutls") {
+            coap_tls_library_t_COAP_TLS_LIBRARY_GNUTLS
+        } else if cfg!(dtls_backend = "mbedtls") {
+            coap_tls_library_t_COAP_TLS_LIBRARY_MBEDTLS
+        } else if cfg!(dtls_backend = "tinydtls") {
+            coap_tls_library_t_COAP_TLS_LIBRARY_TINYDTLS
+        } else if cfg!(dtls_backend = "wolfssl") {
+            coap_tls_library_t_COAP_TLS_LIBRARY_WOLFSSL
+        } else {
+            coap_tls_library_t_COAP_TLS_LIBRARY_NOTLS
+        };
+
+        let actual_dtls_backend = unsafe { *coap_get_tls_library_version() }.type_;
+
+        if presumed_dtls_backend != coap_tls_library_t_COAP_TLS_LIBRARY_NOTLS
+            && actual_dtls_backend != presumed_dtls_backend
+        {
+            panic_wrong_dtls!(presumed_dtls_backend, actual_dtls_backend);
+        }
     }
 
     // SAFETY: Function is always safe to call.
@@ -280,12 +295,6 @@ mod tests {
     use libc::{in6_addr, in_addr, sa_family_t, size_t, AF_INET, AF_INET6};
 
     use super::*;
-    use crate::{
-        coap_pdu_code_t::{COAP_REQUEST_CODE_GET, COAP_RESPONSE_CODE_CONTENT},
-        coap_proto_t::COAP_PROTO_UDP,
-        coap_request_t::COAP_REQUEST_GET,
-        coap_response_t::COAP_RESPONSE_OK,
-    };
 
     const COAP_TEST_RESOURCE_URI: &str = "test";
     const COAP_TEST_RESOURCE_RESPONSE: &str = "Hello World!";
@@ -302,7 +311,7 @@ mod tests {
                         size: std::mem::size_of::<sockaddr_in>() as socklen_t,
                         addr: std::mem::zeroed(),
                     };
-                    *coap_addr.addr.sin.as_mut() = sockaddr_in {
+                    coap_addr.addr.sin = sockaddr_in {
                         sin_family: AF_INET as sa_family_t,
                         sin_port: addr.port().to_be(),
                         sin_addr: in_addr {
@@ -322,7 +331,7 @@ mod tests {
                         size: std::mem::size_of::<sockaddr_in6>() as socklen_t,
                         addr: std::mem::zeroed(),
                     };
-                    *coap_addr.addr.sin6.as_mut() = sockaddr_in6 {
+                    coap_addr.addr.sin6 = sockaddr_in6 {
                         sin6_family: AF_INET6 as sa_family_t,
                         sin6_port: addr.port().to_be(),
                         sin6_addr: in6_addr {
@@ -364,7 +373,7 @@ mod tests {
             COAP_TEST_RESOURCE_RESPONSE.as_ptr(),
         );
         coap_set_app_data(coap_session_get_context(session), (&true) as *const bool as *mut c_void);
-        coap_pdu_set_code(response_pdu, COAP_RESPONSE_CODE_CONTENT);
+        coap_pdu_set_code(response_pdu, coap_pdu_code_t_COAP_RESPONSE_CODE_CONTENT);
     }
 
     /// Response handler for the CoAP client/server test (client-side)
@@ -380,7 +389,7 @@ mod tests {
         received: *const coap_pdu_t,
         _mid: coap_mid_t,
     ) -> coap_response_t {
-        assert_eq!(coap_pdu_get_code(received), COAP_RESPONSE_CODE_CONTENT);
+        assert_eq!(coap_pdu_get_code(received), coap_pdu_code_t_COAP_RESPONSE_CODE_CONTENT);
         let mut len: size_t = 0;
         let mut data: *const u8 = std::ptr::null();
         assert_ne!(coap_get_data(received, &mut len, &mut data), 0);
@@ -388,7 +397,7 @@ mod tests {
 
         assert_eq!(data, COAP_TEST_RESOURCE_RESPONSE.as_bytes());
         coap_set_app_data(coap_session_get_context(session), (&true) as *const bool as *mut c_void);
-        return COAP_RESPONSE_OK;
+        return coap_response_t_COAP_RESPONSE_OK;
     }
 
     /// Creates a CoAP server that provides a single resource under COAP_TEST_RESOURCE_URI over the
@@ -401,7 +410,7 @@ mod tests {
         let address: coap_address_t = coap_address_from_socketaddr(addr);
 
         // SAFETY: We asserted that context != null, listen_addr is a reference and can therefore not be null.
-        let endpoint = unsafe { coap_new_endpoint(context, &address, coap_proto_t::COAP_PROTO_UDP) };
+        let endpoint = unsafe { coap_new_endpoint(context, &address, coap_proto_t_COAP_PROTO_UDP) };
         assert!(!endpoint.is_null());
 
         // SAFETY: Since we use a string constant here, the arguments to the function are all valid.
@@ -418,7 +427,11 @@ mod tests {
         // struct allows for mutable pointers to be set there, so that applications can use this to
         // modify some application specific state.
         unsafe {
-            coap_register_request_handler(test_resource, COAP_REQUEST_GET, Some(test_resource_handler));
+            coap_register_request_handler(
+                test_resource,
+                coap_request_t_COAP_REQUEST_GET,
+                Some(test_resource_handler),
+            );
             coap_add_resource(context, test_resource);
             coap_set_app_data(context, (&false) as *const bool as *mut c_void);
         }
@@ -481,7 +494,7 @@ mod tests {
         // SAFETY: null pointer is valid argument for local_if, server_address is guaranteed to be
         // a correct value (conversion cannot fail), validity of context was asserted before.
         let client_session =
-            unsafe { coap_new_client_session(context, std::ptr::null(), &server_address, COAP_PROTO_UDP) };
+            unsafe { coap_new_client_session(context, std::ptr::null(), &server_address, coap_proto_t_COAP_PROTO_UDP) };
 
         // SAFETY: context and client_session were asserted to be valid.
         // Casting *const to *mut is fine because we don't mutate the value pointed to and the
@@ -492,8 +505,11 @@ mod tests {
         unsafe {
             coap_register_response_handler(context, Some(test_response_handler));
             coap_set_app_data(context, (&false) as *const bool as *mut c_void);
-            let coap_request_pdu =
-                coap_new_pdu(coap_pdu_type_t::COAP_MESSAGE_NON, COAP_REQUEST_CODE_GET, client_session);
+            let coap_request_pdu = coap_new_pdu(
+                coap_pdu_type_t_COAP_MESSAGE_NON,
+                coap_pdu_code_t_COAP_REQUEST_CODE_GET,
+                client_session,
+            );
             assert!(!coap_request_pdu.is_null());
             assert_ne!(
                 coap_add_option(

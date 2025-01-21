@@ -385,17 +385,30 @@ impl BuildSystem for VendoredBuildSystem {
 
     fn generate_bindings(&mut self) -> anyhow::Result<PathBuf> {
         let (define_info, define_parser) = LibcoapDefineParser::new();
-        let bindings = generate_libcoap_bindings(|builder| {
-            Ok(builder
-                .parse_callbacks(Box::new(define_parser))
-                // If the pkg-config provided include path coincides with a system include directory,
-                // setting the "-I{}" command line argument will not do anything, potentially resulting
-                // in clang using different CoAP headers than provided by pkg-config, e.g., if there
-                // is an old libcoap in /usr/local/include, but the desired one has its headers in /usr/include.
-                // Therefore, we use `-isystem` instead.
-                // See also: https://clang.llvm.org/docs/ClangCommandLineReference.html#cmdoption-clang-I-dir
-                .clang_args(self.include_paths.iter().map(|v| format!("-isystem{}", v.display()))))
-        })?;
+        let bindings = generate_libcoap_bindings(
+            |builder| {
+                Ok(builder
+                    .parse_callbacks(Box::new(define_parser))
+                    // If the pkg-config provided include path coincides with a system include directory,
+                    // setting the "-I{}" command line argument will not do anything, potentially resulting
+                    // in clang using different CoAP headers than provided by pkg-config, e.g., if there
+                    // is an old libcoap in /usr/local/include, but the desired one has its headers in /usr/include.
+                    // Therefore, we use `-isystem` instead.
+                    // See also: https://clang.llvm.org/docs/ClangCommandLineReference.html#cmdoption-clang-I-dir
+                    .clang_args(self.include_paths.iter().map(|v| format!("-isystem{}", v.display()))))
+            },
+            // Do not run on header file changes, as this will cause cargo to __always__ rebuild,
+            // no matter what.
+            // This is probably related to the fact that the headers are only generated during
+            // build.
+            // Without changes to the actual source code in src, crate features or environment
+            // variables that influence this build script (which are already covered by
+            // cargo:rerun-if-env-changed), the headers will never change and necessitate a rebuild,
+            // so this should be fine.
+            false,
+        )?;
+        // Just to make sure we do actually run if the libcoap source code changed.
+        println!("cargo:rerun-if-changed=src/libcoap");
 
         self.define_info = Some(RefCell::take(&define_info));
 

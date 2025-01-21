@@ -15,10 +15,7 @@ use crate::crypto::pki_rpk::{
 };
 use crate::crypto::ClientCryptoContext;
 use crate::session::CoapSession;
-use libcoap_sys::{
-    coap_const_char_ptr_t, coap_dtls_key_t, coap_dtls_key_t__bindgen_ty_1, coap_dtls_pki_t, coap_pki_define_t,
-    coap_pki_key_define_t, coap_pki_key_t,
-};
+use libcoap_sys::{coap_const_char_ptr_t, coap_dtls_key_t, coap_dtls_key_t__bindgen_ty_1, coap_dtls_pki_t, coap_pki_define_t, coap_pki_define_t_COAP_PKI_KEY_DEF_PEM, coap_pki_define_t_COAP_PKI_KEY_DEF_PKCS11_RPK, coap_pki_define_t_COAP_PKI_KEY_DEF_RPK_BUF, coap_pki_key_define_t, coap_pki_key_t, coap_pki_key_t_COAP_PKI_KEY_DEFINE};
 use std::ffi::CString;
 use std::fmt::Debug;
 
@@ -170,7 +167,7 @@ impl<PK: KeyComponent<Rpk>, SK: KeyComponent<Rpk>> KeyDefSealed for RpkKeyDef<PK
         let (private_key, private_key_len) = self.private_key.as_raw_key_component();
 
         coap_dtls_key_t {
-            key_type: coap_pki_key_t::COAP_PKI_KEY_DEFINE,
+            key_type: coap_pki_key_t_COAP_PKI_KEY_DEFINE,
             key: coap_dtls_key_t__bindgen_ty_1 {
                 define: coap_pki_key_define_t {
                     ca: coap_const_char_ptr_t {
@@ -181,7 +178,7 @@ impl<PK: KeyComponent<Rpk>, SK: KeyComponent<Rpk>> KeyDefSealed for RpkKeyDef<PK
                     ca_len: 0,
                     public_cert_len,
                     private_key_len,
-                    ca_def: coap_pki_define_t::COAP_PKI_KEY_DEF_PEM,
+                    ca_def: coap_pki_define_t_COAP_PKI_KEY_DEF_PEM,
                     public_cert_def: <PK as KeyComponentSealed<Rpk>>::DEFINE_TYPE,
                     private_key_def: <SK as KeyComponentSealed<Rpk>>::DEFINE_TYPE,
                     private_key_type: self.asn1_private_key_type.into(),
@@ -197,9 +194,9 @@ impl<PK: KeyComponent<Rpk>, SK: KeyComponent<Rpk>> KeyDef for RpkKeyDef<PK, SK> 
 }
 
 impl KeyComponentSealed<Rpk> for PemMemoryKeyComponent {
-    const DEFINE_TYPE: coap_pki_define_t = coap_pki_define_t::COAP_PKI_KEY_DEF_RPK_BUF;
+    const DEFINE_TYPE: coap_pki_define_t = coap_pki_define_t_COAP_PKI_KEY_DEF_RPK_BUF;
 }
 
 impl KeyComponentSealed<Rpk> for Pkcs11KeyComponent {
-    const DEFINE_TYPE: coap_pki_define_t = coap_pki_define_t::COAP_PKI_KEY_DEF_PKCS11_RPK;
+    const DEFINE_TYPE: coap_pki_define_t = coap_pki_define_t_COAP_PKI_KEY_DEF_PKCS11_RPK;
 }

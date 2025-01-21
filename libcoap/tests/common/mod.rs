@@ -21,7 +21,7 @@ use libcoap_rs::message::{CoapMessageCommon, CoapRequest, CoapResponse};
 use libcoap_rs::protocol::{CoapMessageCode, CoapMessageType, CoapRequestCode, CoapResponseCode};
 use libcoap_rs::session::CoapSessionCommon;
 use libcoap_rs::{CoapContext, CoapRequestHandler, CoapResource};
-use libcoap_sys::{coap_dtls_set_log_level, coap_log_t, coap_set_log_level};
+use libcoap_sys::{coap_dtls_set_log_level, coap_log_t_COAP_LOG_DEBUG, coap_set_log_level};
 
 pub(crate) fn get_unused_server_addr() -> SocketAddr {
     // This will give us a SocketAddress with a port in the local port range automatically
@@ -91,8 +91,8 @@ pub(crate) fn spawn_test_server<F: FnOnce(CoapContext<'static>) -> CoapContext<'
 pub(crate) fn run_test_server<F: FnOnce(CoapContext<'static>) -> CoapContext<'static>>(context_configurator: F) {
     unsafe {
         libcoap_sys::coap_startup_with_feature_checks();
-        coap_dtls_set_log_level(coap_log_t::COAP_LOG_DEBUG);
-        coap_set_log_level(coap_log_t::COAP_LOG_DEBUG);
+        coap_dtls_set_log_level(coap_log_t_COAP_LOG_DEBUG);
+        coap_set_log_level(coap_log_t_COAP_LOG_DEBUG);
     }
     let mut context = CoapContext::new().unwrap();
     context = context_configurator(context);

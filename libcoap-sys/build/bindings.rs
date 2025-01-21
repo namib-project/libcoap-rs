@@ -1,12 +1,8 @@
 use std::{cell::RefCell, fmt::Debug, path::PathBuf, rc::Rc};
 
-use anyhow::{Context, Result};
-use bindgen::{
-    callbacks::{IntKind, ParseCallbacks},
-    EnumVariation,
-};
-
 use crate::metadata::{DtlsBackend, LibcoapDefineInfo, LibcoapFeature};
+use anyhow::{Context, Result};
+use bindgen::callbacks::{DeriveTrait, ImplementsTrait, IntKind, ParseCallbacks};
 
 /// Implementation of bindgen's [ParseCallbacks] that allow reading some meta-information about the
 /// used libcoap version from its defines (package version, supported features, ...)
@@ -49,8 +45,47 @@ impl ParseCallbacks for LibcoapDefineParser {
     }
 }
 
+#[derive(Debug, Default)]
+struct LibcoapBindingHelper;
+
+impl ParseCallbacks for LibcoapBindingHelper {
+    // Even if we don't use CargoCallbacks, we want to rebuild if relevant environment variables
+    // change.
+    fn read_env_var(&self, key: &str) {
+        println!("cargo:rerun-if-env-changed={key}")
+    }
+
+    fn blocklisted_type_implements_trait(&self, name: &str, derive_trait: DeriveTrait) -> Option<ImplementsTrait> {
+        // This is based on what libc reports for Unix-based OSes
+        #[cfg(unix)]
+        match (name, derive_trait) {
+            (
+                "struct epoll_event" | "fd_set" | "struct sockaddr_in" | "struct sockaddr_in6" | "struct sockaddr",
+                DeriveTrait::Debug | DeriveTrait::Hash | DeriveTrait::PartialEqOrPartialOrd | DeriveTrait::Copy,
+            ) => Some(ImplementsTrait::Yes),
+            (
+                "struct epoll_event" | "fd_set" | "struct sockaddr_in" | "struct sockaddr_in6" | "struct sockaddr",
+                DeriveTrait::Default,
+            ) => Some(ImplementsTrait::No),
+            (
+                "time_t" | "socklen_t" | "sa_family_t",
+                DeriveTrait::Debug
+                | DeriveTrait::Hash
+                | DeriveTrait::PartialEqOrPartialOrd
+                | DeriveTrait::Copy
+                | DeriveTrait::Default,
+            ) => Some(ImplementsTrait::Yes),
+            (_, _) => None,
+        }
+        #[cfg(not(unix))]
+        // Let's just assume that bindgen's default behavior is fine.
+        None
+    }
+}
+
 pub fn generate_libcoap_bindings(
     bindgen_builder_configurator: impl FnOnce(bindgen::Builder) -> Result<bindgen::Builder>,
+    rerun_on_header_file_changes: bool,
 ) -> Result<bindgen::Bindings> {
     let source_root = PathBuf::from(
         std::env::var_os("CARGO_MANIFEST_DIR")
@@ -65,11 +100,9 @@ pub fn generate_libcoap_bindings(
                 .context("unable to convert header path to &str")?
                 .to_string(),
         )
-        .default_enum_style(EnumVariation::Rust { non_exhaustive: true })
-        // Causes invalid syntax for some reason, so we have to disable it.
+        .parse_callbacks(Box::new(LibcoapBindingHelper))
         .generate_comments(true)
         .generate_cstr(true)
-        .dynamic_link_require_all(true)
         .allowlist_function("(oscore|coap)_.*")
         .allowlist_type("(oscore|coap)_.*")
         .allowlist_var("(oscore|coap)_.*")
@@ -92,6 +125,17 @@ pub fn generate_libcoap_bindings(
         // this problem.
         .blocklist_type("__(u)?int(8|16|32|64|128)_t")
         .size_t_is_usize(true);
+
+    // The `rerun_on_header_files()` method only applies to the top level header (in our case
+    // src/wrapper.h, so we must not add CargoCallbacks at all if we want to get our desired
+    // effect).
+    // To still handle environment variable changes properly, LibcoapBindingHeader already includes
+    // the relevant parts of CargoCallbacks.
+    if rerun_on_header_file_changes {
+        builder = builder.parse_callbacks(Box::new(
+            bindgen::CargoCallbacks::new().rerun_on_header_files(rerun_on_header_file_changes),
+        ))
+    }
     builder = bindgen_builder_configurator(builder)?;
 
     builder.generate().context("unable to generate bindings")

@@ -20,7 +20,7 @@ resolver = "2"
 rust-version = "1.81.0"
 
 [features]
-default = ["dtls-psk", "tcp", "vendored", "libcoap-sys/default"]
+default = ["dtls-psk", "tcp"]
 dtls = ["libcoap-sys/dtls"]
 dtls-psk = ["dtls", "libcoap-sys/dtls-psk"]
 dtls-pki = ["dtls", "libcoap-sys/dtls-pki"]
@@ -38,7 +38,6 @@ dtls-tinydtls-sys-vendored = ["libcoap-sys/dtls-tinydtls-sys-vendored"]
 
 [dependencies]
 libcoap-sys = { version = "^0.2.2", path = "../libcoap-sys", default-features = false, features = ["client", "server"] }
-libc = { version = "^0.2.95" }
 num-derive = { version = "^0.3.3" }
 num-traits = { version = "^0.2.14" }
 url = { version = "^2.2", optional = true }

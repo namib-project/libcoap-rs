@@ -11,8 +11,11 @@
 
 use std::fmt::Debug;
 
-use libcoap_sys::{coap_event_t, coap_session_get_context, coap_session_t};
-use libcoap_sys::{coap_session_get_type, coap_session_type_t};
+use libcoap_sys::{
+    coap_event_t, coap_event_t_COAP_EVENT_SERVER_SESSION_NEW, coap_event_t_COAP_EVENT_TCP_CONNECTED,
+    coap_session_get_context, coap_session_t, coap_session_type_t_COAP_SESSION_TYPE_SERVER,
+};
+use libcoap_sys::coap_session_get_type;
 
 use crate::context::CoapContext;
 use crate::session::CoapSession;
@@ -147,7 +150,6 @@ pub trait CoapEventHandler: Debug {
     #[allow(unused_variables)]
     fn handle_oscore_decode_error(&mut self, session: &mut CoapSession) {}
 
-
     /// Handle an oversized WebSocket packet event.
     #[allow(unused_variables)]
     fn handle_ws_packet_size(&mut self, session: &mut CoapSession) {}
@@ -171,9 +173,9 @@ pub trait CoapEventHandler: Debug {
 pub(crate) unsafe extern "C" fn event_handler_callback(raw_session: *mut coap_session_t, event: coap_event_t) -> i32 {
     let raw_session_type = coap_session_get_type(raw_session);
 
-    let session: CoapSession = if event == coap_event_t::COAP_EVENT_SERVER_SESSION_NEW
-        || (event == coap_event_t::COAP_EVENT_TCP_CONNECTED
-            && raw_session_type == coap_session_type_t::COAP_SESSION_TYPE_SERVER)
+    let session: CoapSession = if event == coap_event_t_COAP_EVENT_SERVER_SESSION_NEW
+        || (event == coap_event_t_COAP_EVENT_TCP_CONNECTED
+            && raw_session_type == coap_session_type_t_COAP_SESSION_TYPE_SERVER)
     {
         CoapServerSession::initialize_raw(raw_session).into()
     } else {

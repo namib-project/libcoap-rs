@@ -140,11 +140,13 @@ dtls-rpk = ["dtls"]
 [dependencies]
 openssl-sys = { version = "^0.9.74", optional = true }
 mbedtls-sys-auto = { version = "^2.26", optional = true }
-libc = "^0.2.126"
 tinydtls-sys = { version = "^0.2.0", default-features = false, optional = true }
 
 [target.'cfg(target_os="espidf")'.dependencies]
 esp-idf-sys = { version = "0.36.1" }
+
+[target.'cfg(not(target_os="espidf"))'.dependencies]
+libc = "0.2.126"
 
 [build-dependencies]
 bindgen = { version = "0.71.1" }

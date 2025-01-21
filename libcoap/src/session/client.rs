@@ -11,9 +11,11 @@ use std::cell::{Ref, RefMut};
 use std::net::SocketAddr;
 
 use libcoap_sys::{
-    coap_new_client_session, coap_proto_t, coap_register_event_handler, coap_session_get_app_data,
-    coap_session_get_context, coap_session_get_type, coap_session_init_token, coap_session_release,
-    coap_session_set_app_data, coap_session_t, coap_session_type_t, COAP_TOKEN_DEFAULT_MAX,
+    coap_new_client_session, coap_proto_t_COAP_PROTO_DTLS, coap_proto_t_COAP_PROTO_TCP, coap_proto_t_COAP_PROTO_UDP,
+    coap_register_event_handler, coap_session_get_app_data, coap_session_get_context, coap_session_get_type,
+    coap_session_init_token, coap_session_release, coap_session_set_app_data, coap_session_t,
+    coap_session_type_t_COAP_SESSION_TYPE_CLIENT, coap_session_type_t_COAP_SESSION_TYPE_HELLO,
+    coap_session_type_t_COAP_SESSION_TYPE_NONE, coap_session_type_t_COAP_SESSION_TYPE_SERVER, COAP_TOKEN_DEFAULT_MAX,
 };
 
 use super::{CoapSessionCommon, CoapSessionInner, CoapSessionInnerProvider};
@@ -115,15 +117,15 @@ impl CoapClientSession<'_> {
             match &crypto_ctx {
                 #[cfg(feature = "dtls-psk")]
                 ClientCryptoContext::Psk(psk_ctx) => {
-                    psk_ctx.create_raw_session(ctx, &addr.into(), coap_proto_t::COAP_PROTO_DTLS)?
+                    psk_ctx.create_raw_session(ctx, &addr.into(), coap_proto_t_COAP_PROTO_DTLS)?
                 },
                 #[cfg(feature = "dtls-pki")]
                 ClientCryptoContext::Pki(pki_ctx) => {
-                    pki_ctx.create_raw_session(ctx, &addr.into(), coap_proto_t::COAP_PROTO_DTLS)?
+                    pki_ctx.create_raw_session(ctx, &addr.into(), coap_proto_t_COAP_PROTO_DTLS)?
                 },
                 #[cfg(feature = "dtls-rpk")]
                 ClientCryptoContext::Rpk(rpk_ctx) => {
-                    rpk_ctx.create_raw_session(ctx, &addr.into(), coap_proto_t::COAP_PROTO_DTLS)?
+                    rpk_ctx.create_raw_session(ctx, &addr.into(), coap_proto_t_COAP_PROTO_DTLS)?
                 },
             }
         };
@@ -149,7 +151,7 @@ impl CoapClientSession<'_> {
                 ctx.as_mut_raw_context(),
                 std::ptr::null(),
                 CoapAddress::from(addr).as_raw_address(),
-                coap_proto_t::COAP_PROTO_UDP,
+                coap_proto_t_COAP_PROTO_UDP,
             )
         };
         if session.is_null() {
@@ -176,7 +178,7 @@ impl CoapClientSession<'_> {
                 ctx.as_mut_raw_context(),
                 std::ptr::null(),
                 CoapAddress::from(addr).as_raw_address(),
-                coap_proto_t::COAP_PROTO_TCP,
+                coap_proto_t_COAP_PROTO_TCP,
             )
         };
         if session.is_null() {
@@ -208,15 +210,18 @@ impl CoapClientSession<'_> {
     pub(crate) unsafe fn from_raw<'a>(raw_session: *mut coap_session_t) -> CoapClientSession<'a> {
         assert!(!raw_session.is_null(), "provided raw session was null");
         let raw_session_type = coap_session_get_type(raw_session);
+        // Variant names are named by bindgen, we have no influence on this.
+        // Ref: https://github.com/rust-lang/rust/issues/39371
+        #[allow(non_upper_case_globals)]
         match raw_session_type {
-            coap_session_type_t::COAP_SESSION_TYPE_NONE => panic!("provided session has no type"),
-            coap_session_type_t::COAP_SESSION_TYPE_CLIENT => {
+            coap_session_type_t_COAP_SESSION_TYPE_NONE => panic!("provided session has no type"),
+            coap_session_type_t_COAP_SESSION_TYPE_CLIENT => {
                 let raw_app_data_ptr = coap_session_get_app_data(raw_session);
                 assert!(!raw_app_data_ptr.is_null(), "provided raw session has no app data");
                 let inner = CoapFfiRcCell::clone_raw_rc(raw_app_data_ptr);
                 CoapClientSession { inner }
             },
-            coap_session_type_t::COAP_SESSION_TYPE_SERVER | coap_session_type_t::COAP_SESSION_TYPE_HELLO => {
+            coap_session_type_t_COAP_SESSION_TYPE_SERVER | coap_session_type_t_COAP_SESSION_TYPE_HELLO => {
                 panic!("attempted to create CoapClientSession from raw server session")
             },
             _ => unreachable!("unknown session type"),

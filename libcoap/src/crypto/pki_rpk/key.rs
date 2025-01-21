@@ -8,7 +8,15 @@
  */
 
 use libcoap_sys::{
-    coap_asn1_privatekey_type_t, coap_const_char_ptr_t, coap_dtls_key_t, coap_dtls_pki_t, coap_pki_define_t,
+    coap_asn1_privatekey_type_t, coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_CMAC,
+    coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_DH, coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_DHX,
+    coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_DSA, coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_DSA1,
+    coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_DSA2, coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_DSA3,
+    coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_DSA4, coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_EC,
+    coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_HKDF, coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_HMAC,
+    coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_NONE, coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_RSA,
+    coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_RSA2, coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_TLS1_PRF,
+    coap_const_char_ptr_t, coap_dtls_key_t, coap_dtls_pki_t, coap_pki_define_t,
 };
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
@@ -210,41 +218,41 @@ impl<T: Into<CString>> From<T> for EngineKeyComponent {
 #[derive(Copy, Clone, FromPrimitive, Debug, PartialEq, Eq, Hash, Default)]
 pub enum Asn1PrivateKeyType {
     #[default]
-    None = coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_NONE as isize,
-    Rsa = coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_RSA as isize,
-    Rsa2 = coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_RSA2 as isize,
-    Dsa = coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_DSA as isize,
-    Dsa1 = coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_DSA1 as isize,
-    Dsa2 = coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_DSA2 as isize,
-    Dsa3 = coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_DSA3 as isize,
-    Dsa4 = coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_DSA4 as isize,
-    Dh = coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_DH as isize,
-    Dhx = coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_DHX as isize,
-    Ec = coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_EC as isize,
-    Hmac = coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_HMAC as isize,
-    Cmac = coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_CMAC as isize,
-    Tls1Prf = coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_TLS1_PRF as isize,
-    Hkdf = coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_HKDF as isize,
+    None = coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_NONE as isize,
+    Rsa = coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_RSA as isize,
+    Rsa2 = coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_RSA2 as isize,
+    Dsa = coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_DSA as isize,
+    Dsa1 = coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_DSA1 as isize,
+    Dsa2 = coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_DSA2 as isize,
+    Dsa3 = coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_DSA3 as isize,
+    Dsa4 = coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_DSA4 as isize,
+    Dh = coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_DH as isize,
+    Dhx = coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_DHX as isize,
+    Ec = coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_EC as isize,
+    Hmac = coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_HMAC as isize,
+    Cmac = coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_CMAC as isize,
+    Tls1Prf = coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_TLS1_PRF as isize,
+    Hkdf = coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_HKDF as isize,
 }
 
 impl From<Asn1PrivateKeyType> for coap_asn1_privatekey_type_t {
     fn from(value: Asn1PrivateKeyType) -> Self {
         match value {
-            Asn1PrivateKeyType::None => coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_NONE,
-            Asn1PrivateKeyType::Rsa => coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_RSA,
-            Asn1PrivateKeyType::Rsa2 => coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_RSA2,
-            Asn1PrivateKeyType::Dsa => coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_DSA,
-            Asn1PrivateKeyType::Dsa1 => coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_DSA1,
-            Asn1PrivateKeyType::Dsa2 => coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_DSA2,
-            Asn1PrivateKeyType::Dsa3 => coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_DSA3,
-            Asn1PrivateKeyType::Dsa4 => coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_DSA4,
-            Asn1PrivateKeyType::Dh => coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_DH,
-            Asn1PrivateKeyType::Dhx => coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_DHX,
-            Asn1PrivateKeyType::Ec => coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_EC,
-            Asn1PrivateKeyType::Hmac => coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_HMAC,
-            Asn1PrivateKeyType::Cmac => coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_CMAC,
-            Asn1PrivateKeyType::Tls1Prf => coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_TLS1_PRF,
-            Asn1PrivateKeyType::Hkdf => coap_asn1_privatekey_type_t::COAP_ASN1_PKEY_HKDF,
+            Asn1PrivateKeyType::None => coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_NONE,
+            Asn1PrivateKeyType::Rsa => coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_RSA,
+            Asn1PrivateKeyType::Rsa2 => coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_RSA2,
+            Asn1PrivateKeyType::Dsa => coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_DSA,
+            Asn1PrivateKeyType::Dsa1 => coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_DSA1,
+            Asn1PrivateKeyType::Dsa2 => coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_DSA2,
+            Asn1PrivateKeyType::Dsa3 => coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_DSA3,
+            Asn1PrivateKeyType::Dsa4 => coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_DSA4,
+            Asn1PrivateKeyType::Dh => coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_DH,
+            Asn1PrivateKeyType::Dhx => coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_DHX,
+            Asn1PrivateKeyType::Ec => coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_EC,
+            Asn1PrivateKeyType::Hmac => coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_HMAC,
+            Asn1PrivateKeyType::Cmac => coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_CMAC,
+            Asn1PrivateKeyType::Tls1Prf => coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_TLS1_PRF,
+            Asn1PrivateKeyType::Hkdf => coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_HKDF,
         }
     }
 }

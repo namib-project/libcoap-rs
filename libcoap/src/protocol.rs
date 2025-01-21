@@ -18,26 +18,45 @@ use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 
 use libcoap_sys::{
+    coap_option_num_t, coap_pdu_code_t, coap_pdu_code_t_COAP_EMPTY_CODE, coap_pdu_code_t_COAP_REQUEST_CODE_DELETE,
+    coap_pdu_code_t_COAP_REQUEST_CODE_FETCH, coap_pdu_code_t_COAP_REQUEST_CODE_GET,
+    coap_pdu_code_t_COAP_REQUEST_CODE_IPATCH, coap_pdu_code_t_COAP_REQUEST_CODE_PATCH,
+    coap_pdu_code_t_COAP_REQUEST_CODE_POST, coap_pdu_code_t_COAP_REQUEST_CODE_PUT,
+    coap_pdu_code_t_COAP_RESPONSE_CODE_BAD_GATEWAY, coap_pdu_code_t_COAP_RESPONSE_CODE_BAD_OPTION,
+    coap_pdu_code_t_COAP_RESPONSE_CODE_BAD_REQUEST, coap_pdu_code_t_COAP_RESPONSE_CODE_CHANGED,
+    coap_pdu_code_t_COAP_RESPONSE_CODE_CONFLICT, coap_pdu_code_t_COAP_RESPONSE_CODE_CONTENT,
+    coap_pdu_code_t_COAP_RESPONSE_CODE_CONTINUE, coap_pdu_code_t_COAP_RESPONSE_CODE_CREATED,
+    coap_pdu_code_t_COAP_RESPONSE_CODE_DELETED, coap_pdu_code_t_COAP_RESPONSE_CODE_FORBIDDEN,
+    coap_pdu_code_t_COAP_RESPONSE_CODE_GATEWAY_TIMEOUT, coap_pdu_code_t_COAP_RESPONSE_CODE_HOP_LIMIT_REACHED,
+    coap_pdu_code_t_COAP_RESPONSE_CODE_INCOMPLETE, coap_pdu_code_t_COAP_RESPONSE_CODE_INTERNAL_ERROR,
+    coap_pdu_code_t_COAP_RESPONSE_CODE_NOT_ACCEPTABLE, coap_pdu_code_t_COAP_RESPONSE_CODE_NOT_ALLOWED,
+    coap_pdu_code_t_COAP_RESPONSE_CODE_NOT_FOUND, coap_pdu_code_t_COAP_RESPONSE_CODE_NOT_IMPLEMENTED,
+    coap_pdu_code_t_COAP_RESPONSE_CODE_PRECONDITION_FAILED, coap_pdu_code_t_COAP_RESPONSE_CODE_PROXYING_NOT_SUPPORTED,
+    coap_pdu_code_t_COAP_RESPONSE_CODE_REQUEST_TOO_LARGE, coap_pdu_code_t_COAP_RESPONSE_CODE_SERVICE_UNAVAILABLE,
+    coap_pdu_code_t_COAP_RESPONSE_CODE_TOO_MANY_REQUESTS, coap_pdu_code_t_COAP_RESPONSE_CODE_UNAUTHORIZED,
+    coap_pdu_code_t_COAP_RESPONSE_CODE_UNPROCESSABLE, coap_pdu_code_t_COAP_RESPONSE_CODE_UNSUPPORTED_CONTENT_FORMAT,
+    coap_pdu_code_t_COAP_RESPONSE_CODE_VALID, coap_pdu_type_t, coap_pdu_type_t_COAP_MESSAGE_ACK,
+    coap_pdu_type_t_COAP_MESSAGE_CON, coap_pdu_type_t_COAP_MESSAGE_NON, coap_pdu_type_t_COAP_MESSAGE_RST,
+    coap_request_t, coap_request_t_COAP_REQUEST_DELETE, coap_request_t_COAP_REQUEST_FETCH,
+    coap_request_t_COAP_REQUEST_GET, coap_request_t_COAP_REQUEST_IPATCH, coap_request_t_COAP_REQUEST_PATCH,
+    coap_request_t_COAP_REQUEST_POST, coap_request_t_COAP_REQUEST_PUT, coap_response_phrase,
     COAP_MEDIATYPE_APPLICATION_ACE_CBOR, COAP_MEDIATYPE_APPLICATION_CBOR, COAP_MEDIATYPE_APPLICATION_COAP_GROUP_JSON,
-    COAP_MEDIATYPE_APPLICATION_COSE_ENCRYPT,
-    COAP_MEDIATYPE_APPLICATION_COSE_ENCRYPT0, COAP_MEDIATYPE_APPLICATION_COSE_KEY, COAP_MEDIATYPE_APPLICATION_COSE_KEY_SET, COAP_MEDIATYPE_APPLICATION_COSE_MAC,
-    COAP_MEDIATYPE_APPLICATION_COSE_MAC0, COAP_MEDIATYPE_APPLICATION_COSE_SIGN,
-    COAP_MEDIATYPE_APPLICATION_COSE_SIGN1, COAP_MEDIATYPE_APPLICATION_CWT,
-    COAP_MEDIATYPE_APPLICATION_DOTS_CBOR, COAP_MEDIATYPE_APPLICATION_EXI, COAP_MEDIATYPE_APPLICATION_JSON,
-    COAP_MEDIATYPE_APPLICATION_LINK_FORMAT, COAP_MEDIATYPE_APPLICATION_MB_CBOR_SEQ, COAP_MEDIATYPE_APPLICATION_OCTET_STREAM,
-    COAP_MEDIATYPE_APPLICATION_OSCORE, COAP_MEDIATYPE_APPLICATION_RDF_XML, COAP_MEDIATYPE_APPLICATION_SENML_CBOR,
-    COAP_MEDIATYPE_APPLICATION_SENML_EXI, COAP_MEDIATYPE_APPLICATION_SENML_JSON,
-    COAP_MEDIATYPE_APPLICATION_SENML_XML, COAP_MEDIATYPE_APPLICATION_SENSML_CBOR, COAP_MEDIATYPE_APPLICATION_SENSML_EXI,
-    COAP_MEDIATYPE_APPLICATION_SENSML_JSON, COAP_MEDIATYPE_APPLICATION_SENSML_XML, COAP_MEDIATYPE_APPLICATION_XML,
-    COAP_MEDIATYPE_TEXT_PLAIN, COAP_OPTION_ACCEPT,
-    COAP_OPTION_BLOCK1, COAP_OPTION_BLOCK2,
-    COAP_OPTION_CONTENT_FORMAT, COAP_OPTION_ECHO, COAP_OPTION_ETAG,
-    COAP_OPTION_HOP_LIMIT, COAP_OPTION_IF_MATCH, COAP_OPTION_IF_NONE_MATCH, COAP_OPTION_LOCATION_PATH, COAP_OPTION_LOCATION_QUERY,
-    COAP_OPTION_MAXAGE, COAP_OPTION_NORESPONSE, coap_option_num_t, COAP_OPTION_OBSERVE,
-    COAP_OPTION_OSCORE, COAP_OPTION_PROXY_SCHEME, COAP_OPTION_PROXY_URI, COAP_OPTION_Q_BLOCK1,
+    COAP_MEDIATYPE_APPLICATION_COSE_ENCRYPT, COAP_MEDIATYPE_APPLICATION_COSE_ENCRYPT0,
+    COAP_MEDIATYPE_APPLICATION_COSE_KEY, COAP_MEDIATYPE_APPLICATION_COSE_KEY_SET, COAP_MEDIATYPE_APPLICATION_COSE_MAC,
+    COAP_MEDIATYPE_APPLICATION_COSE_MAC0, COAP_MEDIATYPE_APPLICATION_COSE_SIGN, COAP_MEDIATYPE_APPLICATION_COSE_SIGN1,
+    COAP_MEDIATYPE_APPLICATION_CWT, COAP_MEDIATYPE_APPLICATION_DOTS_CBOR, COAP_MEDIATYPE_APPLICATION_EXI,
+    COAP_MEDIATYPE_APPLICATION_JSON, COAP_MEDIATYPE_APPLICATION_LINK_FORMAT, COAP_MEDIATYPE_APPLICATION_MB_CBOR_SEQ,
+    COAP_MEDIATYPE_APPLICATION_OCTET_STREAM, COAP_MEDIATYPE_APPLICATION_OSCORE, COAP_MEDIATYPE_APPLICATION_RDF_XML,
+    COAP_MEDIATYPE_APPLICATION_SENML_CBOR, COAP_MEDIATYPE_APPLICATION_SENML_EXI, COAP_MEDIATYPE_APPLICATION_SENML_JSON,
+    COAP_MEDIATYPE_APPLICATION_SENML_XML, COAP_MEDIATYPE_APPLICATION_SENSML_CBOR,
+    COAP_MEDIATYPE_APPLICATION_SENSML_EXI, COAP_MEDIATYPE_APPLICATION_SENSML_JSON,
+    COAP_MEDIATYPE_APPLICATION_SENSML_XML, COAP_MEDIATYPE_APPLICATION_XML, COAP_MEDIATYPE_TEXT_PLAIN,
+    COAP_OPTION_ACCEPT, COAP_OPTION_BLOCK1, COAP_OPTION_BLOCK2, COAP_OPTION_CONTENT_FORMAT, COAP_OPTION_ECHO,
+    COAP_OPTION_ETAG, COAP_OPTION_HOP_LIMIT, COAP_OPTION_IF_MATCH, COAP_OPTION_IF_NONE_MATCH,
+    COAP_OPTION_LOCATION_PATH, COAP_OPTION_LOCATION_QUERY, COAP_OPTION_MAXAGE, COAP_OPTION_NORESPONSE,
+    COAP_OPTION_OBSERVE, COAP_OPTION_OSCORE, COAP_OPTION_PROXY_SCHEME, COAP_OPTION_PROXY_URI, COAP_OPTION_Q_BLOCK1,
     COAP_OPTION_Q_BLOCK2, COAP_OPTION_RTAG, COAP_OPTION_SIZE1, COAP_OPTION_SIZE2, COAP_OPTION_URI_HOST,
-    COAP_OPTION_URI_PATH, COAP_OPTION_URI_PORT, COAP_OPTION_URI_QUERY, coap_pdu_code_t, coap_pdu_type_t,
-    coap_pdu_type_t::{COAP_MESSAGE_ACK, COAP_MESSAGE_CON, COAP_MESSAGE_NON, COAP_MESSAGE_RST}, coap_request_t, coap_response_phrase,
+    COAP_OPTION_URI_PATH, COAP_OPTION_URI_PORT, COAP_OPTION_URI_QUERY,
 };
 
 use crate::error::{MessageCodeError, UnknownOptionError};
@@ -286,7 +305,7 @@ impl CoapMessageCode {
     /// [coap_pdu_t](libcoap_sys::coap_pdu_t).
     pub fn to_raw_pdu_code(self) -> coap_pdu_code_t {
         match self {
-            CoapMessageCode::Empty => coap_pdu_code_t::COAP_EMPTY_CODE,
+            CoapMessageCode::Empty => coap_pdu_code_t_COAP_EMPTY_CODE,
             CoapMessageCode::Request(req) => req.to_raw_pdu_code(),
             CoapMessageCode::Response(rsp) => rsp.to_raw_pdu_code(),
         }
@@ -309,8 +328,11 @@ impl TryFrom<coap_pdu_code_t> for CoapMessageCode {
     type Error = MessageCodeError;
 
     fn try_from(code: coap_pdu_code_t) -> Result<Self, Self::Error> {
+        // Variant names are named by bindgen, we have no influence on this.
+        // Ref: https://github.com/rust-lang/rust/issues/39371
+        #[allow(non_upper_case_globals)]
         match code {
-            coap_pdu_code_t::COAP_EMPTY_CODE => Ok(CoapMessageCode::Empty),
+            coap_pdu_code_t_COAP_EMPTY_CODE => Ok(CoapMessageCode::Empty),
             code => CoapRequestCode::try_from(code)
                 .map(CoapMessageCode::Request)
                 .or_else(|_| CoapResponseCode::try_from(code).map(CoapMessageCode::Response)),
@@ -326,30 +348,30 @@ impl TryFrom<coap_pdu_code_t> for CoapMessageCode {
 #[non_exhaustive]
 #[derive(FromPrimitive, Clone, Copy, Eq, PartialEq, Hash, Debug)]
 pub enum CoapRequestCode {
-    Get = coap_pdu_code_t::COAP_REQUEST_CODE_GET as u8,
-    Put = coap_pdu_code_t::COAP_REQUEST_CODE_PUT as u8,
-    Delete = coap_pdu_code_t::COAP_REQUEST_CODE_DELETE as u8,
-    Post = coap_pdu_code_t::COAP_REQUEST_CODE_POST as u8,
-    Fetch = coap_pdu_code_t::COAP_REQUEST_CODE_FETCH as u8,
-    IPatch = coap_pdu_code_t::COAP_REQUEST_CODE_IPATCH as u8,
-    Patch = coap_pdu_code_t::COAP_REQUEST_CODE_PATCH as u8,
+    Get = coap_pdu_code_t_COAP_REQUEST_CODE_GET as u8,
+    Put = coap_pdu_code_t_COAP_REQUEST_CODE_PUT as u8,
+    Delete = coap_pdu_code_t_COAP_REQUEST_CODE_DELETE as u8,
+    Post = coap_pdu_code_t_COAP_REQUEST_CODE_POST as u8,
+    Fetch = coap_pdu_code_t_COAP_REQUEST_CODE_FETCH as u8,
+    IPatch = coap_pdu_code_t_COAP_REQUEST_CODE_IPATCH as u8,
+    Patch = coap_pdu_code_t_COAP_REQUEST_CODE_PATCH as u8,
 }
 
 impl CoapRequestCode {
     /// Returns the [coap_request_t](coap_request_t) corresponding to this request code.
     ///
-    /// Note that this is *not* the code that should be set inside of a [coap_pdu_t](libcoap_sys::coap_pdu_t),
+    /// Note that this is *not* the code that should be set inside a [coap_pdu_t](libcoap_sys::coap_pdu_t),
     /// but a value used internally by the libcoap C library. See [to_raw_pdu_code()](CoapRequestCode::to_raw_pdu_code())
     /// for the standardized value used in messages.
     pub fn to_raw_request(self) -> coap_request_t {
         match self {
-            CoapRequestCode::Get => coap_request_t::COAP_REQUEST_GET,
-            CoapRequestCode::Put => coap_request_t::COAP_REQUEST_PUT,
-            CoapRequestCode::Delete => coap_request_t::COAP_REQUEST_FETCH,
-            CoapRequestCode::Post => coap_request_t::COAP_REQUEST_POST,
-            CoapRequestCode::Fetch => coap_request_t::COAP_REQUEST_FETCH,
-            CoapRequestCode::IPatch => coap_request_t::COAP_REQUEST_IPATCH,
-            CoapRequestCode::Patch => coap_request_t::COAP_REQUEST_PATCH,
+            CoapRequestCode::Get => coap_request_t_COAP_REQUEST_GET,
+            CoapRequestCode::Put => coap_request_t_COAP_REQUEST_PUT,
+            CoapRequestCode::Delete => coap_request_t_COAP_REQUEST_DELETE,
+            CoapRequestCode::Post => coap_request_t_COAP_REQUEST_POST,
+            CoapRequestCode::Fetch => coap_request_t_COAP_REQUEST_FETCH,
+            CoapRequestCode::IPatch => coap_request_t_COAP_REQUEST_IPATCH,
+            CoapRequestCode::Patch => coap_request_t_COAP_REQUEST_PATCH,
         }
     }
 
@@ -357,28 +379,13 @@ impl CoapRequestCode {
     /// request code.
     pub fn to_raw_pdu_code(self) -> coap_pdu_code_t {
         match self {
-            CoapRequestCode::Get => coap_pdu_code_t::COAP_REQUEST_CODE_GET,
-            CoapRequestCode::Put => coap_pdu_code_t::COAP_REQUEST_CODE_PUT,
-            CoapRequestCode::Delete => coap_pdu_code_t::COAP_REQUEST_CODE_FETCH,
-            CoapRequestCode::Post => coap_pdu_code_t::COAP_REQUEST_CODE_POST,
-            CoapRequestCode::Fetch => coap_pdu_code_t::COAP_REQUEST_CODE_FETCH,
-            CoapRequestCode::IPatch => coap_pdu_code_t::COAP_REQUEST_CODE_IPATCH,
-            CoapRequestCode::Patch => coap_pdu_code_t::COAP_REQUEST_CODE_PATCH,
-        }
-    }
-}
-
-impl From<coap_request_t> for CoapRequestCode {
-    fn from(req: coap_request_t) -> Self {
-        match req {
-            coap_request_t::COAP_REQUEST_GET => CoapRequestCode::Get,
-            coap_request_t::COAP_REQUEST_POST => CoapRequestCode::Post,
-            coap_request_t::COAP_REQUEST_PUT => CoapRequestCode::Put,
-            coap_request_t::COAP_REQUEST_DELETE => CoapRequestCode::Delete,
-            coap_request_t::COAP_REQUEST_FETCH => CoapRequestCode::Fetch,
-            coap_request_t::COAP_REQUEST_PATCH => CoapRequestCode::Patch,
-            coap_request_t::COAP_REQUEST_IPATCH => CoapRequestCode::IPatch,
-            _ => panic!("unknown request type"),
+            CoapRequestCode::Get => coap_pdu_code_t_COAP_REQUEST_CODE_GET,
+            CoapRequestCode::Put => coap_pdu_code_t_COAP_REQUEST_CODE_PUT,
+            CoapRequestCode::Delete => coap_pdu_code_t_COAP_REQUEST_CODE_FETCH,
+            CoapRequestCode::Post => coap_pdu_code_t_COAP_REQUEST_CODE_POST,
+            CoapRequestCode::Fetch => coap_pdu_code_t_COAP_REQUEST_CODE_FETCH,
+            CoapRequestCode::IPatch => coap_pdu_code_t_COAP_REQUEST_CODE_IPATCH,
+            CoapRequestCode::Patch => coap_pdu_code_t_COAP_REQUEST_CODE_PATCH,
         }
     }
 }
@@ -386,8 +393,8 @@ impl From<coap_request_t> for CoapRequestCode {
 impl TryFrom<coap_pdu_code_t> for CoapRequestCode {
     type Error = MessageCodeError;
 
-    fn try_from(req: coap_pdu_code_t) -> Result<Self, Self::Error> {
-        <CoapRequestCode as FromPrimitive>::from_u32(req as u32).ok_or(MessageCodeError::NotARequestCode)
+    fn try_from(value: coap_pdu_code_t) -> Result<Self, Self::Error> {
+        <CoapRequestCode as FromPrimitive>::from_u32(value as u32).ok_or(MessageCodeError::NotARequestCode)
     }
 }
 
@@ -399,33 +406,33 @@ impl TryFrom<coap_pdu_code_t> for CoapRequestCode {
 #[non_exhaustive]
 #[derive(Clone, Copy, FromPrimitive, Debug, Eq, PartialEq, Hash)]
 pub enum CoapResponseCode {
-    Content = coap_pdu_code_t::COAP_RESPONSE_CODE_CONTENT as u8,
-    BadGateway = coap_pdu_code_t::COAP_RESPONSE_CODE_BAD_GATEWAY as u8,
-    Continue = coap_pdu_code_t::COAP_RESPONSE_CODE_CONTINUE as u8,
-    Conflict = coap_pdu_code_t::COAP_RESPONSE_CODE_CONFLICT as u8,
-    BadRequest = coap_pdu_code_t::COAP_RESPONSE_CODE_BAD_REQUEST as u8,
-    BadOption = coap_pdu_code_t::COAP_RESPONSE_CODE_BAD_OPTION as u8,
-    Changed = coap_pdu_code_t::COAP_RESPONSE_CODE_CHANGED as u8,
-    Created = coap_pdu_code_t::COAP_RESPONSE_CODE_CREATED as u8,
-    Deleted = coap_pdu_code_t::COAP_RESPONSE_CODE_DELETED as u8,
-    Forbidden = coap_pdu_code_t::COAP_RESPONSE_CODE_FORBIDDEN as u8,
-    GatewayTimeout = coap_pdu_code_t::COAP_RESPONSE_CODE_GATEWAY_TIMEOUT as u8,
-    HopLimitReached = coap_pdu_code_t::COAP_RESPONSE_CODE_HOP_LIMIT_REACHED as u8,
-    Incomplete = coap_pdu_code_t::COAP_RESPONSE_CODE_INCOMPLETE as u8,
-    InternalError = coap_pdu_code_t::COAP_RESPONSE_CODE_INTERNAL_ERROR as u8,
-    NotAcceptable = coap_pdu_code_t::COAP_RESPONSE_CODE_NOT_ACCEPTABLE as u8,
-    NotAllowed = coap_pdu_code_t::COAP_RESPONSE_CODE_NOT_ALLOWED as u8,
-    NotFound = coap_pdu_code_t::COAP_RESPONSE_CODE_NOT_FOUND as u8,
-    NotImplemented = coap_pdu_code_t::COAP_RESPONSE_CODE_NOT_IMPLEMENTED as u8,
-    PreconditionFailed = coap_pdu_code_t::COAP_RESPONSE_CODE_PRECONDITION_FAILED as u8,
-    ProxyingNotSupported = coap_pdu_code_t::COAP_RESPONSE_CODE_PROXYING_NOT_SUPPORTED as u8,
-    RequestTooLarge = coap_pdu_code_t::COAP_RESPONSE_CODE_REQUEST_TOO_LARGE as u8,
-    ServiceUnavailable = coap_pdu_code_t::COAP_RESPONSE_CODE_SERVICE_UNAVAILABLE as u8,
-    TooManyRequests = coap_pdu_code_t::COAP_RESPONSE_CODE_TOO_MANY_REQUESTS as u8,
-    Unauthorized = coap_pdu_code_t::COAP_RESPONSE_CODE_UNAUTHORIZED as u8,
-    Unprocessable = coap_pdu_code_t::COAP_RESPONSE_CODE_UNPROCESSABLE as u8,
-    UnsupportedContentFormat = coap_pdu_code_t::COAP_RESPONSE_CODE_UNSUPPORTED_CONTENT_FORMAT as u8,
-    Valid = coap_pdu_code_t::COAP_RESPONSE_CODE_VALID as u8,
+    Content = coap_pdu_code_t_COAP_RESPONSE_CODE_CONTENT as u8,
+    BadGateway = coap_pdu_code_t_COAP_RESPONSE_CODE_BAD_GATEWAY as u8,
+    Continue = coap_pdu_code_t_COAP_RESPONSE_CODE_CONTINUE as u8,
+    Conflict = coap_pdu_code_t_COAP_RESPONSE_CODE_CONFLICT as u8,
+    BadRequest = coap_pdu_code_t_COAP_RESPONSE_CODE_BAD_REQUEST as u8,
+    BadOption = coap_pdu_code_t_COAP_RESPONSE_CODE_BAD_OPTION as u8,
+    Changed = coap_pdu_code_t_COAP_RESPONSE_CODE_CHANGED as u8,
+    Created = coap_pdu_code_t_COAP_RESPONSE_CODE_CREATED as u8,
+    Deleted = coap_pdu_code_t_COAP_RESPONSE_CODE_DELETED as u8,
+    Forbidden = coap_pdu_code_t_COAP_RESPONSE_CODE_FORBIDDEN as u8,
+    GatewayTimeout = coap_pdu_code_t_COAP_RESPONSE_CODE_GATEWAY_TIMEOUT as u8,
+    HopLimitReached = coap_pdu_code_t_COAP_RESPONSE_CODE_HOP_LIMIT_REACHED as u8,
+    Incomplete = coap_pdu_code_t_COAP_RESPONSE_CODE_INCOMPLETE as u8,
+    InternalError = coap_pdu_code_t_COAP_RESPONSE_CODE_INTERNAL_ERROR as u8,
+    NotAcceptable = coap_pdu_code_t_COAP_RESPONSE_CODE_NOT_ACCEPTABLE as u8,
+    NotAllowed = coap_pdu_code_t_COAP_RESPONSE_CODE_NOT_ALLOWED as u8,
+    NotFound = coap_pdu_code_t_COAP_RESPONSE_CODE_NOT_FOUND as u8,
+    NotImplemented = coap_pdu_code_t_COAP_RESPONSE_CODE_NOT_IMPLEMENTED as u8,
+    PreconditionFailed = coap_pdu_code_t_COAP_RESPONSE_CODE_PRECONDITION_FAILED as u8,
+    ProxyingNotSupported = coap_pdu_code_t_COAP_RESPONSE_CODE_PROXYING_NOT_SUPPORTED as u8,
+    RequestTooLarge = coap_pdu_code_t_COAP_RESPONSE_CODE_REQUEST_TOO_LARGE as u8,
+    ServiceUnavailable = coap_pdu_code_t_COAP_RESPONSE_CODE_SERVICE_UNAVAILABLE as u8,
+    TooManyRequests = coap_pdu_code_t_COAP_RESPONSE_CODE_TOO_MANY_REQUESTS as u8,
+    Unauthorized = coap_pdu_code_t_COAP_RESPONSE_CODE_UNAUTHORIZED as u8,
+    Unprocessable = coap_pdu_code_t_COAP_RESPONSE_CODE_UNPROCESSABLE as u8,
+    UnsupportedContentFormat = coap_pdu_code_t_COAP_RESPONSE_CODE_UNSUPPORTED_CONTENT_FORMAT as u8,
+    Valid = coap_pdu_code_t_COAP_RESPONSE_CODE_VALID as u8,
 }
 
 impl CoapResponseCode {
@@ -433,35 +440,33 @@ impl CoapResponseCode {
     /// request code.
     pub fn to_raw_pdu_code(self) -> coap_pdu_code_t {
         match self {
-            CoapResponseCode::Content => coap_pdu_code_t::COAP_RESPONSE_CODE_CONTENT,
-            CoapResponseCode::BadGateway => coap_pdu_code_t::COAP_RESPONSE_CODE_BAD_GATEWAY,
-            CoapResponseCode::Continue => coap_pdu_code_t::COAP_RESPONSE_CODE_CONTINUE,
-            CoapResponseCode::Conflict => coap_pdu_code_t::COAP_RESPONSE_CODE_CONFLICT,
-            CoapResponseCode::BadRequest => coap_pdu_code_t::COAP_RESPONSE_CODE_BAD_REQUEST,
-            CoapResponseCode::BadOption => coap_pdu_code_t::COAP_RESPONSE_CODE_BAD_OPTION,
-            CoapResponseCode::Changed => coap_pdu_code_t::COAP_RESPONSE_CODE_CHANGED,
-            CoapResponseCode::Created => coap_pdu_code_t::COAP_RESPONSE_CODE_CREATED,
-            CoapResponseCode::Deleted => coap_pdu_code_t::COAP_RESPONSE_CODE_DELETED,
-            CoapResponseCode::Forbidden => coap_pdu_code_t::COAP_RESPONSE_CODE_FORBIDDEN,
-            CoapResponseCode::GatewayTimeout => coap_pdu_code_t::COAP_RESPONSE_CODE_GATEWAY_TIMEOUT,
-            CoapResponseCode::HopLimitReached => coap_pdu_code_t::COAP_RESPONSE_CODE_HOP_LIMIT_REACHED,
-            CoapResponseCode::Incomplete => coap_pdu_code_t::COAP_RESPONSE_CODE_INCOMPLETE,
-            CoapResponseCode::InternalError => coap_pdu_code_t::COAP_RESPONSE_CODE_INTERNAL_ERROR,
-            CoapResponseCode::NotAcceptable => coap_pdu_code_t::COAP_RESPONSE_CODE_NOT_ACCEPTABLE,
-            CoapResponseCode::NotAllowed => coap_pdu_code_t::COAP_RESPONSE_CODE_NOT_ALLOWED,
-            CoapResponseCode::NotFound => coap_pdu_code_t::COAP_RESPONSE_CODE_NOT_FOUND,
-            CoapResponseCode::NotImplemented => coap_pdu_code_t::COAP_RESPONSE_CODE_NOT_IMPLEMENTED,
-            CoapResponseCode::PreconditionFailed => coap_pdu_code_t::COAP_RESPONSE_CODE_PRECONDITION_FAILED,
-            CoapResponseCode::ProxyingNotSupported => coap_pdu_code_t::COAP_RESPONSE_CODE_PROXYING_NOT_SUPPORTED,
-            CoapResponseCode::RequestTooLarge => coap_pdu_code_t::COAP_RESPONSE_CODE_REQUEST_TOO_LARGE,
-            CoapResponseCode::ServiceUnavailable => coap_pdu_code_t::COAP_RESPONSE_CODE_SERVICE_UNAVAILABLE,
-            CoapResponseCode::TooManyRequests => coap_pdu_code_t::COAP_RESPONSE_CODE_TOO_MANY_REQUESTS,
-            CoapResponseCode::Unauthorized => coap_pdu_code_t::COAP_RESPONSE_CODE_UNAUTHORIZED,
-            CoapResponseCode::Unprocessable => coap_pdu_code_t::COAP_RESPONSE_CODE_UNPROCESSABLE,
-            CoapResponseCode::UnsupportedContentFormat => {
-                coap_pdu_code_t::COAP_RESPONSE_CODE_UNSUPPORTED_CONTENT_FORMAT
-            },
-            CoapResponseCode::Valid => coap_pdu_code_t::COAP_RESPONSE_CODE_VALID,
+            CoapResponseCode::Content => coap_pdu_code_t_COAP_RESPONSE_CODE_CONTENT,
+            CoapResponseCode::BadGateway => coap_pdu_code_t_COAP_RESPONSE_CODE_BAD_GATEWAY,
+            CoapResponseCode::Continue => coap_pdu_code_t_COAP_RESPONSE_CODE_CONTINUE,
+            CoapResponseCode::Conflict => coap_pdu_code_t_COAP_RESPONSE_CODE_CONFLICT,
+            CoapResponseCode::BadRequest => coap_pdu_code_t_COAP_RESPONSE_CODE_BAD_REQUEST,
+            CoapResponseCode::BadOption => coap_pdu_code_t_COAP_RESPONSE_CODE_BAD_OPTION,
+            CoapResponseCode::Changed => coap_pdu_code_t_COAP_RESPONSE_CODE_CHANGED,
+            CoapResponseCode::Created => coap_pdu_code_t_COAP_RESPONSE_CODE_CREATED,
+            CoapResponseCode::Deleted => coap_pdu_code_t_COAP_RESPONSE_CODE_DELETED,
+            CoapResponseCode::Forbidden => coap_pdu_code_t_COAP_RESPONSE_CODE_FORBIDDEN,
+            CoapResponseCode::GatewayTimeout => coap_pdu_code_t_COAP_RESPONSE_CODE_GATEWAY_TIMEOUT,
+            CoapResponseCode::HopLimitReached => coap_pdu_code_t_COAP_RESPONSE_CODE_HOP_LIMIT_REACHED,
+            CoapResponseCode::Incomplete => coap_pdu_code_t_COAP_RESPONSE_CODE_INCOMPLETE,
+            CoapResponseCode::InternalError => coap_pdu_code_t_COAP_RESPONSE_CODE_INTERNAL_ERROR,
+            CoapResponseCode::NotAcceptable => coap_pdu_code_t_COAP_RESPONSE_CODE_NOT_ACCEPTABLE,
+            CoapResponseCode::NotAllowed => coap_pdu_code_t_COAP_RESPONSE_CODE_NOT_ALLOWED,
+            CoapResponseCode::NotFound => coap_pdu_code_t_COAP_RESPONSE_CODE_NOT_FOUND,
+            CoapResponseCode::NotImplemented => coap_pdu_code_t_COAP_RESPONSE_CODE_NOT_IMPLEMENTED,
+            CoapResponseCode::PreconditionFailed => coap_pdu_code_t_COAP_RESPONSE_CODE_PRECONDITION_FAILED,
+            CoapResponseCode::ProxyingNotSupported => coap_pdu_code_t_COAP_RESPONSE_CODE_PROXYING_NOT_SUPPORTED,
+            CoapResponseCode::RequestTooLarge => coap_pdu_code_t_COAP_RESPONSE_CODE_REQUEST_TOO_LARGE,
+            CoapResponseCode::ServiceUnavailable => coap_pdu_code_t_COAP_RESPONSE_CODE_SERVICE_UNAVAILABLE,
+            CoapResponseCode::TooManyRequests => coap_pdu_code_t_COAP_RESPONSE_CODE_TOO_MANY_REQUESTS,
+            CoapResponseCode::Unauthorized => coap_pdu_code_t_COAP_RESPONSE_CODE_UNAUTHORIZED,
+            CoapResponseCode::Unprocessable => coap_pdu_code_t_COAP_RESPONSE_CODE_UNPROCESSABLE,
+            CoapResponseCode::UnsupportedContentFormat => coap_pdu_code_t_COAP_RESPONSE_CODE_UNSUPPORTED_CONTENT_FORMAT,
+            CoapResponseCode::Valid => coap_pdu_code_t_COAP_RESPONSE_CODE_VALID,
         }
     }
 }
@@ -497,13 +502,13 @@ impl TryFrom<coap_pdu_code_t> for CoapResponseCode {
 #[derive(Copy, Clone, Hash, Eq, PartialEq, FromPrimitive, Debug)]
 pub enum CoapMessageType {
     /// Confirmable message, i.e. a message whose reception should be confirmed by the peer.
-    Con = COAP_MESSAGE_CON as u8,
+    Con = coap_pdu_type_t_COAP_MESSAGE_CON as u8,
     /// Non-confirmable message, i.e. a message whose reception should not be confirmed by the peer.
-    Non = COAP_MESSAGE_NON as u8,
+    Non = coap_pdu_type_t_COAP_MESSAGE_NON as u8,
     /// Acknowledgement for a previous message.
-    Ack = COAP_MESSAGE_ACK as u8,
+    Ack = coap_pdu_type_t_COAP_MESSAGE_ACK as u8,
     /// Non-acknowledgement for a previous message.
-    Rst = COAP_MESSAGE_RST as u8,
+    Rst = coap_pdu_type_t_COAP_MESSAGE_RST as u8,
 }
 
 impl CoapMessageType {
@@ -511,10 +516,10 @@ impl CoapMessageType {
     /// this message type.
     pub fn to_raw_pdu_type(&self) -> coap_pdu_type_t {
         match self {
-            CoapMessageType::Con => COAP_MESSAGE_CON,
-            CoapMessageType::Non => COAP_MESSAGE_NON,
-            CoapMessageType::Ack => COAP_MESSAGE_ACK,
-            CoapMessageType::Rst => COAP_MESSAGE_RST,
+            CoapMessageType::Con => coap_pdu_type_t_COAP_MESSAGE_CON,
+            CoapMessageType::Non => coap_pdu_type_t_COAP_MESSAGE_NON,
+            CoapMessageType::Ack => coap_pdu_type_t_COAP_MESSAGE_ACK,
+            CoapMessageType::Rst => coap_pdu_type_t_COAP_MESSAGE_RST,
         }
     }
 }
