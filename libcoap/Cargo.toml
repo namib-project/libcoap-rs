@@ -52,3 +52,14 @@ anyhow = "1.0.95"
 
 [package.metadata.docs.rs]
 features = ["dtls", "dtls_openssl", "vendored", "url"]
+
+[target.'cfg(target_os="espidf")'.dependencies]
+esp-idf-sys = { version = "0.36.1" }
+
+# For ESP-IDF builds, we need to add the espressif/coap component ourselves here,
+# as esp-idf-sys only inspects the metadata for direct dependencies.
+# Otherwise, users of this library would always also have to depend on libcoap-sys
+# or add this snippet themselves.
+[[package.metadata.esp-idf-sys.extra_components]]
+remote_component = { name = "espressif/coap", version = "4.3.5~3" }
+bindings_header = "src/wrapper.h"
