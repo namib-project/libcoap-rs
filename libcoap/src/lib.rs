@@ -36,16 +36,20 @@
 //!     - [x] Notifying observers as a server
 //!
 //! # Building
-//! libcoap-rs can be linked to either an included version of libcoap or to a version provided by
-//! the environment.
-//! By default, it will use the vendored version, which can be disabled by disabling the default
-//! feature `vendored`.
+//! libcoap-rs is based on libcoap-sys, which provide many different ways to obtain and link against
+//! a system-provided or vendored version of the libcoap C library.
 //!
-//! In order to use DTLS, a DTLS library must be chosen, see the later section on using
-//! cryptography for more information.
+//! Refer to [its documentation](https://docs.rs/libcoap-sys) for detailed instructions on how to
+//! build libcoap-sys as well as this library.
 //!
-//! Some (but not all) of the available DTLS libraries may also be vendored using the
-//! `dtls_[LIBRARY]_vendored` feature.
+//! Most of these instructions can be applied to libcoap-rs directly, although libcoap-rs does
+//! abstract away some of the features.
+//!
+//! For your convenience, libcoap-rs "re-exports" some features that do not have any influence on
+//! the safe wrapper, but may have to be set in libcoap-sys to enable building (e.g., the
+//! `dtls-<LIBRARY NAME>-sys` features).
+//! This way, you don't need to add libcoap-sys as a dependency yourself, and may just enable the
+//! feature in this crate instead.
 //!
 //! ## Building on the ESP32
 //!

@@ -42,11 +42,7 @@ impl ManualBuildSystem {
         };
         let use_static = match env::var("LIBCOAP_RS_STATIC") {
             Ok(v) => {
-                if v == "0" || v == "" {
-                    false
-                } else {
-                    true
-                }
+                !(v == "0" || v.is_empty())
             },
             Err(VarError::NotPresent) => false,
             Err(e) => return Err(e).context("Unable to parse LIBCOAP_RS_STATIC environment variable."),

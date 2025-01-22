@@ -239,7 +239,7 @@ impl VendoredBuildSystem {
     }
 
     #[cfg(feature = "dtls-tinydtls-sys")]
-    fn configure_tinydtls_sys(mut build_config: &mut autotools::Config) -> Result<(Option<PathBuf>, bool)> {
+    fn configure_tinydtls_sys(build_config: &mut autotools::Config) -> Result<(Option<PathBuf>, bool)> {
         if env::var_os("TinyDTLS_CFLAGS").is_some() || env::var_os("TinyDTLS_LIBS").is_some() {
             // Do not use tinydtls-sys if the user manually set either the corresponding LIBS or
             // CFLAGS variable.
@@ -252,7 +252,7 @@ impl VendoredBuildSystem {
                 .expect("tinydtls-sys dependency has been added, but DEP_TINYDTLS_INCLUDE has not been set");
             let tinydtls_libs = env::var_os("DEP_TINYDTLS_LIBS")
                 .expect("tinydtls-sys dependency has been added, but DEP_TINYDTLS_LIBS has not been set");
-            build_config = build_config.env(
+            build_config.env(
                 "TinyDTLS_CFLAGS",
                 format!(
                     "-I{} -I{}",
@@ -267,7 +267,7 @@ impl VendoredBuildSystem {
             );
 
             // Need to set TinyDTLS_LIBS explicitly to force static linking (TinyDTLS also builds a shared version of the library).
-            build_config = build_config.env(
+            build_config.env(
                 "TinyDTLS_LIBS",
                 format!(
                     "-L{} -l:libtinydtls.a",
@@ -283,7 +283,7 @@ impl VendoredBuildSystem {
     }
 
     #[cfg(feature = "dtls-openssl-sys")]
-    fn configure_openssl_sys(build_config: &mut autotools::Config) -> Result<(Option<PathBuf>, bool)> {
+    fn configure_openssl_sys(_build_config: &mut autotools::Config) -> Result<(Option<PathBuf>, bool)> {
         if env::var_os("OpenSSL_CFLAGS").is_some() || env::var_os("OpenSSL_LIBS").is_some() {
             // Do not use tinydtls-sys if the user manually set either the corresponding LIBS or
             // CFLAGS variable.
@@ -307,7 +307,7 @@ impl VendoredBuildSystem {
     #[cfg(feature = "dtls-mbedtls-sys")]
     fn configure_mbedtls_sys(
         out_dir: &Path,
-        mut build_config: &mut autotools::Config,
+        build_config: &mut autotools::Config,
     ) -> Result<(Option<PathBuf>, bool)> {
         if env::var_os("MbedTLS_CFLAGS").is_some() || env::var_os("MbedTLS_LIBS").is_some() {
             // Do not use tinydtls-sys if the user manually set either the corresponding LIBS or
@@ -342,7 +342,7 @@ impl VendoredBuildSystem {
                 .join("build")
                 .join("library");
 
-            build_config = build_config.env(
+            build_config.env(
                 "MbedTLS_CFLAGS",
                 format!(
                     "-I{} -I{}",
@@ -352,7 +352,7 @@ impl VendoredBuildSystem {
                         .expect("DEP_MBEDTLS_INCLUDE is not a valid UTF-8 string")
                 ),
             );
-            build_config = build_config.env(
+            build_config.env(
                 "MbedTLS_LIBS",
                 format!(
                     "-L{0} -l:libmbedtls.a -l:libmbedcrypto.a -l:libmbedx509.a",

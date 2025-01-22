@@ -51,7 +51,7 @@
 //! If the documentation below does not solve your issue, feel free to open an issue
 //! [on GitHub](https://github.com/namib-project/libcoap-rs/) and ask for help.
 //!
-//! Cargo Features
+//! Optional Features
 //! --------------
 //! Most features specified in this crate's Cargo.toml directly correspond to a feature that can be
 //! enabled or disabled in libcoap's configure-script and/or CMake configuration, refer to the
@@ -63,20 +63,30 @@
 //! Depending on the build system and linked version of libcoap, the features actually provided may
 //! differ from the ones indicated by the crate features.
 //! If you want to ensure that all features that are enabled for this crate are actually supported
-//! by the linked version of libcoap, you may call [coap_startup_with_feature_checks].
+//! by the linked version of libcoap, you may call [`coap_startup_with_feature_checks()`].
 //!
 //! Aside from the features relating to libcoap functionality, the following features may also be
 //! enabled for this crate:
 //! - `vendored`: Build and statically link against a version of libcoap bundled with this crate
 //!     instead of using a system-provided one[^1].
-//! - `dtls-<LIBRARY NAME>-sys`: Allows the [vendored](#TODO) libcoap version to link against the
+//! - `dtls-<LIBRARY NAME>-sys`: Allows the [vendored](#vendored-build-system) libcoap version to link against the
 //!     same version of a DTLS library that is used by the corresponding <LIBRARY NAME>-sys
 //!     crate[^2].
-//!     Note, however, that this does not imply that this DTLS library *will* be used, it
-//!     should  
+//!     Note, however, that this does not imply that this DTLS library *will* be used, refer to
+//!     the [documentation below](#dtls-library-selection) for more information.
+//!
+//!     If a different build system than `vendored` is used, this feature is effectively a no-op.
 //! - `dtls-<LIBRARY NAME>-sys-vendored` instructs the sys-crate of the DTLS library corresponding
 //!     to the feature name to use a vendored version of the underlying library (implies
 //!     `dtls-<LIBRARY NAME>-sys`).
+//! - `dtls-(cid|psk|pki|pkcs11|rpk)`: Require support for specific DTLS features in `libcoap`.
+//!     These features can not be enabled explicitly while building `libcoap`, support for them is
+//!     automatically made available based on the used DTLS library (see
+//!     [the corresponding section below](#dtls-library-selection)).
+//!
+//!     Enabling these features will add appropriate checks during compile- and/or runtime
+//!     initialization to ensure these features are available in the used DTLS library (or panic
+//!     otherwise).
 //!
 //! [^1]: Note that when building for the ESP-IDF, this feature will be a no-op, as the version
 //!       provided by the ESP-IDF will always be used.
@@ -85,7 +95,212 @@
 //!
 //! Build Process
 //! -------------
-//! [TODO]
+//! In general, `libcoap-sys` supports four different build systems, which will be explained in more
+//! detail in the following sections:
+//! - `vendored`: Build libcoap from source using a bundled version of the library (requires the
+//!               `vendored` feature to be enabled.
+//! - `pkgconfig`: Link against a system-provided version of libcoap, obtaining the library and
+//!                include paths using the `pkg-config` utility.
+//! - `manual`: Provide include and library directories+compiler/linker flags via environment
+//!             variables.
+//! - `espidf`: Build for the ESP family of microcontrollers using the ESP-IDF framework (used
+//!             instead of the regular `vendored` build if the build system is set to `vendored` and
+//!             building for an ESP-IDF Rust target).
+//!
+//! The build system that should be used can be specified manually by setting the
+//! `LIBCOAP_RS_BUILD_SYSTEM` environment variable to the corresponding value.
+//!
+//! If you have explicitly specified a build system and building using that system fails, no other
+//! system will be tried.
+//!
+//! If you do not explicitly provide a build system to use, the build script will follow these
+//! steps to determine a suitable build system:
+//!
+//! 1. If the `vendored` crate feature is enabled, or we are building for the ESP-IDF, act as if the
+//!    build system is set to `vendored`. If a vendored build is attempted and fails, return with an
+//!    error and do not try anything else.
+//! 2. Otherwise, try `pkgconfig` first.
+//! 3. If `pkgconfig` doesn't work, fall back to `manual` (which will fail if the environment
+//!    variables aren't set).
+//! 4. If `manual` doesn't work, return an error indicating the issues with all previously attempted
+//!    build systems.
+//!
+//! ## Generic Information (applies to all build systems)
+//! The following information applies to all build systems (although some specifics may be detailed
+//! in the respective build system's section).
+//!
+//! ### C Standard Library Functions
+//! Some `libcoap` functions utilize types from the C standard library (e.g., `sockaddr_in` in
+//! `coap_address_t`).
+//!
+//! For most targets, the data types defined in the [`libc`](https://docs.rs/libc/latest/libc/)
+//! crate will be used to provide those data types.
+//! However, some targets (especially embedded ones such as `espidf`) will use a different library
+//! instead, which may cause compilation issues in code that assumes `libc` data types to be
+//! compatible.
+//!
+//! For your convenience, this crate re-exports the used standard library crate as the `c_stdlib`
+//! module. For best interoperability, you should `use` this module instead of using the actual
+//! crates directly to import the required data types.
+//!
+//! ### DTLS Library Selection
+//!
+//! In order to provide DTLS support, `libcoap` must be combined with a DTLS library/backend.
+//! DTLS libraries are mutually exclusive, and multiple versions of `libcoap` linked against
+//! different DTLS libraries may be installed in a system simultaneously, so `libcoap-sys` must
+//! decide on a variant of `libcoap` to link against during build.
+//!
+//! While the default mechanism for determining a DTLS library differs between build systems, you
+//! may select a DTLS library explicitly by setting the `LIBCOAP_RS_DTLS_BACKEND` environment
+//! variable to any of the supported values (`gnutls`, `openssl`, `mbedtls`, `tinydtls`, or
+//! `wolfssl`). Refer to the build-system-specific documentation for information about supported
+//! DTLS libraries and specifics.
+//!
+//! Note that some DTLS-related features (such as `dtls-(cid|psk|pki|pkcs11|rpk)`) are dependent on
+//! the used DTLS backend, refer to [the `coap_encryption(3)` man page](https://libcoap.net/doc/reference/4.3.5/man_coap_encryption.html)
+//! for information on supported features for each DTLS library.
+//!
+//! ### Feature Support and Compile-Time/Initialization Checks
+//! During compilation, each build system will attempt to ensure that the used version of `libcoap`
+//! does in fact support all [features](#optional-features) that were enabled in `Cargo.toml`.
+//! The exact method differs based on each build system, but most will attempt to parse the
+//! `coap3/coap_defines.h` header file in order to determine missing features (with `espidf` being a
+//! notable exception).
+//!
+//! If a build system detects that a requested feature is missing, an appropriate error message will
+//! be returned. In most cases, these errors must be resolved by linking to a different version of
+//! `libcoap`.
+//!
+//! Unfortunately, for various reasons, this compile-time feature check may produce false
+//! positive and/or false negative results (especially when cross compiling[^3])
+//! is not available for all features (especially ones dependent on the DTLS library) and may not
+//! even be available at all on some platforms.
+//!
+//! Therefore, library users should assume that the compile-time checks may not provide accurate
+//! results, and should call [`coap_startup_with_feature_checks()`] during initialization to perform
+//! run-time checks for all requested features. This run-time check will always work and be
+//! accurate.
+//!
+//! Lastly, if you encounter a false positive error (i.e., a compile time error that indicates that
+//! some feature is missing, even though you are 100% certain that it is available), you may bypass
+//! the compile-time checks by setting `LIBCOAP_RS_BYPASS_COMPILE_FEATURE_CHECKS` to any non-zero
+//! value.
+//! Note, however, that this might lead to cryptic errors if your assumption was wrong and the
+//! feature is not available after all.
+//!
+//! In most cases, a false positive might be caused by the include paths/header files used for
+//! binding generation refering to a different version of `libcoap` than the one that is linked
+//! against, which could also cause difficult-to-debug issues and indicates a more severe problem
+//! with the build process.
+//!
+//! [^3]: For this reason, using this method [is noted to be unsafe in `libcoap`'s documentation](https://libcoap.net/doc/reference/4.3.5/man_coap_supported.html).
+//!
+//! ## Vendored Build System
+//!
+//! The vendored build system uses a bundled version of libcoap (usually the latest stable version
+//! at the time of release) to build and statically link against.
+//! Under the hood, it uses the [`autotools`](https://docs.rs/autotools/latest/autotools/) crate to
+//! configure and run the build process, and you may therefore customize the build's compiler and
+//! linker flags by setting the environment variables used in `libcoap`'s `configure` script.
+//!
+//! This build system will enable only those features in `libcoap` that are requested as
+//! `Cargo.toml` features, and will explicitly disable all other ones.
+//!
+//! If a DTLS library is explicitly selected by the user, it will instruct libcoap to link against
+//! that library by setting the corresponding `--with-<LIBRARY NAME>` configure flag.
+//!
+//! If you enable the `dtls-<LIBRARY NAME>-sys` features and do not set the `<LIBRARY NAME>_CFLAGS`
+//! or `<LIBRARY NAME>_LIBS` environment variables, this build system will set these environment
+//! variables to ensure that if this DTLS library is the one that libcoap uses, we link against
+//! exactly the same version as used in the `<LIBRARY NAME>-sys` crate.
+//! This is especially relevant if those crates also provide a `vendored` version in order to avoid
+//! multiple versions of the same library being in use.
+//! If a different DTLS library is used, this feature should have no effect (it will set the
+//! environment variable, but `libcoap` will ignore it).
+//!
+//! If you do not specify a DTLS library, this build system will follow the same default order that
+//! libcoap does (gnutls > openssl > wolfssl > mbedtls > tinydtls), unless you enabled one of the
+//! `dtls-<LIBRARY NAME>-sys` features, in which case those will have priority.
+//! If multiple of these features are enabled, they are prioritized in the same order as used by
+//! `libcoap` (openssl > mbedtls > tinydtls).
+//!
+//! ## `pkg-config` Build System
+//!
+//! The `pkg-config` build system utilizes the `pkg-config` utility available on most Unix-like
+//! systems to link against a system-provided version of `libcoap`.
+//! To do so, it uses the [`pkg_config`](https://docs.rs/pkg-config/latest/pkg_config/) crate, and
+//! you may therefore customize the build process by setting the environment variables described in
+//! that library's documentation (which may be of special relevance if you try to cross compile).
+//!
+//! By default, it will probe `pkg-config` for a library with the name `libcoap-3`, which will
+//! usually symlink to the DTLS library variant of libcoap that was installed most recently.
+//! If you have explicitly requested use of a specific DTLS library, this build system will attempt
+//! to find the `libcoap-3-<LIBRARY NAME>` library instead.
+//!
+//! However, library selection does not take into account any other requested features (i.e., it
+//! will not check for feature support before generating the bindings), but will use header-based
+//! compile-time feature checks (see the general section) to ensure support for all required
+//! features after binding generation.
+//!
+//! The `dtls-<LIBRARY NAME>-sys` features have no effect on this build system, but note that static
+//! linking against a system-provided version of `libcoap` may cause issues if it causes multiple
+//! versions of the same DTLS library to be statically linked into the same Rust binary.
+//!
+//! ## `manual` Build System
+//!
+//! This build system is intended as a fallback solution if all other options fail. It will attempt
+//! to generate bindings and link against the version of `libcoap` that is described by the
+//! following environment variables:
+//!
+//! - `LIBCOAP_RS_INCLUDE_DIRS`: Paths that should be added to `clang`'s include path to search for
+//!                              header files (e.g., `/usr/local/include`, _not_
+//!                              `/usr/local/include/coap3`). Multiple values are separated by
+//!                              colons (`:`).
+//! - `LIBCOAP_RS_LIB_DIRS`:     Paths that should be added to `rustc`'s library path to search for
+//!                              object files to link against. Multiple values are separated by
+//!                              colons (`:`).
+//! - `LIBCOAP_RS_STATIC`:       Set to any non-zero and non-empty value to instruct `rustc` to use
+//!                              static linking instead of dynamic linking for `libcoap`.
+//! - `LIBCOAP_RS_ADDITIONAL_LIBRARIES`: Additional libraries (such as DTLS libraries) that should
+//!                              be linked against, separated by colons (`:`).
+//!                              Note that these will be added after `libcoap`, and that the order
+//!                              in which they are specified matters for most linkers.
+//!                              You may also request static linking by prepending `static=` to the
+//!                              library name.
+//!
+//! ## `espidf` Build System
+//!
+//! This build system will be used instead of the regular `vendored` build if you are building for
+//! targets that are based on the `ESP-IDF`.
+//!
+//! If `libcoap-sys` is a direct dependency, it will automatically enable the
+//! [`espressif/coap`](https://components.espressif.com/components/espressif/coap) component in
+//! order to instruct `esp-idf-sys` to compile and link `libcoap` and generate bindings for it.
+//!
+//! If you encounter errors that indicate that the `espressif/coap` component may not be enabled in
+//! the ESP-IDF, this could have the following reasons:
+//! - You may have to run `cargo clean`, as the `esp-idf-sys` build script does not always detect
+//!     changes in requested extra components properly.
+//! - `libcoap-sys` is a transient dependency: the `esp-idf-sys` build script
+//!     [only considers metadata from the root crate and its direct dependencies](https://docs.esp-rs.org/esp-idf-sys/esp_idf_sys/#extra-esp-idf-components)
+//!     to determine which components to install.
+//!     In order to solve this, you can either add `libcoap-sys` as a direct dependency, or copy
+//!     this crate's `src/wrapper.h` file and add the following snippet to your own `Cargo.toml`.
+//!     ```cargo
+//!     [[package.metadata.esp-idf-sys.extra_components]]
+//!     remote_component = { name = "espressif/coap", version = "4.3.5~3" }
+//!     bindings_header = "src/wrapper.h"
+//!     ```
+//!     Afterward, run `cargo clean` (see the issue mentioned above) and try again.
+//!
+//! It will then parse the generated bindings file and re-export all symbols in `esp-idf-sys` that
+//! are related to `libcoap`.
+//!
+//! Note that `esp-idf-sys` may use a different version of `bindgen` than the other build systems
+//! and that bindings might differ slightly as a result.
+//!
+//! Unlike most other targets, this one will use `esp-idf-sys` instead of `libc` to provide its
+//! standard library types (see the generic information section above).
 
 // Bindgen translates the C headers, clippy's and rustfmt's recommendations are not applicable here.
 #![allow(clippy::all)]
@@ -217,16 +432,17 @@ macro_rules! panic_wrong_dtls {
 }
 
 /// Initialize the CoAP library and additionally perform runtime checks to ensure that required
-/// features (as enabled in `Cargo.toml`) are available.
+/// features (as enabled in `Cargo.toml`) are available and that the used DTLS library matches the
+/// one that was determined during compile-time.
 ///
-/// You *should* prefer using this function over [coap_startup], as without calling this function
+/// You *should* prefer using this function over [`coap_startup()`], as without calling this function
 /// some of the features enabled using the Cargo features may not actually be available.
 ///
-/// Either this function or [coap_startup] must be run once before any libcoap function is called.
+/// Either this function or [`coap_startup()`] must be run once before any libcoap function is called.
 ///
 /// If you are absolutely 100% certain that all features you require are always available (or are
 /// prepared to deal with error return values/different behavior on your own if they aren't), you
-/// may use [coap_startup] instead.
+/// may use [`coap_startup()`] instead.
 // Make sure that if we're compiling for the ESP-IDF, this function is only compiled if the
 // libcoap component is installed in the ESP-IDF.
 // This way, these function calls will not cause missing function or struct definition errors that

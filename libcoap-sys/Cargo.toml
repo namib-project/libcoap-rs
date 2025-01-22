@@ -43,18 +43,6 @@ default = [
     "epoll"
     # TODO add proxy
 ]
-# While not specified here due to limitations in Cargo's syntax, the DTLS feature depends on one of the DTLS backends
-# being enabled.
-# If you are developing a library based on libcoap-sys and do not care about the DTLS backend, enable the dtls feature
-# and let the user decide on the backend to use, either by re-exporting these features (see
-# https://doc.rust-lang.org/cargo/reference/features.html#dependency-features) or by assuming that the user will use
-# libcoap-sys as a dependency and enable the corresponding backend feature themselves, relying on Cargo's feature
-# unification to enable it for your crate as well.
-# Also note that the backends are **mutually exclusive** due to the C library having these backends as mutually
-# exclusive features. If multiple backends are enabled (e.g. because multiple dependencies use libcoap-sys and use
-# different backends), we select one based on the auto-detection order specified in
-# https://github.com/obgm/libcoap/blob/develop/configure.ac#L494 (gnutls > openssl > mbedtls > tinydtls).
-
 
 # Allows using the version of OpenSSL provided by openssl-sys instead of a system-provided one.
 # Note that this does not enforce the use of OpenSSL in libcoap, see the crate-level documentation for more info.
@@ -70,22 +58,14 @@ dtls-tinydtls-sys = ["dep:tinydtls-sys", "tinydtls-sys/ecc", "tinydtls-sys/psk"]
 # Tell the tinydtls-sys version that is possibly used by libcoap-sys to use the vendored version of its library.
 dtls-tinydtls-sys-vendored = ["dtls-tinydtls-sys", "tinydtls-sys/vendored"]
 
-# Enabling this feature will force libcoap-sys to be built with and statically linked to a vendored version of libcoap,
-# which will be built by the build-script before building libcoap-sys.
-# which will be built by the build-script before building libcoap-sys.
+# Enabling this feature will allow libcoap-sys to be built with and statically linked to a vendored version of libcoap,
 # This way, it is no longer required to have libcoap installed to use this crate.
 vendored = []
 # --- FEATURE FLAGS ---
-# Note that setting the feature flags currently has no effect on the generated Rust code, because the libcoap headers do
-# not use these feature flags. They only affect the features built into the vendored C library (if enabled).
-
 # Enable this feature to enable/require CoAP over DTLS support in the C library.
-# Important: also read the section on DTLS backends before enabling this feature.
 # Corresponding libcoap configure flag: --enable-dtls
 dtls = []
 # Enable this feature to enable/require TLS support in addition to DTLS support.
-# Note: Will also enable the TCP and DTLS features, so consider the above section regarding DTLS backends before +
-# enabling this.
 tls = ["dtls", "tcp"]
 # Enable this feature to enable/require OSCORE functionality in the C library.
 # Corresponding libcoap configure flag: --enable-oscore

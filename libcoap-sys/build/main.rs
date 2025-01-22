@@ -97,6 +97,24 @@ fn main() -> Result<()> {
     if let Some(dtls_backend) = build_system.detected_dtls_backend() {
         println!("cargo::metadata=dtls_backend={}", dtls_backend.as_str());
         println!("cargo::rustc-cfg=dtls_backend=\"{}\"", dtls_backend.as_str());
+
+        if !bypass_compile_time_feature_checks {
+            if let Some(req_backend) = requested_dtls_backend {
+                assert_eq!(req_backend, dtls_backend,
+                           concat!(
+                           "the libcoap-rs compile-time check has determined that the DTLS library\n",
+                           "the used version of libcoap linked against ({}) does not match the one set in LIBCOAP_RS_DTLS_BACKEND ({}).\n",
+                           "If you are certain that this check is mistaken (e.g., because you are cross-compiling), you\n",
+                           "may bypass this check by setting the `LIBCOAP_RS_BYPASS_COMPILE_FEATURE_CHECKS` environment\n",
+                           "variable to any non-zero value.\n",
+                           "Be aware, however, that this might lead to more cryptic errors if the requested features are\n",
+                           "not available after all.\n",
+                           "Refer to the libcoap-sys crate-level documentation for more information: https://docs.rs/libcoap-sys."
+                           ), dtls_backend.as_str(), req_backend.as_str())
+            } else if bypass_compile_time_feature_checks {
+                println!("cargo:warning=You have bypassed the libcoap-sys compile-time DTLS library check.")
+            }
+        }
     }
 
     match build_system.detected_features() {
@@ -115,7 +133,8 @@ fn main() -> Result<()> {
                         "may bypass this check by setting the `LIBCOAP_RS_BYPASS_COMPILE_FEATURE_CHECKS` environment\n",
                         "variable to any non-zero value.\n",
                         "Be aware, however, that this might lead to more cryptic errors if the requested features are\n",
-                        "not available after all."
+                        "not available after all.\n",
+                        "Refer to the libcoap-sys crate-level documentation for more information: https://docs.rs/libcoap-sys."
                     ),
                     missing_features
                         .iter()

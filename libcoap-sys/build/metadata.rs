@@ -12,6 +12,8 @@ use enumset::{EnumSet, EnumSetType};
 /// increased if building on older versions causes issues with libcoap-sys specifically.
 pub const MINIMUM_LIBCOAP_VERSION: &str = "4.3.5";
 
+/// Information about a version of libcoap that was parsed by
+/// [`LibcoapDefineParser`](crate::bindings::LibcoapDefineParser).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct LibcoapDefineInfo {
     pub version: Option<String>,
@@ -19,6 +21,7 @@ pub struct LibcoapDefineInfo {
     pub supported_features: EnumSet<LibcoapFeature>,
 }
 
+/// An optional feature that may or may not be supported by a version of `libcoap`.
 #[derive(EnumSetType, Debug)]
 pub enum LibcoapFeature {
     AfUnix,
@@ -191,6 +194,7 @@ impl LibcoapFeature {
     }
 }
 
+/// A DLTS library that can be used by `libcoap` for encryption support.
 #[derive(Debug, EnumSetType, Hash)]
 pub enum DtlsBackend {
     GnuTls,
