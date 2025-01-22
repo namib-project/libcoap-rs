@@ -53,7 +53,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rust-src, rustc, rust-std, cargo, llvm-tools, llvm-tools-preview
-          toolchain: ${{ matrix.rust_version == 'msrv' && '1.81' || matrix.rust_version }}
+          toolchain: ${{ matrix.rust_version == 'msrv' && '1.82' || matrix.rust_version }}
       - if: matrix.dtls_backend == 'gnutls'
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:

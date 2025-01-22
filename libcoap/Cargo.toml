@@ -16,8 +16,10 @@ authors = ["Hugo Hakim Damer <hdamer@uni-bremen.de>"]
 categories = ["api-bindings", "network-programming", "embedded"]
 keywords = ["coap", "libcoap"]
 resolver = "2"
-# Current reason for MSRV (please update when increasing MSRV): Transient dependency "home" requires Rust 1.81.
-rust-version = "1.81.0"
+# Current reason for MSRV (please update when increasing MSRV): bindgen generates unsafe extern "C" blocks, which are 
+# not supported on Rust < 1.82, and Rust < 1.84 is not MSRV aware, so we can't just increase libcoap-sys's MSRV.
+# See also: https://doc.rust-lang.org/nightly/edition-guide/rust-2024/unsafe-extern.html
+rust-version = "1.82.0"
 
 [features]
 default = ["dtls-psk", "tcp"]
