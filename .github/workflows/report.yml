@@ -59,7 +59,7 @@ jobs:
           pattern: docs
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          path: coverage-data
+          path: ./doc
       - name: 'Get artifact ID'
         id: get-artifact-id
         uses: actions/github-script@v7
@@ -79,7 +79,7 @@ jobs:
       - if: ${{ (github.event.workflow_run.head_repository.owner.login == github.event.workflow_run.repository.owner.login) && (vars.DOCS_AND_COV_REPO != '') }}
         uses: peaceiris/actions-gh-pages@v4
         with:
-          publish_dir: ./target/doc
+          publish_dir: ./doc
           publish_branch: main
           external_repository: ${{ vars.DOCS_AND_COV_REPO }}
           personal_token: ${{ secrets.DOCS_AND_COV_REPO_TOKEN }}

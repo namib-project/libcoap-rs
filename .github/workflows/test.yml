@@ -30,18 +30,20 @@ jobs:
       RUSTDOCFLAGS: "${{ matrix.rust_version == 'nightly' && '-C instrument-coverage -Cpanic=abort -Zpanic_abort_tests -Z unstable-options --persist-doctests target/debug/doctests' || ' ' }}"
       LIBRARY_FEATURES: |
         ${{ (matrix.crate == 'libcoap-rs' && 'tcp,vendored,rand')
-            || (matrix.crate == 'libcoap-sys' && 'default')
+            || (matrix.crate == 'libcoap-sys' && 'default,vendored')
             || 'vendored'
         }}
+      LIBCOAP_RS_DTLS_BACKEND: ${{ matrix.dtls_backend }}
+      LIBCOAP_RS_BUILD_SYSTEM: "vendored"
       DTLS_LIBRARY_FEATURES: |
-        ${{ (matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'tinydtls' && 'tcp,dtls-psk,dtls-rpk,dtls_tinydtls_vendored')
-            || (matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'mbedtls' && 'tcp,dtls-psk,dtls-pki,dtls_mbedtls_vendored')
-            || (matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'openssl' && 'tcp,dtls-psk,dtls-pki,dtls_openssl_vendored')
-            || (matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'gnutls' && 'tcp,dtls-psk,dtls-pki,dtls-rpk,dtls_gnutls')
-            || (matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'tinydtls' && 'dtls,dtls_backend_tinydtls,dtls_backend_tinydtls_vendored')
-            || (matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'mbedtls' && 'dtls,dtls_backend_mbedtls,dtls_backend_mbedtls_vendored')
-            || (matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'openssl' && 'dtls,dtls_backend_openssl,dtls_backend_openssl_vendored')
-            || (matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'gnutls' && 'dtls,dtls_backend_gnutls')
+        ${{ (matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'tinydtls' && 'tcp,dtls-psk,dtls-rpk,dtls-tinydtls-sys-vendored')
+            || (matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'mbedtls' && 'tcp,dtls-psk,dtls-pki,dtls-mbedtls-sys')
+            || (matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'openssl' && 'tcp,dtls-psk,dtls-pki,dtls-openssl-sys-vendored')
+            || (matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'gnutls' && 'tcp,dtls-psk,dtls-pki,dtls-rpk')
+            || (matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'tinydtls' && 'dtls,dtls-tinydtls-sys-vendored')
+            || (matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'mbedtls' && 'dtls,dtls-mbedtls-sys')
+            || (matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'openssl' && 'dtls,dtls-openssl-sys-vendored')
+            || (matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'gnutls' && 'dtls')
             || 'vendored'
         }}
     steps:
