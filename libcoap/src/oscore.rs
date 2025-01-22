@@ -1,5 +1,7 @@
 use libc::uint64_t;
-use libcoap_sys::{coap_new_oscore_conf, coap_oscore_conf_t, coap_oscore_save_seq_num_t, coap_str_const_t};
+use libcoap_sys::{
+    coap_bin_const_t, coap_new_oscore_conf, coap_oscore_conf_t, coap_oscore_save_seq_num_t, coap_str_const_t,
+};
 use std::{
     ffi::CStr,
     fs::{self, File, OpenOptions},
@@ -84,5 +86,29 @@ impl OscoreConf {
             };
         }
         None
+    }
+}
+
+pub struct OscoreRecipient<'a> {
+    recipient_id: &'a str,
+    recipient: *mut coap_bin_const_t,
+}
+
+impl OscoreRecipient<'_> {
+    pub fn new(recipient_id: &str) -> OscoreRecipient {
+        let mut recipient = coap_bin_const_t {
+            length: recipient_id.len(),
+            s: recipient_id.as_ptr(),
+        };
+
+        let recipient: *mut coap_bin_const_t = Box::into_raw(Box::new(recipient));
+
+        OscoreRecipient {
+            recipient_id,
+            recipient,
+        }
+    }
+    pub fn get_c_struct(&self) -> *mut coap_bin_const_t {
+        self.recipient
     }
 }

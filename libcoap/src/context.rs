@@ -43,7 +43,7 @@ use crate::{
     resource::{CoapResource, UntypedCoapResource},
     session::{session_response_handler, CoapServerSession, CoapSession},
     transport::CoapEndpoint,
-    OscoreConf,
+    OscoreConf, OscoreRecipient,
 };
 
 static COAP_STARTUP_ONCE: Once = Once::new();
@@ -388,27 +388,17 @@ impl CoapContext<'_> {
         };
     }
 
-    // TODO: currenctly broken due to lifetimes?
-    pub fn add_new_oscore_recipient(&mut self, recipient_id: &str) {
-        let mut recipient = coap_bin_const_t {
-            length: recipient_id.len(),
-            s: recipient_id.as_ptr(), // <-  TODO: this
-        };
+    pub fn add_new_oscore_recipient(&mut self, recipient: OscoreRecipient) {
         let mut inner_ref = self.inner.borrow_mut();
         unsafe {
-            coap_new_oscore_recipient(inner_ref.raw_context, &mut recipient);
+            coap_new_oscore_recipient(inner_ref.raw_context, recipient.get_c_struct());
         };
     }
 
-    // TODO: same as above
-    pub fn delete_oscore_recipient(&mut self, recipient_id: &str) {
-        let mut recipient = coap_bin_const_t {
-            length: recipient_id.len(),
-            s: recipient_id.as_ptr(), // <-  TODO: and this
-        };
+    pub fn delete_oscore_recipient(&mut self, recipient: OscoreRecipient) {
         let mut inner_ref = self.inner.borrow_mut();
         unsafe {
-            coap_delete_oscore_recipient(inner_ref.raw_context, &mut recipient);
+            coap_delete_oscore_recipient(inner_ref.raw_context, recipient.get_c_struct());
         }
     }
 
