@@ -2,7 +2,6 @@ use std::{
     cell::RefCell,
     env,
     env::VarError,
-    ffi::OsString,
     path::{Path, PathBuf},
     process::Command,
 };
