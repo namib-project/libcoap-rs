@@ -1,15 +1,21 @@
-use crate::bindings::{generate_libcoap_bindings, LibcoapDefineParser};
-use crate::build_system::BuildSystem;
-use crate::metadata::{DtlsBackend, LibcoapDefineInfo, LibcoapFeature};
+use std::{
+    cell::RefCell,
+    env,
+    env::VarError,
+    ffi::OsString,
+    path::{Path, PathBuf},
+    process::Command,
+};
+
 use anyhow::{anyhow, ensure, Context, Result};
 use enumset::EnumSet;
-use std::cell::RefCell;
-use std::env;
-use std::env::VarError;
-use std::ffi::OsString;
-use std::path::{Path, PathBuf};
-use std::process::Command;
 use version_compare::Version;
+
+use crate::{
+    bindings::{generate_libcoap_bindings, LibcoapDefineParser},
+    build_system::BuildSystem,
+    metadata::{DtlsBackend, LibcoapDefineInfo, LibcoapFeature},
+};
 
 const VENDORED_LIBCOAP_VERSION: &str = "4.3.5";
 
@@ -213,7 +219,7 @@ impl VendoredBuildSystem {
             let library = pkg_config::Config::new().statik(true).exactly_version(VENDORED_LIBCOAP_VERSION).probe("libcoap-3").context("unable to link against build version of libcoap using pkg-config (which is necessary if you're not using a Rust dependency to link the DTLS library)")?;
 
             // SAFETY: We are still single-threaded here.
-            unsafe { env::set_var("PKG_CONFIG_PATH", pkg_config_path_bak.unwrap_or(OsString::new())) }
+            unsafe { env::set_var("PKG_CONFIG_PATH", pkg_config_path_bak.unwrap_or_default()) }
             Ok(Self {
                 out_dir,
                 define_info: None,
@@ -221,7 +227,7 @@ impl VendoredBuildSystem {
             })
         } else {
             // SAFETY: We are still single-threaded here.
-            unsafe { env::set_var("PKG_CONFIG_PATH", pkg_config_path_bak.unwrap_or(OsString::new())) }
+            unsafe { env::set_var("PKG_CONFIG_PATH", pkg_config_path_bak.unwrap_or_default()) }
             println!(
                 "cargo:rustc-link-search={}",
                 libcoap_build_prefix
@@ -305,10 +311,7 @@ impl VendoredBuildSystem {
     }
 
     #[cfg(feature = "dtls-mbedtls-sys")]
-    fn configure_mbedtls_sys(
-        out_dir: &Path,
-        build_config: &mut autotools::Config,
-    ) -> Result<(Option<PathBuf>, bool)> {
+    fn configure_mbedtls_sys(out_dir: &Path, build_config: &mut autotools::Config) -> Result<(Option<PathBuf>, bool)> {
         if env::var_os("MbedTLS_CFLAGS").is_some() || env::var_os("MbedTLS_LIBS").is_some() {
             // Do not use tinydtls-sys if the user manually set either the corresponding LIBS or
             // CFLAGS variable.

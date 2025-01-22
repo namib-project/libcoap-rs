@@ -7,8 +7,10 @@
  * See the README as well as the LICENSE file for more information.
  */
 
-use std::cell::{Ref, RefMut};
-use std::net::SocketAddr;
+use std::{
+    cell::{Ref, RefMut},
+    net::SocketAddr,
+};
 
 use libcoap_sys::{
     coap_new_client_session, coap_proto_t_COAP_PROTO_DTLS, coap_proto_t_COAP_PROTO_TCP, coap_proto_t_COAP_PROTO_UDP,
@@ -19,13 +21,16 @@ use libcoap_sys::{
 };
 
 use super::{CoapSessionCommon, CoapSessionInner, CoapSessionInnerProvider};
-use crate::event::event_handler_callback;
-use crate::mem::{CoapFfiRcCell, DropInnerExclusively};
-use crate::prng::coap_prng_try_fill;
-use crate::{context::CoapContext, error::SessionCreationError, types::CoapAddress};
-
 #[cfg(feature = "dtls")]
 use crate::crypto::ClientCryptoContext;
+use crate::{
+    context::CoapContext,
+    error::SessionCreationError,
+    event::event_handler_callback,
+    mem::{CoapFfiRcCell, DropInnerExclusively},
+    prng::coap_prng_try_fill,
+    types::CoapAddress,
+};
 
 #[derive(Debug)]
 struct CoapClientSessionInner<'a> {
@@ -272,6 +277,7 @@ impl<'a> CoapSessionInnerProvider<'a> for CoapClientSession<'a> {
     fn inner_ref<'b>(&'b self) -> Ref<'b, CoapSessionInner<'a>> {
         Ref::map(self.inner.borrow(), |v| &v.inner)
     }
+
     fn inner_mut<'b>(&'b self) -> RefMut<'b, CoapSessionInner<'a>> {
         RefMut::map(self.inner.borrow_mut(), |v| &mut v.inner)
     }

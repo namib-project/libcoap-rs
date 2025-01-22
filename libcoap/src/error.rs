@@ -9,9 +9,7 @@
 
 //! Error types
 
-use std::ffi::NulError;
-use std::string::FromUtf8Error;
-use std::sync::PoisonError;
+use std::{ffi::NulError, string::FromUtf8Error, sync::PoisonError};
 
 use thiserror::Error;
 

@@ -311,6 +311,7 @@
 
 use core::ffi::c_void;
 
+use c_stdlib::{epoll_event, fd_set, memcmp, sa_family_t, sockaddr, sockaddr_in, sockaddr_in6, socklen_t, time_t};
 /// Re-export of the crate that provides libc data types used by libcoap.
 ///
 /// In most cases, this will be libc, but on the ESP-IDF, it will be esp_idf_sys.
@@ -321,10 +322,6 @@ pub use esp_idf_sys as c_stdlib;
 /// In most cases, this will be libc, but on the ESP-IDF, it will be esp_idf_sys.
 #[cfg(not(target_os = "espidf"))]
 pub use libc as c_stdlib;
-
-
-use c_stdlib::{epoll_event, fd_set, memcmp, sa_family_t, sockaddr, sockaddr_in, sockaddr_in6, socklen_t, time_t};
-
 // use dtls backend libraries in cases where they set our linker flags, otherwise rustc will
 // optimize them out, resulting in missing symbols.
 #[allow(unused_imports)]

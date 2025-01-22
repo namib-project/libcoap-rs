@@ -15,10 +15,7 @@
 //! process of creating requests and responses and setting the appropriate options ([CoapRequest]
 //! and [CoapResponse]).
 
-use std::{ffi::c_void, mem::MaybeUninit, slice::Iter};
-use std::fmt::Write;
-
-use num_traits::FromPrimitive;
+use std::{ffi::c_void, fmt::Write, mem::MaybeUninit, slice::Iter};
 
 use libcoap_sys::{
     coap_add_data, coap_add_data_large_request, coap_add_optlist_pdu, coap_add_token, coap_delete_optlist,
@@ -27,23 +24,23 @@ use libcoap_sys::{
     coap_pdu_get_mid, coap_pdu_get_token, coap_pdu_get_type, coap_pdu_init, coap_pdu_set_code, coap_pdu_set_type,
     coap_pdu_t, coap_session_t,
 };
+use num_traits::FromPrimitive;
 pub use request::CoapRequest;
 pub use response::CoapResponse;
 
 use crate::{
+    context::ensure_coap_started,
     error::{MessageConversionError, OptionValueError},
     protocol::{
-        Block, CoapMatch, CoapMessageCode, CoapMessageType, CoapOptionNum, CoapOptionType, ContentFormat, ETag,
-        HopLimit, MaxAge, NoResponse, Observe, ProxyScheme, ProxyUri, Size, UriHost, UriPath, UriPort, UriQuery,
+        Block, CoapMatch, CoapMessageCode, CoapMessageType, CoapOptionNum, CoapOptionType, ContentFormat, ETag, Echo,
+        HopLimit, MaxAge, NoResponse, Observe, Oscore, ProxyScheme, ProxyUri, RequestTag, Size, UriHost, UriPath,
+        UriPort, UriQuery,
     },
     session::CoapSessionCommon,
-    types::CoapMessageId,
-};
-use crate::context::ensure_coap_started;
-use crate::protocol::{Echo, Oscore, RequestTag};
-use crate::types::{
-    decode_var_len_u16, decode_var_len_u32, decode_var_len_u8, encode_var_len_u16, encode_var_len_u32,
-    encode_var_len_u8,
+    types::{
+        decode_var_len_u16, decode_var_len_u32, decode_var_len_u8, encode_var_len_u16, encode_var_len_u32,
+        encode_var_len_u8, CoapMessageId,
+    },
 };
 
 pub mod request;

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: BSD-2-CLAUSE
 
-use anyhow::{bail, Result};
 use std::env::VarError;
+
+use anyhow::{bail, Result};
 use version_compare::Version;
 
 /// The minimal version of libcoap that is expected to work with libcoap-rs.

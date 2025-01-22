@@ -9,10 +9,13 @@
 
 #![cfg(feature = "dtls-pki")]
 
-use crate::common::dtls::dtls_client_server_request_common;
-use libcoap_rs::crypto::pki_rpk::{Asn1PrivateKeyType, DerFileKeyComponent, NonCertVerifying, PkiRpkContextBuilder};
-use libcoap_rs::crypto::pki_rpk::{Pki, PkiKeyDef};
 use std::path::PathBuf;
+
+use libcoap_rs::crypto::pki_rpk::{
+    Asn1PrivateKeyType, DerFileKeyComponent, NonCertVerifying, Pki, PkiKeyDef, PkiRpkContextBuilder,
+};
+
+use crate::common::dtls::dtls_client_server_request_common;
 
 mod common;
 

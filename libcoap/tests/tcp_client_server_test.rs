@@ -6,16 +6,16 @@
  * Copyright © 2021-2023 The NAMIB Project Developers, all rights reserved.
  * See the README as well as the LICENSE file for more information.
  */
- #![cfg(feature = "tcp")]
+#![cfg(feature = "tcp")]
 
-use libcoap_rs::session::CoapClientSession;
+use std::time::Duration;
+
 use libcoap_rs::{
     message::CoapMessageCommon,
     protocol::{CoapMessageCode, CoapResponseCode},
-    session::CoapSessionCommon,
+    session::{CoapClientSession, CoapSessionCommon},
     CoapContext,
 };
-use std::time::Duration;
 
 mod common;
 

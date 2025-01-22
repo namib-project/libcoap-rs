@@ -14,9 +14,6 @@ use std::{
     fmt::{Display, Formatter},
 };
 
-use num_derive::FromPrimitive;
-use num_traits::FromPrimitive;
-
 use libcoap_sys::{
     coap_option_num_t, coap_pdu_code_t, coap_pdu_code_t_COAP_EMPTY_CODE, coap_pdu_code_t_COAP_REQUEST_CODE_DELETE,
     coap_pdu_code_t_COAP_REQUEST_CODE_FETCH, coap_pdu_code_t_COAP_REQUEST_CODE_GET,
@@ -58,6 +55,8 @@ use libcoap_sys::{
     COAP_OPTION_Q_BLOCK2, COAP_OPTION_RTAG, COAP_OPTION_SIZE1, COAP_OPTION_SIZE2, COAP_OPTION_URI_HOST,
     COAP_OPTION_URI_PATH, COAP_OPTION_URI_PORT, COAP_OPTION_URI_QUERY,
 };
+use num_derive::FromPrimitive;
+use num_traits::FromPrimitive;
 
 use crate::error::{MessageCodeError, UnknownOptionError};
 

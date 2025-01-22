@@ -20,8 +20,8 @@ pub mod vendored;
 /// If you want to implement your own build system, you may want to use the `manual` build system
 /// as a basis.
 ///
-/// In order to implement the compile-time checks, you may want to use 
-/// [`LibcoapDefineParser`](crate::bindings::LibcoapDefineParser), at least in cases where you have 
+/// In order to implement the compile-time checks, you may want to use
+/// [`LibcoapDefineParser`](crate::bindings::LibcoapDefineParser), at least in cases where you have
 /// the corresponding `coap_defines.h` header file available.
 pub trait BuildSystem {
     /// Returns the set of features that are supported by the linked version of libcoap, or `None`

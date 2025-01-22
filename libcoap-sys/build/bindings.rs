@@ -1,8 +1,9 @@
 use std::{cell::RefCell, fmt::Debug, path::PathBuf, rc::Rc};
 
-use crate::metadata::{DtlsBackend, LibcoapDefineInfo, LibcoapFeature};
 use anyhow::{Context, Result};
 use bindgen::callbacks::{DeriveTrait, ImplementsTrait, IntKind, ParseCallbacks};
+
+use crate::metadata::{DtlsBackend, LibcoapDefineInfo, LibcoapFeature};
 
 /// Implementation of bindgen's [ParseCallbacks] that allow reading some meta-information about the
 /// used libcoap version from its defines (package version, supported features, ...)

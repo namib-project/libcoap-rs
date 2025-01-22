@@ -1,15 +1,14 @@
-use std::cell::RefCell;
-use std::env;
-use std::env::VarError;
-use std::path::PathBuf;
+use std::{cell::RefCell, env, env::VarError, path::PathBuf};
 
 use anyhow::{Context, Result};
 use enumset::EnumSet;
 use version_compare::Version;
 
-use crate::bindings::{generate_libcoap_bindings, LibcoapDefineParser};
-use crate::metadata::{DtlsBackend, LibcoapDefineInfo};
-use crate::{build_system::BuildSystem, metadata::LibcoapFeature};
+use crate::{
+    bindings::{generate_libcoap_bindings, LibcoapDefineParser},
+    build_system::BuildSystem,
+    metadata::{DtlsBackend, LibcoapDefineInfo, LibcoapFeature},
+};
 
 pub struct ManualBuildSystem {
     out_dir: PathBuf,
@@ -41,9 +40,7 @@ impl ManualBuildSystem {
             Err(e) => return Err(e).context("Unable to parse LIBCOAP_RS_ADDITIONAL_LIBRARIES environment variable."),
         };
         let use_static = match env::var("LIBCOAP_RS_STATIC") {
-            Ok(v) => {
-                !(v == "0" || v.is_empty())
-            },
+            Ok(v) => !(v == "0" || v.is_empty()),
             Err(VarError::NotPresent) => false,
             Err(e) => return Err(e).context("Unable to parse LIBCOAP_RS_STATIC environment variable."),
         };

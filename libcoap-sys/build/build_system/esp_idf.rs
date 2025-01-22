@@ -1,14 +1,14 @@
-use crate::build_system::BuildSystem;
-use crate::metadata::{DtlsBackend, LibcoapFeature};
+use std::{env, fs::File, io::Write, iter::once, path::PathBuf};
+
 use anyhow::{anyhow, Context, Result};
 use enumset::EnumSet;
-use std::env;
-use std::fs::File;
-use std::io::Write;
-use std::iter::once;
-use std::path::PathBuf;
 use syn::{ForeignItem, Ident, Item};
 use version_compare::Version;
+
+use crate::{
+    build_system::BuildSystem,
+    metadata::{DtlsBackend, LibcoapFeature},
+};
 
 pub struct EspIdfBuildSystem {
     out_dir: PathBuf,

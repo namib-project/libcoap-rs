@@ -13,14 +13,13 @@ use std::fmt::Debug;
 
 use libcoap_sys::{
     coap_event_t, coap_event_t_COAP_EVENT_SERVER_SESSION_NEW, coap_event_t_COAP_EVENT_TCP_CONNECTED,
-    coap_session_get_context, coap_session_t, coap_session_type_t_COAP_SESSION_TYPE_SERVER,
+    coap_session_get_context, coap_session_get_type, coap_session_t, coap_session_type_t_COAP_SESSION_TYPE_SERVER,
 };
-use libcoap_sys::coap_session_get_type;
 
-use crate::context::CoapContext;
-use crate::session::CoapSession;
-
-use crate::session::CoapServerSession;
+use crate::{
+    context::CoapContext,
+    session::{CoapServerSession, CoapSession},
+};
 
 /// Trait for CoAP event handlers.
 ///

@@ -7,6 +7,10 @@
  * See the README as well as the LICENSE file for more information.
  */
 
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
+use std::{ffi::CString, fmt::Debug, path::Path};
+
 use libcoap_sys::{
     coap_asn1_privatekey_type_t, coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_CMAC,
     coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_DH, coap_asn1_privatekey_type_t_COAP_ASN1_PKEY_DHX,
@@ -20,11 +24,6 @@ use libcoap_sys::{
 };
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
-use std::ffi::CString;
-use std::fmt::Debug;
-#[cfg(unix)]
-use std::os::unix::ffi::OsStrExt;
-use std::path::Path;
 
 /// Trait for marker structs that describe different types of asymmetric DTLS keys (RPK or PKI).
 #[allow(private_bounds)]

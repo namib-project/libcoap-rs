@@ -9,6 +9,7 @@
 
 //! Module containing context-internal types and traits.
 
+use core::ffi::c_uint;
 #[cfg(feature = "dtls-pki")]
 use std::ffi::CString;
 #[cfg(feature = "dtls")]
@@ -16,8 +17,6 @@ use std::ptr::NonNull;
 use std::{any::Any, ffi::c_void, fmt::Debug, net::SocketAddr, ops::Sub, sync::Once, time::Duration};
 #[cfg(all(feature = "dtls-pki", unix))]
 use std::{os::unix::ffi::OsStrExt, path::Path};
-
-use core::ffi::c_uint;
 
 #[cfg(feature = "dtls-pki")]
 use libcoap_sys::coap_context_set_pki_root_cas;

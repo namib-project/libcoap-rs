@@ -7,22 +7,24 @@
  * See the README as well as the LICENSE file for more information.
  */
 
-use crate::crypto::psk::key::PskKey;
-use crate::error::ContextConfigurationError;
-use crate::session::CoapServerSession;
+use std::{
+    borrow::Borrow,
+    cell::RefCell,
+    collections::{BTreeMap, HashMap},
+    ffi::{c_void, CStr},
+    fmt::Debug,
+    hash::Hash,
+    os::raw::c_char,
+    ptr::NonNull,
+    rc::{Rc, Weak},
+};
+
 use libcoap_sys::{
     coap_bin_const_t, coap_context_set_psk2, coap_context_t, coap_dtls_spsk_info_t, coap_dtls_spsk_t, coap_session_t,
     COAP_DTLS_SPSK_SETUP_VERSION,
 };
-use std::borrow::Borrow;
-use std::cell::RefCell;
-use std::collections::{BTreeMap, HashMap};
-use std::ffi::{c_void, CStr};
-use std::fmt::Debug;
-use std::hash::Hash;
-use std::os::raw::c_char;
-use std::ptr::NonNull;
-use std::rc::{Rc, Weak};
+
+use crate::{crypto::psk::key::PskKey, error::ContextConfigurationError, session::CoapServerSession};
 
 /// Builder for a server-side DTLS encryption context for use with pre-shared keys (PSK).
 #[derive(Debug)]

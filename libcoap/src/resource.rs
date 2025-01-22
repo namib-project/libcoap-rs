@@ -9,15 +9,13 @@
 
 //! Resource and resource handler descriptions
 
+use core::ffi::c_int;
 use std::{
     any::Any,
-    cell::Ref,
-    cell::RefMut,
+    cell::{Ref, RefMut},
     fmt::{Debug, Formatter},
     marker::PhantomData,
 };
-
-use core::ffi::c_int;
 
 use libcoap_sys::{
     coap_delete_resource, coap_new_str_const, coap_pdu_t, coap_register_request_handler, coap_resource_get_uri_path,
@@ -26,16 +24,14 @@ use libcoap_sys::{
     COAP_RESOURCE_FLAGS_NOTIFY_CON, COAP_RESOURCE_FLAGS_NOTIFY_NON, COAP_RESOURCE_FLAGS_RELEASE_URI,
 };
 
-use crate::context::ensure_coap_started;
-use crate::mem::{CoapFfiRcCell, DropInnerExclusively};
-use crate::message::request::CoapRequest;
-use crate::message::response::CoapResponse;
-use crate::message::CoapMessageCommon;
-use crate::protocol::CoapMessageCode;
-use crate::protocol::CoapMessageType;
-use crate::session::CoapServerSession;
-use crate::session::CoapSessionCommon;
-use crate::{error::MessageConversionError, message::CoapMessage, protocol::CoapRequestCode};
+use crate::{
+    context::ensure_coap_started,
+    error::MessageConversionError,
+    mem::{CoapFfiRcCell, DropInnerExclusively},
+    message::{request::CoapRequest, response::CoapResponse, CoapMessage, CoapMessageCommon},
+    protocol::{CoapMessageCode, CoapMessageType, CoapRequestCode},
+    session::{CoapServerSession, CoapSessionCommon},
+};
 
 // Trait aliases are experimental
 //trait CoapMethodHandlerFn<D> = FnMut(&D, &mut CoapSession, &CoapRequestMessage, &mut CoapResponseMessage);

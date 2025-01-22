@@ -7,20 +7,22 @@
  * See the README as well as the LICENSE file for more information.
  */
 
-use crate::crypto::psk::key::PskKey;
-use crate::error::SessionCreationError;
-use crate::session::CoapClientSession;
-use crate::types::CoapAddress;
-use crate::CoapContext;
+use std::{
+    cell::RefCell,
+    ffi::{c_char, c_void, CString, NulError},
+    fmt::Debug,
+    ptr::NonNull,
+    rc::{Rc, Weak},
+};
+
 use libcoap_sys::{
     coap_dtls_cpsk_info_t, coap_dtls_cpsk_t, coap_new_client_session_psk2, coap_proto_t, coap_session_t,
     coap_str_const_t, COAP_DTLS_CPSK_SETUP_VERSION,
 };
-use std::cell::RefCell;
-use std::ffi::{c_char, c_void, CString, NulError};
-use std::fmt::Debug;
-use std::ptr::NonNull;
-use std::rc::{Rc, Weak};
+
+use crate::{
+    crypto::psk::key::PskKey, error::SessionCreationError, session::CoapClientSession, types::CoapAddress, CoapContext,
+};
 
 /// Builder for a client-side DTLS encryption context for use with pre-shared keys (PSK).
 #[derive(Debug)]

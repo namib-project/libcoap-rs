@@ -4,10 +4,11 @@ use anyhow::{anyhow, bail, Context, Result};
 use enumset::EnumSet;
 use version_compare::Version;
 
-use crate::build_system::esp_idf::EspIdfBuildSystem;
-use crate::build_system::vendored::VendoredBuildSystem;
 use crate::{
-    build_system::{manual::ManualBuildSystem, pkgconfig::PkgConfigBuildSystem, BuildSystem},
+    build_system::{
+        esp_idf::EspIdfBuildSystem, manual::ManualBuildSystem, pkgconfig::PkgConfigBuildSystem,
+        vendored::VendoredBuildSystem, BuildSystem,
+    },
     metadata::{DtlsBackend, LibcoapFeature, MINIMUM_LIBCOAP_VERSION},
 };
 

@@ -10,24 +10,19 @@
 //! Types required for conversion between libcoap C library abstractions and Rust types.
 
 use core::ffi::c_ushort;
-use libcoap_sys::c_stdlib::{in6_addr, in_addr, sa_family_t, sockaddr_in, sockaddr_in6, socklen_t, AF_INET, AF_INET6};
-use num_derive::FromPrimitive;
-use num_traits::FromPrimitive;
-use std::ffi::{CStr, CString};
-use std::fmt::{Display, Formatter};
-use std::marker::PhantomPinned;
-use std::pin::Pin;
 use std::{
-    fmt::Debug,
+    ffi::{CStr, CString},
+    fmt::{Debug, Display, Formatter},
+    marker::PhantomPinned,
     mem::MaybeUninit,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
     os::raw::c_int,
+    pin::Pin,
     str::FromStr,
 };
-#[cfg(feature = "url")]
-use url::Url;
 
 use libcoap_sys::{
+    c_stdlib::{in6_addr, in_addr, sa_family_t, sockaddr_in, sockaddr_in6, socklen_t, AF_INET, AF_INET6},
     coap_address_t, coap_delete_optlist, coap_mid_t, coap_proto_t, coap_proto_t_COAP_PROTO_DTLS,
     coap_proto_t_COAP_PROTO_NONE, coap_proto_t_COAP_PROTO_TCP, coap_proto_t_COAP_PROTO_TLS,
     coap_proto_t_COAP_PROTO_UDP, coap_split_proxy_uri, coap_split_uri, coap_str_const_t, coap_string_equal,
@@ -37,11 +32,12 @@ use libcoap_sys::{
     coap_uri_scheme_t_COAP_URI_SCHEME_COAP_WS, coap_uri_scheme_t_COAP_URI_SCHEME_HTTP,
     coap_uri_scheme_t_COAP_URI_SCHEME_HTTPS, coap_uri_t, COAP_URI_SCHEME_SECURE_MASK,
 };
+use num_derive::FromPrimitive;
+use num_traits::FromPrimitive;
+#[cfg(feature = "url")]
+use url::Url;
 
-use crate::context::ensure_coap_started;
-use crate::error::UriParsingError;
-use crate::message::CoapOption;
-use crate::protocol::UriPort;
+use crate::{context::ensure_coap_started, error::UriParsingError, message::CoapOption, protocol::UriPort};
 
 /// Interface index used internally by libcoap to refer to an endpoint.
 pub type IfIndex = c_int;

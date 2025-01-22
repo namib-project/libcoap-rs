@@ -10,17 +10,23 @@
 #[cfg(any(feature = "dtls-pki", feature = "dtls-rpk"))]
 pub mod dtls;
 
-use std::net::{SocketAddr, UdpSocket};
-use std::rc::Rc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Condvar, Mutex};
-use std::thread::JoinHandle;
-use std::time::Duration;
+use std::{
+    net::{SocketAddr, UdpSocket},
+    rc::Rc,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Condvar, Mutex,
+    },
+    thread::JoinHandle,
+    time::Duration,
+};
 
-use libcoap_rs::message::{CoapMessageCommon, CoapRequest, CoapResponse};
-use libcoap_rs::protocol::{CoapMessageCode, CoapMessageType, CoapRequestCode, CoapResponseCode};
-use libcoap_rs::session::CoapSessionCommon;
-use libcoap_rs::{CoapContext, CoapRequestHandler, CoapResource};
+use libcoap_rs::{
+    message::{CoapMessageCommon, CoapRequest, CoapResponse},
+    protocol::{CoapMessageCode, CoapMessageType, CoapRequestCode, CoapResponseCode},
+    session::CoapSessionCommon,
+    CoapContext, CoapRequestHandler, CoapResource,
+};
 use libcoap_sys::{coap_dtls_set_log_level, coap_log_t_COAP_LOG_DEBUG, coap_set_log_level};
 
 pub(crate) fn get_unused_server_addr() -> SocketAddr {

@@ -1,21 +1,23 @@
-use crate::common;
-use libcoap_rs::crypto::pki_rpk::{
-    KeyDef, KeyType, NonCertVerifying, PkiRpkContext, PkiRpkContextBuilder, ServerPkiRpkCryptoContext,
+use std::{ffi::CStr, path::PathBuf, time::Duration};
+
+use libcoap_rs::{
+    crypto::{
+        pki_rpk::{KeyDef, KeyType, NonCertVerifying, PkiRpkContext, PkiRpkContextBuilder, ServerPkiRpkCryptoContext},
+        ClientCryptoContext,
+    },
+    message::CoapMessageCommon,
+    protocol::{CoapMessageCode, CoapResponseCode},
+    session::{CoapClientSession, CoapSessionCommon},
+    CoapContext,
 };
-use libcoap_rs::crypto::ClientCryptoContext;
-use libcoap_rs::message::CoapMessageCommon;
-use libcoap_rs::protocol::{CoapMessageCode, CoapResponseCode};
-use libcoap_rs::session::{CoapClientSession, CoapSessionCommon};
-use libcoap_rs::CoapContext;
 use libcoap_sys::{
     coap_get_tls_library_version, coap_package_version, coap_tls_library_t_COAP_TLS_LIBRARY_GNUTLS,
     coap_tls_library_t_COAP_TLS_LIBRARY_MBEDTLS, coap_tls_library_t_COAP_TLS_LIBRARY_NOTLS,
     coap_tls_library_t_COAP_TLS_LIBRARY_OPENSSL, coap_tls_library_t_COAP_TLS_LIBRARY_TINYDTLS,
     coap_tls_library_t_COAP_TLS_LIBRARY_WOLFSSL,
 };
-use std::ffi::CStr;
-use std::path::PathBuf;
-use std::time::Duration;
+
+use crate::common;
 
 // Is used in some test cases, but not in others (causing a compiler warning)
 #[allow(unused)]

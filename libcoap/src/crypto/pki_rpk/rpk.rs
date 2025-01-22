@@ -7,17 +7,27 @@
  * See the README as well as the LICENSE file for more information.
  */
 
-use crate::crypto::pki_rpk;
-use crate::crypto::pki_rpk::key::{KeyComponentSealed, KeyTypeSealed};
-use crate::crypto::pki_rpk::{
-    Asn1PrivateKeyType, CnCallback, KeyComponent, KeyDef, KeyDefSealed, NonCertVerifying, PemMemoryKeyComponent,
-    Pkcs11KeyComponent, PkiRpkContext, PkiRpkContextBuilder, ServerPkiRpkCryptoContext,
+use std::{ffi::CString, fmt::Debug};
+
+use libcoap_sys::{
+    coap_const_char_ptr_t, coap_dtls_key_t, coap_dtls_key_t__bindgen_ty_1, coap_dtls_pki_t, coap_pki_define_t,
+    coap_pki_define_t_COAP_PKI_KEY_DEF_PEM, coap_pki_define_t_COAP_PKI_KEY_DEF_PKCS11_RPK,
+    coap_pki_define_t_COAP_PKI_KEY_DEF_RPK_BUF, coap_pki_key_define_t, coap_pki_key_t,
+    coap_pki_key_t_COAP_PKI_KEY_DEFINE,
 };
-use crate::crypto::ClientCryptoContext;
-use crate::session::CoapSession;
-use libcoap_sys::{coap_const_char_ptr_t, coap_dtls_key_t, coap_dtls_key_t__bindgen_ty_1, coap_dtls_pki_t, coap_pki_define_t, coap_pki_define_t_COAP_PKI_KEY_DEF_PEM, coap_pki_define_t_COAP_PKI_KEY_DEF_PKCS11_RPK, coap_pki_define_t_COAP_PKI_KEY_DEF_RPK_BUF, coap_pki_key_define_t, coap_pki_key_t, coap_pki_key_t_COAP_PKI_KEY_DEFINE};
-use std::ffi::CString;
-use std::fmt::Debug;
+
+use crate::{
+    crypto::{
+        pki_rpk,
+        pki_rpk::{
+            key::{KeyComponentSealed, KeyTypeSealed},
+            Asn1PrivateKeyType, CnCallback, KeyComponent, KeyDef, KeyDefSealed, NonCertVerifying,
+            PemMemoryKeyComponent, Pkcs11KeyComponent, PkiRpkContext, PkiRpkContextBuilder, ServerPkiRpkCryptoContext,
+        },
+        ClientCryptoContext,
+    },
+    session::CoapSession,
+};
 
 /// (Marker) key type for asymmetric DTLS keys not signed by a CA (raw public keys).
 #[derive(Debug, Clone, Copy)]
