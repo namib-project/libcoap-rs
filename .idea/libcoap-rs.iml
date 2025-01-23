@@ -7,9 +7,13 @@
       <sourceFolder url="file://$MODULE_DIR$/libcoap/tests" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/libcoap-sys/examples" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/libcoap/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/libcoap-sys/examples/esp-idf/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/libcoap/examples/esp-idf/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/libcoap-sys/target" />
       <excludeFolder url="file://$MODULE_DIR$/libcoap/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
+      <excludeFolder url="file://$MODULE_DIR$/libcoap-sys/examples/esp-idf/target" />
+      <excludeFolder url="file://$MODULE_DIR$/libcoap/examples/esp-idf/target" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
