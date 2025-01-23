@@ -35,6 +35,7 @@ tcp = ["libcoap-sys/tcp"]
 tls = ["libcoap-sys/tls"]
 rand = ["dep:rand", "dep:rand_core"]
 vendored = ["libcoap-sys/vendored"]
+oscore = ["libcoap-sys/oscore"]
 
 [dependencies]
 libcoap-sys = { version = "^0.2.2", path = "../libcoap-sys", default-features = false, features = ["client", "server"] }

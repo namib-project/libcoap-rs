@@ -204,6 +204,7 @@ extern crate core;
 
 pub use context::CoapContext;
 pub use event::CoapEventHandler;
+#[cfg(feature = "oscore")]
 pub use oscore::{OscoreConf, OscoreRecipient};
 pub use resource::{CoapRequestHandler, CoapResource};
 
@@ -214,6 +215,7 @@ pub mod error;
 mod event;
 mod mem;
 pub mod message;
+#[cfg(feature = "oscore")]
 pub mod oscore;
 pub mod prng;
 pub mod protocol;

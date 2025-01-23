@@ -10,16 +10,18 @@
 use std::cell::{Ref, RefMut};
 use std::net::SocketAddr;
 
+#[cfg(feature = "oscore")]
+use libcoap_sys::{coap_context_oscore_server, coap_new_client_session_oscore, coap_new_oscore_conf, coap_str_const_t};
 use libcoap_sys::{
-    coap_context_oscore_server, coap_new_client_session, coap_new_client_session_oscore, coap_new_oscore_conf,
-    coap_proto_t, coap_register_event_handler, coap_session_get_app_data, coap_session_get_context,
-    coap_session_get_type, coap_session_init_token, coap_session_release, coap_session_set_app_data, coap_session_t,
-    coap_session_type_t, coap_str_const_t, COAP_TOKEN_DEFAULT_MAX,
+    coap_new_client_session, coap_proto_t, coap_register_event_handler, coap_session_get_app_data,
+    coap_session_get_context, coap_session_get_type, coap_session_init_token, coap_session_release,
+    coap_session_set_app_data, coap_session_t, coap_session_type_t, COAP_TOKEN_DEFAULT_MAX,
 };
 
 use super::{CoapSessionCommon, CoapSessionInner, CoapSessionInnerProvider};
 use crate::event::event_handler_callback;
 use crate::mem::{CoapFfiRcCell, DropInnerExclusively};
+#[cfg(feature = "oscore")]
 use crate::oscore::OscoreConf;
 use crate::prng::coap_prng_try_fill;
 use crate::{context::CoapContext, error::SessionCreationError, types::CoapAddress};
@@ -194,6 +196,7 @@ impl CoapClientSession<'_> {
     ///
     /// Will return a [SessionCreationError] if libcoap was unable to create a session
     /// (most likely because it was not possible to bind to a port).
+    #[cfg(feature = "oscore")]
     pub fn connect_oscore<'a>(
         ctx: &mut CoapContext<'a>,
         addr: SocketAddr,
