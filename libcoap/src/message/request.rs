@@ -10,17 +10,15 @@
 use std::str::FromStr;
 
 use crate::{
-    error::{MessageConversionError, MessageTypeError},
-    message::{CoapMessage, CoapMessageCommon, CoapOption},
+    error::{MessageConversionError, MessageTypeError, OptionValueError},
+    message::{construct_path_string, construct_query_string, CoapMessage, CoapMessageCommon, CoapOption},
     protocol::{
         CoapMatch, CoapMessageCode, CoapMessageType, CoapOptionType, CoapRequestCode, ContentFormat, ETag, HopLimit,
         NoResponse, Observe,
     },
+    session::CoapSessionCommon,
     types::{CoapUri, CoapUriScheme},
 };
-use crate::error::OptionValueError;
-use crate::message::{construct_path_string, construct_query_string};
-use crate::session::CoapSessionCommon;
 
 /// Representation of a CoAP request message.
 ///

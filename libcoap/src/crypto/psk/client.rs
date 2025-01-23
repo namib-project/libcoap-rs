@@ -7,20 +7,22 @@
  * See the README as well as the LICENSE file for more information.
  */
 
-use crate::crypto::psk::key::PskKey;
-use crate::error::SessionCreationError;
-use crate::session::CoapClientSession;
-use crate::types::CoapAddress;
-use crate::CoapContext;
+use std::{
+    cell::RefCell,
+    ffi::{c_char, c_void, CString, NulError},
+    fmt::Debug,
+    ptr::NonNull,
+    rc::{Rc, Weak},
+};
+
 use libcoap_sys::{
     coap_dtls_cpsk_info_t, coap_dtls_cpsk_t, coap_new_client_session_psk2, coap_proto_t, coap_session_t,
     coap_str_const_t, COAP_DTLS_CPSK_SETUP_VERSION,
 };
-use std::cell::RefCell;
-use std::ffi::{c_char, c_void, CString, NulError};
-use std::fmt::Debug;
-use std::ptr::NonNull;
-use std::rc::{Rc, Weak};
+
+use crate::{
+    crypto::psk::key::PskKey, error::SessionCreationError, session::CoapClientSession, types::CoapAddress, CoapContext,
+};
 
 /// Builder for a client-side DTLS encryption context for use with pre-shared keys (PSK).
 #[derive(Debug)]
@@ -41,9 +43,7 @@ impl<'a> ClientPskContextBuilder<'a> {
                 raw_cfg: Box::new(coap_dtls_cpsk_t {
                     version: COAP_DTLS_CPSK_SETUP_VERSION as u8,
                     reserved: Default::default(),
-                    #[cfg(dtls_ec_jpake_support)]
                     ec_jpake: 0,
-                    #[cfg(dtls_cid_support)]
                     use_cid: 0,
                     validate_ih_call_back: None,
                     ih_call_back_arg: std::ptr::null_mut(),
@@ -96,10 +96,12 @@ impl ClientPskContextBuilder<'_> {
     /// Enables or disables support for EC JPAKE ([RFC 8236](https://datatracker.ietf.org/doc/html/rfc8236))
     /// key exchanges in (D)TLS.
     ///
+    /// Note: At the time of writing (based on libcoap 4.3.5), this is only supported on MbedTLS,
+    /// enabling EC JPAKE on other DTLS backends has no effect.
+    ///
     /// # Implementation details (informative, not covered by semver guarantees)
     ///
     /// Equivalent to setting `ec_jpake` in the underlying [`coap_dtls_cpsk_t`] structure.
-    #[cfg(dtls_ec_jpake_support)]
     pub fn ec_jpake(mut self, ec_jpake: bool) -> Self {
         self.ctx.raw_cfg.ec_jpake = ec_jpake.into();
         self
@@ -110,7 +112,7 @@ impl ClientPskContextBuilder<'_> {
     /// # Implementation details (informative, not covered by semver guarantees)
     ///
     /// Equivalent to setting `use_cid` in the underlying [`coap_dtls_cpsk_t`] structure.
-    #[cfg(dtls_cid_support)]
+    #[cfg(feature = "dtls-cid")]
     pub fn use_cid(mut self, use_cid: bool) -> Self {
         self.ctx.raw_cfg.use_cid = use_cid.into();
         self

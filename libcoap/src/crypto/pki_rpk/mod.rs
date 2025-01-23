@@ -295,27 +295,31 @@ mod pki;
 #[cfg(feature = "dtls-rpk")]
 mod rpk;
 
+use std::{
+    cell::RefCell,
+    ffi::{c_char, c_int, c_uint, c_void, CStr, CString, NulError},
+    fmt::{Debug, Formatter},
+    marker::PhantomData,
+    ptr::NonNull,
+    rc::{Rc, Weak},
+};
+
+pub use key::*;
+use libcoap_sys::{
+    coap_context_set_pki, coap_context_t, coap_dtls_key_t, coap_dtls_pki_t, coap_new_client_session_pki, coap_proto_t,
+    coap_session_t, COAP_DTLS_PKI_SETUP_VERSION,
+};
 #[cfg(feature = "dtls-pki")]
 pub use pki::*;
 #[cfg(feature = "dtls-rpk")]
 pub use rpk::*;
 
-pub use key::*;
-
-use crate::error::{ContextConfigurationError, SessionCreationError};
-use crate::session::CoapSession;
-use crate::types::CoapAddress;
-use crate::CoapContext;
-use libcoap_sys::{
-    coap_context_set_pki, coap_context_t, coap_dtls_key_t, coap_dtls_pki_t, coap_new_client_session_pki, coap_proto_t,
-    coap_session_t, COAP_DTLS_PKI_SETUP_VERSION,
+use crate::{
+    error::{ContextConfigurationError, SessionCreationError},
+    session::CoapSession,
+    types::CoapAddress,
+    CoapContext,
 };
-use std::cell::RefCell;
-use std::ffi::{c_char, c_int, c_uint, c_void, CStr, CString, NulError};
-use std::fmt::{Debug, Formatter};
-use std::marker::PhantomData;
-use std::ptr::NonNull;
-use std::rc::{Rc, Weak};
 
 /// A context configuration for server-side PKI or RPK based DTLS encryption.
 #[derive(Clone, Debug)]

@@ -10,13 +10,11 @@
 #![cfg(feature = "dtls-psk")]
 use std::time::Duration;
 
-use libcoap_rs::crypto::psk::PskKey;
-use libcoap_rs::crypto::psk::{ClientPskContextBuilder, ServerPskContextBuilder};
-use libcoap_rs::session::CoapClientSession;
 use libcoap_rs::{
+    crypto::psk::{ClientPskContextBuilder, PskKey, ServerPskContextBuilder},
     message::CoapMessageCommon,
     protocol::{CoapMessageCode, CoapResponseCode},
-    session::CoapSessionCommon,
+    session::{CoapClientSession, CoapSessionCommon},
     CoapContext,
 };
 

@@ -18,54 +18,56 @@ categories = ["external-ffi-bindings", "network-programming", "embedded"]
 keywords = ["coap", "libcoap"]
 exclude = ["src/libcoap/ext/"]
 resolver = "2"
-# Current reason for MSRV (please update when increasing MSRV): Transient dependency "home" requires Rust 1.81.
-rust-version = "1.81.0"
+build = "build/main.rs"
+# Current reason for MSRV (please update when increasing MSRV): bindgen generates unsafe extern "C" blocks, which are
+# not supported on Rust < 1.82.
+# See also: https://doc.rust-lang.org/nightly/edition-guide/rust-2024/unsafe-extern.html
+rust-version = "1.82.0"
 
 [features]
-# The default features match those of libcoaps configure script, except for dtls, which is disabled here because it
-# requires a backend to be set manually.
-default = ["oscore", "ipv4", "ipv6", "af-unix", "tcp", "websockets", "async", "observe-persist", "q-block", "thread-safe", "thread-recursive-lock-detection", "server", "client", "epoll", "vendored", "static"]
-# While not specified here due to limitations in Cargo's syntax, the DTLS feature depends on one of the DTLS backends
-# being enabled.
-# If you are developing a library based on libcoap-sys and do not care about the DTLS backend, enable the dtls feature
-# and let the user decide on the backend to use, either by re-exporting these features (see
-# https://doc.rust-lang.org/cargo/reference/features.html#dependency-features) or by assuming that the user will use
-# libcoap-sys as a dependency and enable the corresponding backend feature themselves, relying on Cargo's feature
-# unification to enable it for your crate as well.
-# Also note that the backends are **mutually exclusive** due to the C library having these backends as mutually
-# exclusive features. If multiple backends are enabled (e.g. because multiple dependencies use libcoap-sys and use
-# different backends), we select one based on the auto-detection order specified in
-# https://github.com/obgm/libcoap/blob/develop/configure.ac#L494 (gnutls > openssl > mbedtls > tinydtls).
+# The default features match those of libcoap's configure script for
+# the minimum supported version.
+default = [
+    "dtls",
+    "oscore",
+    "ipv4",
+    "ipv6",
+    "af-unix",
+    "tcp",
+    "websockets",
+    "async",
+    "observe-persist",
+    "q-block",
+    "thread-safe",
+    "thread-recursive-lock-detection",
+    "server",
+    "client",
+    "epoll",
+    # TODO add proxy
+]
 
+# Allows using the version of OpenSSL provided by openssl-sys instead of a system-provided one.
+# Note that this does not enforce the use of OpenSSL in libcoap, see the crate-level documentation for more info.
+dtls-openssl-sys = ["dep:openssl-sys"]
+# Tell the openssl-sys version that is possibly used by libcoap-sys to use the vendored version of its library.
+dtls-openssl-sys-vendored = ["dtls-openssl-sys", "openssl-sys/vendored"]
+# Allows using the version of MbedTLS provided by mbedtls-sys-auto instead of a system-provided one.
+# Note that this does not enforce the use of MbedTLS in libcoap, see the crate-level documentation for more info.
+dtls-mbedtls-sys = ["dep:mbedtls-sys-auto"]
+# Allows using the version of TinyDTLS provided by tinydtls-sys instead of a system-provided one.
+# Note that this does not enforce the use of TinyDTLS in libcoap, see the crate-level documentation for more info.
+dtls-tinydtls-sys = ["dep:tinydtls-sys", "tinydtls-sys/ecc", "tinydtls-sys/psk"]
+# Tell the tinydtls-sys version that is possibly used by libcoap-sys to use the vendored version of its library.
+dtls-tinydtls-sys-vendored = ["dtls-tinydtls-sys", "tinydtls-sys/vendored"]
 
-# Corresponding libcoap configure flag: --with-openssl
-dtls_backend_openssl = ["dtls", "dep:openssl-sys"]
-dtls_backend_openssl_vendored = ["dtls_backend_openssl", "openssl-sys/vendored"]
-# Corresponding libcoap configure flag: --with-gnutls
-dtls_backend_gnutls = ["dtls"]
-# Corresponding libcoap configure flag: --with-mbedtls
-dtls_backend_mbedtls = ["dtls"] # can't use mbedtls-sys-auto to generate linker flags here, as the crate doesn't support mbedtls >= 3.0.0
-dtls_backend_mbedtls_vendored = ["dep:mbedtls-sys-auto", "dtls_backend_mbedtls"]
-# Corresponding libcoap configure flags: --with-tinydtls --without-submodule-tinydtls
-dtls_backend_tinydtls = ["dtls", "dep:tinydtls-sys", "tinydtls-sys/ecc", "tinydtls-sys/psk"]
-dtls_backend_tinydtls_vendored = ["dtls_backend_tinydtls", "tinydtls-sys/vendored"]
-# Enabling this feature will force libcoap-sys to be built with and statically linked to a vendored version of libcoap,
-# which will be built by the build-script before building libcoap-sys.
+# Enabling this feature will allow libcoap-sys to be built with and statically linked to a vendored version of libcoap,
 # This way, it is no longer required to have libcoap installed to use this crate.
-vendored = ["static"]
-# Enable this feature to use static linking to libcoap instead of dynamic linking.
-static = []
+vendored = []
 # --- FEATURE FLAGS ---
-# Note that setting the feature flags currently has no effect on the generated Rust code, because the libcoap headers do
-# not use these feature flags. They only affect the features built into the vendored C library (if enabled).
-
 # Enable this feature to enable/require CoAP over DTLS support in the C library.
-# Important: also read the section on DTLS backends before enabling this feature.
 # Corresponding libcoap configure flag: --enable-dtls
 dtls = []
 # Enable this feature to enable/require TLS support in addition to DTLS support.
-# Note: Will also enable the TCP and DTLS features, so consider the above section regarding DTLS backends before +
-# enabling this.
 tls = ["dtls", "tcp"]
 # Enable this feature to enable/require OSCORE functionality in the C library.
 # Corresponding libcoap configure flag: --enable-oscore
@@ -137,24 +139,28 @@ dtls-rpk = ["dtls"]
 [dependencies]
 openssl-sys = { version = "^0.9.74", optional = true }
 mbedtls-sys-auto = { version = "^2.26", optional = true }
-libc = "^0.2.126"
 tinydtls-sys = { version = "^0.2.0", default-features = false, optional = true }
 
 [target.'cfg(target_os="espidf")'.dependencies]
-esp-idf-sys = { version = "0.35.0" }
+esp-idf-sys = { version = "0.36.1" }
+
+[target.'cfg(not(target_os="espidf"))'.dependencies]
+libc = "0.2.126"
 
 [build-dependencies]
-bindgen = "0.69.4"
+bindgen = { version = "0.71.1" }
 autotools = "^0.2.3"
 fs_extra = "^1.2"
 pkg-config = "^0.3.24"
-regex = "1.10.5"
-embuild = { version = "0.32.0", features = ["bindgen", "espidf", "cmake"] }
 version-compare = "0.2.0"
+anyhow = { version = "1.0.94", features = ["backtrace"] }
+enumset = "1.1.5"
+syn = { version = "2.0.96" }
+embuild = { version = "0.33.0", features = ["espidf"] }
 
 [package.metadata.docs.rs]
 features = ["dtls", "dtls_backend_openssl", "vendored"]
 
 [[package.metadata.esp-idf-sys.extra_components]]
-remote_component = { name = "espressif/coap", version = "4.3.4~3" }
+remote_component = { name = "espressif/coap", version = "4.3.5~3" }
 bindings_header = "src/wrapper.h"

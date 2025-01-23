@@ -10,18 +10,24 @@
 #[cfg(any(feature = "dtls-pki", feature = "dtls-rpk"))]
 pub mod dtls;
 
-use std::net::{SocketAddr, UdpSocket};
-use std::rc::Rc;
-use std::sync::{Arc, Condvar, Mutex};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::thread::JoinHandle;
-use std::time::Duration;
+use std::{
+    net::{SocketAddr, UdpSocket},
+    rc::Rc,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Condvar, Mutex,
+    },
+    thread::JoinHandle,
+    time::Duration,
+};
 
-use libcoap_rs::{CoapContext, CoapRequestHandler, CoapResource};
-use libcoap_rs::message::{CoapMessageCommon, CoapRequest, CoapResponse};
-use libcoap_rs::protocol::{CoapMessageCode, CoapMessageType, CoapRequestCode, CoapResponseCode};
-use libcoap_rs::session::CoapSessionCommon;
-use libcoap_sys::{coap_dtls_set_log_level, coap_log_t, coap_set_log_level};
+use libcoap_rs::{
+    message::{CoapMessageCommon, CoapRequest, CoapResponse},
+    protocol::{CoapMessageCode, CoapMessageType, CoapRequestCode, CoapResponseCode},
+    session::CoapSessionCommon,
+    CoapContext, CoapRequestHandler, CoapResource,
+};
+use libcoap_sys::{coap_dtls_set_log_level, coap_log_t_COAP_LOG_DEBUG, coap_set_log_level};
 
 pub(crate) fn get_unused_server_addr() -> SocketAddr {
     // This will give us a SocketAddress with a port in the local port range automatically
@@ -51,25 +57,40 @@ pub(crate) fn spawn_test_server<F: FnOnce(CoapContext<'static>) -> CoapContext<'
     let ready_condition = Arc::new((Mutex::new(false), Condvar::new()));
     let ready_condition2 = Arc::clone(&ready_condition);
 
-    let server_handle = std::thread::spawn(move || {
-        let (ready_var, ready_cond) = &*ready_condition2;
-        run_test_server(|context| {
-            let context = context_configurator(context);
-            let mut ready_var = ready_var.lock().expect("ready condition mutex is poisoned");
-            *ready_var = true;
-            ready_cond.notify_all();
-            context
-        });
-    });
+    let server_handle = std::thread::Builder::new()
+        .name(String::from("test server"))
+        .spawn(move || {
+            let (ready_var, ready_cond) = &*ready_condition2;
+            run_test_server(|context| {
+                let context = context_configurator(context);
+                let mut ready_var = ready_var.lock().expect("ready condition mutex is poisoned");
+                *ready_var = true;
+                ready_cond.notify_all();
+                context
+            });
+        })
+        .expect("unable to spawn test server thread");
 
     let (ready_var, ready_cond) = &*ready_condition;
-    drop(
-        ready_cond
-            .wait_while(ready_var.lock().expect("ready condition mutex is poisoned"), |ready| {
-                !*ready
-            })
-            .expect("ready condition mutex is poisoned"),
-    );
+    {
+        let (_guard, timeout_result) = ready_cond
+            .wait_timeout_while(
+                ready_var.lock().expect("ready condition mutex is poisoned"),
+                Duration::from_secs(10),
+                |ready| !*ready,
+            )
+            .expect("ready condition mutex is poisoned");
+        if timeout_result.timed_out() && server_handle.is_finished() {
+            if let Err(e) = server_handle.join() {
+                std::panic::resume_unwind(e);
+            }
+            panic!("Test server thread is dead and has not reported readiness after 10 seconds, but has also not panicked.")
+        }
+
+        if timeout_result.timed_out() {
+            panic!("Test server thread has not reported readiness after 10 seconds, but has also not died (deadlock?).")
+        }
+    }
     server_handle
 }
 
@@ -77,8 +98,8 @@ pub(crate) fn spawn_test_server<F: FnOnce(CoapContext<'static>) -> CoapContext<'
 pub(crate) fn run_test_server<F: FnOnce(CoapContext<'static>) -> CoapContext<'static>>(context_configurator: F) {
     unsafe {
         libcoap_sys::coap_startup_with_feature_checks();
-        coap_dtls_set_log_level(coap_log_t::COAP_LOG_DEBUG);
-        coap_set_log_level(coap_log_t::COAP_LOG_DEBUG);
+        coap_dtls_set_log_level(coap_log_t_COAP_LOG_DEBUG);
+        coap_set_log_level(coap_log_t_COAP_LOG_DEBUG);
     }
     let mut context = CoapContext::new().unwrap();
     context = context_configurator(context);

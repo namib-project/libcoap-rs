@@ -11,7 +11,9 @@ use std::cell::{Ref, RefMut};
 
 use libcoap_sys::{
     coap_session_get_app_data, coap_session_get_type, coap_session_reference, coap_session_release,
-    coap_session_set_app_data, coap_session_t, coap_session_type_t,
+    coap_session_set_app_data, coap_session_t, coap_session_type_t_COAP_SESSION_TYPE_CLIENT,
+    coap_session_type_t_COAP_SESSION_TYPE_HELLO, coap_session_type_t_COAP_SESSION_TYPE_NONE,
+    coap_session_type_t_COAP_SESSION_TYPE_SERVER,
 };
 
 use super::{CoapSessionCommon, CoapSessionInner, CoapSessionInnerProvider};
@@ -65,13 +67,16 @@ impl CoapServerSession<'_> {
         assert!(!raw_session.is_null(), "provided raw session was null");
         let raw_session_type = coap_session_get_type(raw_session);
         let inner = CoapSessionInner::new(raw_session);
+        // Variant names are named by bindgen, we have no influence on this.
+        // Ref: https://github.com/rust-lang/rust/issues/39371
+        #[allow(non_upper_case_globals)]
         let session_inner = match raw_session_type {
-            coap_session_type_t::COAP_SESSION_TYPE_NONE => panic!("provided session has no type"),
-            coap_session_type_t::COAP_SESSION_TYPE_CLIENT => {
+            coap_session_type_t_COAP_SESSION_TYPE_NONE => panic!("provided session has no type"),
+            coap_session_type_t_COAP_SESSION_TYPE_CLIENT => {
                 panic!("attempted to create server session from raw client session")
             },
-            coap_session_type_t::COAP_SESSION_TYPE_SERVER => CoapServerSessionInner { inner },
-            coap_session_type_t::COAP_SESSION_TYPE_HELLO => CoapServerSessionInner { inner },
+            coap_session_type_t_COAP_SESSION_TYPE_SERVER => CoapServerSessionInner { inner },
+            coap_session_type_t_COAP_SESSION_TYPE_HELLO => CoapServerSessionInner { inner },
             _ => unreachable!("unknown session type"),
         };
         let session_ref = CoapFfiRcCell::new(session_inner);
@@ -139,9 +144,12 @@ impl CoapServerSession<'_> {
     pub(crate) unsafe fn from_raw_without_refcount<'a>(raw_session: *mut coap_session_t) -> CoapServerSession<'a> {
         assert!(!raw_session.is_null(), "provided raw session was null");
         let raw_session_type = coap_session_get_type(raw_session);
+        // Variant names are named by bindgen, we have no influence on this.
+        // Ref: https://github.com/rust-lang/rust/issues/39371
+        #[allow(non_upper_case_globals)]
         match raw_session_type {
-            coap_session_type_t::COAP_SESSION_TYPE_NONE => panic!("provided session has no type"),
-            coap_session_type_t::COAP_SESSION_TYPE_SERVER | coap_session_type_t::COAP_SESSION_TYPE_HELLO => {
+            coap_session_type_t_COAP_SESSION_TYPE_NONE => panic!("provided session has no type"),
+            coap_session_type_t_COAP_SESSION_TYPE_SERVER | coap_session_type_t_COAP_SESSION_TYPE_HELLO => {
                 let raw_app_data_ptr = coap_session_get_app_data(raw_session);
                 assert!(!raw_app_data_ptr.is_null(), "provided raw session has no app data");
                 CoapServerSession {
@@ -149,7 +157,7 @@ impl CoapServerSession<'_> {
                     ref_counted: false,
                 }
             },
-            coap_session_type_t::COAP_SESSION_TYPE_CLIENT => {
+            coap_session_type_t_COAP_SESSION_TYPE_CLIENT => {
                 panic!("attempted to create CoapServerSession from raw client session")
             },
             _ => unreachable!("unknown session type"),

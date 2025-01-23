@@ -7,14 +7,14 @@
  * See the README as well as the LICENSE file for more information.
  */
 
-use libcoap_rs::session::CoapClientSession;
+use std::time::Duration;
+
 use libcoap_rs::{
     message::CoapMessageCommon,
     protocol::{CoapMessageCode, CoapResponseCode},
-    session::CoapSessionCommon,
+    session::{CoapClientSession, CoapSessionCommon},
     CoapContext,
 };
-use std::time::Duration;
 
 mod common;
 
