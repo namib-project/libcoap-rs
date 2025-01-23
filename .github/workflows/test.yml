@@ -55,7 +55,7 @@ jobs:
           components: rust-src, rustc, rust-std, cargo, llvm-tools, llvm-tools-preview
           toolchain: ${{ matrix.rust_version == 'msrv' && '1.82' || matrix.rust_version }}
       - if: matrix.dtls_backend == 'gnutls'
-        uses: awalsh128/cache-apt-pkgs-action@latest
+        uses: awalsh128/cache-apt-pkgs-action@v1.4.3
         with:
           packages: libgnutls28-dev libgnutls30
           version: 1.0
@@ -107,7 +107,7 @@ jobs:
           submodules: true
           ref: ${{ env.HEAD_REF }}
       # --all-features uses GNUTLS as backend, must provide it.
-      - uses: awalsh128/cache-apt-pkgs-action@latest
+      - uses: awalsh128/cache-apt-pkgs-action@v1.4.3
         with:
           packages: libgnutls28-dev libgnutls30
           version: 1.0
