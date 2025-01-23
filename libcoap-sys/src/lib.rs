@@ -283,7 +283,7 @@ pub fn coap_startup_with_feature_checks() {
             panic!("Required feature \"websockets\" is not supported by libcoap")
         }
     }
-    #[cfg(feature_checks_available)]
+    #[cfg(not(feature_checks_available))]
     {
         println!("WARNING: coap_startup_with_feature_checks() could not assert the availability of features because the linked version of libcoap is too old (< 4.3.5rc3)!")
     }
