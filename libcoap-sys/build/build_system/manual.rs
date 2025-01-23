@@ -1,3 +1,12 @@
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * build/build_system/manual.rs - Manual build system for libcoap-sys.
+ * This file is part of the libcoap-sys crate, see the README and LICENSE files for
+ * more information and terms of use.
+ * Copyright © 2021-2025 The NAMIB Project Developers, all rights reserved.
+ * See the README as well as the LICENSE file for more information.
+ */
+
 use std::{cell::RefCell, env, env::VarError, path::PathBuf};
 
 use anyhow::{Context, Result};
@@ -9,7 +18,6 @@ use crate::{
     build_system::BuildSystem,
     metadata::{DtlsBackend, LibcoapDefineInfo, LibcoapFeature},
 };
-
 pub struct ManualBuildSystem {
     out_dir: PathBuf,
     include_dirs: Vec<PathBuf>,

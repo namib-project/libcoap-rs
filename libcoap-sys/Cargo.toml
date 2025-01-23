@@ -42,7 +42,7 @@ default = [
     "thread-recursive-lock-detection",
     "server",
     "client",
-    "epoll"
+    "epoll",
     # TODO add proxy
 ]
 

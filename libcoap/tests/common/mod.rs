@@ -83,10 +83,11 @@ pub(crate) fn spawn_test_server<F: FnOnce(CoapContext<'static>) -> CoapContext<'
         if timeout_result.timed_out() && server_handle.is_finished() {
             if let Err(e) = server_handle.join() {
                 std::panic::resume_unwind(e);
-            } else {
-                panic!("Test server thread is dead and has not reported readiness after 10 seconds, but has also not panicked.")
             }
-        } else if timeout_result.timed_out() {
+            panic!("Test server thread is dead and has not reported readiness after 10 seconds, but has also not panicked.")
+        }
+
+        if timeout_result.timed_out() {
             panic!("Test server thread has not reported readiness after 10 seconds, but has also not died (deadlock?).")
         }
     }

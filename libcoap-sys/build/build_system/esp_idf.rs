@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * build/build_system/esp_idf.rs - ESP-IDF build system for libcoap-sys.
+ * This file is part of the libcoap-sys crate, see the README and LICENSE files for
+ * more information and terms of use.
+ * Copyright © 2021-2025 The NAMIB Project Developers, all rights reserved.
+ * See the README as well as the LICENSE file for more information.
+ */
 use std::{env, fs::File, io::Write, iter::once, path::PathBuf};
 
 use anyhow::{anyhow, Context, Result};
@@ -32,7 +40,7 @@ impl EspIdfBuildSystem {
 
         if let Some(backend) = requested_dtls_backend {
             if backend != DtlsBackend::MbedTls {
-                return Err(anyhow!("libcoap only supports the MbedTLS DTLS backend when compiling for the ESP-IDF, but you have requested the {backend} backend."));
+                return Err(anyhow!("libcoap only supports the MbedTLS DTLS backend when compiling for ESP-IDF, but you have requested the {backend} backend."));
             }
         }
 
@@ -60,7 +68,18 @@ impl BuildSystem for EspIdfBuildSystem {
             .filter(|v| v.define_name().is_some() && v.sdkconfig_flag_name().is_none())
             .collect();
         if !uncheckable_features.is_empty() {
-            println!("cargo:warning=When building for ESP-IDF, the availability of the following requested features that usually can be checked during compile time can only be checked during runtime instead: {}", uncheckable_features.iter().map(|v| v.as_str()).collect::<Vec<&'static str>>().join(", "))
+            println!(
+                concat!(
+                    "cargo:warning=When building for ESP-IDF, the availability of the following ",
+                    "requested features that usually can be checked during compile time can only",
+                    "be checked during runtime instead: {}"
+                ),
+                uncheckable_features
+                    .iter()
+                    .map(|v| v.as_str())
+                    .collect::<Vec<&'static str>>()
+                    .join(", ")
+            )
         }
 
         Some(self.requested_features)
@@ -115,8 +134,9 @@ impl BuildSystem for EspIdfBuildSystem {
             };
 
             for ident in ident.map(|i| i.to_string()) {
+                let lowercase_ident = ident.to_lowercase();
                 // If the item belongs to the libcoap crate (starts with coap or oscore), re-export it in our bindings.
-                if ident.to_lowercase().starts_with("coap") || ident.to_lowercase().starts_with("oscore") {
+                if lowercase_ident.starts_with("coap") || lowercase_ident.starts_with("oscore") {
                     writeln!(&mut libcoap_bindings_file, "pub use esp_idf_sys::{};", ident)
                         .context("unable to write to bindings file")?;
                 }
@@ -129,16 +149,17 @@ impl BuildSystem for EspIdfBuildSystem {
                 .iter()
                 .filter_map(|v| v.sdkconfig_flag_name().map(|flag| (v.as_str(), flag)))
             {
+                let feature_flag_lowercase = feature_flag.to_lowercase();
                 // For some reason, embuild adds expected cfg flags for some, but not all
                 // feature-related sdkconfig flags, causing warnings if we don't do this.
-                println!("cargo::rustc-check-cfg=cfg(esp_idf_{})", feature_flag.to_lowercase());
+                println!("cargo::rustc-check-cfg=cfg(esp_idf_{})", feature_flag_lowercase);
 
                 writeln!(
                     &mut libcoap_bindings_file,
                     // Only show these errors if the coap component is enabled at all (in order to
                     // only show the relevant compilation error).
                     "#[cfg(all(esp_idf_comp_espressif__coap_enabled, not(esp_idf_{})))]",
-                    feature_flag.to_lowercase()
+                    feature_flag_lowercase
                 )
                 .context("unable to write to bindings file")?;
                 writeln!(

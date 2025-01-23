@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * build/build_system/mod.rs - Basic definitions for libcoap-sys build systems.
+ * This file is part of the libcoap-sys crate, see the README and LICENSE files for
+ * more information and terms of use.
+ * Copyright © 2021-2025 The NAMIB Project Developers, all rights reserved.
+ * See the README as well as the LICENSE file for more information.
+ */
 use std::path::PathBuf;
 
 use anyhow::Result;
@@ -13,7 +21,7 @@ pub mod vendored;
 
 /// Trait that is implemented by build systems for libcoap.
 ///
-/// It is assumed that the constructor structs implementing this trait already performs all
+/// It is assumed that the constructor structs implementing this trait already perform all
 /// necessary steps to link against libcoap, and that only binding generation and compile-time
 /// checks remain.
 ///

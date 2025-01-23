@@ -1,3 +1,12 @@
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * build/main.rs - Build script entrypoint for libcoap-sys.
+ * This file is part of the libcoap-sys crate, see the README and LICENSE files for
+ * more information and terms of use.
+ * Copyright © 2021-2025 The NAMIB Project Developers, all rights reserved.
+ * See the README as well as the LICENSE file for more information.
+ */
+
 use std::{env, env::VarError, path::PathBuf};
 
 use anyhow::{anyhow, bail, Context, Result};
@@ -103,10 +112,10 @@ fn main() -> Result<()> {
             if let Some(req_backend) = requested_dtls_backend {
                 assert_eq!(req_backend, dtls_backend,
                            concat!(
-                           "the libcoap-rs compile-time check has determined that the DTLS library\n",
+                           "The libcoap-rs compile-time check has determined that the DTLS library\n",
                            "the used version of libcoap linked against ({}) does not match the one set in LIBCOAP_RS_DTLS_BACKEND ({}).\n",
                            "If you are certain that this check is mistaken (e.g., because you are cross-compiling), you\n",
-                           "may bypass this check by setting the `LIBCOAP_RS_BYPASS_COMPILE_FEATURE_CHECKS` environment\n",
+                           "may bypass it by setting the `LIBCOAP_RS_BYPASS_COMPILE_FEATURE_CHECKS` environment\n",
                            "variable to any non-zero value.\n",
                            "Be aware, however, that this might lead to more cryptic errors if the requested features are\n",
                            "not available after all.\n",

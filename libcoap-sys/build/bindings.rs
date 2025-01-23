@@ -1,3 +1,12 @@
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * build/bindings.rs - Binding generation tools for the libcoap-sys build script.
+ * This file is part of the libcoap-sys crate, see the README and LICENSE files for
+ * more information and terms of use.
+ * Copyright © 2021-2025 The NAMIB Project Developers, all rights reserved.
+ * See the README as well as the LICENSE file for more information.
+ */
+
 use std::{cell::RefCell, fmt::Debug, path::PathBuf, rc::Rc};
 
 use anyhow::{Context, Result};
@@ -18,7 +27,11 @@ impl LibcoapDefineParser {
         let host = std::env::var_os("HOST").unwrap_or_default();
 
         if target != host {
-            println!("cargo:warning=libcoap-rs compile-time feature checks may be inaccurate when cross compiling, see https://libcoap.net/doc/reference/4.3.5/man_coap_supported.html for more information.");
+            println!(concat!(
+                "cargo:warning=libcoap-rs compile-time feature checks may be inaccurate when cross",
+                " compiling, see https://libcoap.net/doc/reference/4.3.5/man_coap_supported.html",
+                " for more information."
+            ));
         }
 
         let value: LibcoapDefineParser = Default::default();
