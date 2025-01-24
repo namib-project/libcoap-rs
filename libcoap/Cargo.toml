@@ -14,6 +14,7 @@ version = "0.2.2"
 edition = "2021"
 license = "BSD-2-Clause"
 readme = "README.md"
+include = ["/README.md", "/LICENSE", "/NOTICE.md"]
 repository = "https://github.com/namib-project/libcoap-rs"
 authors = ["Hugo Hakim Damer <hdamer@uni-bremen.de>"]
 categories = ["api-bindings", "network-programming", "embedded"]
