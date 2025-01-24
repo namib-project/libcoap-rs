@@ -18,7 +18,7 @@ use std::{
 };
 
 use libcoap_sys::{
-    coap_delete_resource, coap_new_str_const, coap_pdu_t, coap_register_request_handler, coap_resource_get_uri_path,
+    coap_add_attr, coap_delete_resource, coap_new_str_const, coap_pdu_t, coap_register_request_handler, coap_resource_get_uri_path,
     coap_resource_get_userdata, coap_resource_init, coap_resource_notify_observers, coap_resource_set_get_observable,
     coap_resource_set_mode, coap_resource_set_userdata, coap_resource_t, coap_send_rst, coap_session_t, coap_string_t,
     COAP_RESOURCE_FLAGS_NOTIFY_CON, COAP_RESOURCE_FLAGS_NOTIFY_NON, COAP_RESOURCE_FLAGS_RELEASE_URI,
@@ -309,6 +309,20 @@ impl<D: Any + ?Sized + Debug> CoapResource<D> {
                 inner.raw_resource,
                 code.to_raw_request(),
                 inner.handlers.handler(code).map(|h| h.raw_handler),
+            );
+        }
+    }
+
+    // TODO: Decide on naming and placement
+    // TODO: Parameterize (look at new for an example)
+    pub fn add_attr(&self) {
+        let mut inner = self.inner.borrow_mut();
+	//TODO: Security
+        unsafe {
+            let name = coap_new_str_const("title".as_ptr(), "title".len());
+            let value = coap_new_str_const("foobar".as_ptr(), "foobar".len());
+            coap_add_attr(
+                inner.raw_resource, name, value, 0 //TODO: Check if 0 is wrong here
             );
         }
     }

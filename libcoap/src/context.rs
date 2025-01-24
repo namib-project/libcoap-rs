@@ -56,6 +56,12 @@ use crate::{
     transport::CoapEndpoint,
 };
 
+//TODO: New feature?
+use libcoap_sys::{
+    coap_join_mcast_group_intf,
+};
+use std::ffi::CString;
+
 static COAP_STARTUP_ONCE: Once = Once::new();
 
 #[inline(always)]
@@ -404,6 +410,20 @@ impl CoapContext<'_> {
     #[cfg(feature = "dtls")]
     pub fn add_endpoint_dtls(&mut self, addr: SocketAddr) -> Result<(), EndpointCreationError> {
         self.add_endpoint(addr, coap_proto_t_COAP_PROTO_DTLS)
+    }
+
+    // TODO: Find correct naming and placement in file
+    // TODO: Parameterize (look at set_pki_root_ca_paths for an example)
+    // TODO: Documentation
+    // TODO: Possibly wrap in feature?
+    pub fn join_mcast_group_intf(&mut self) {
+        let mut inner_ref = self.inner.borrow_mut();
+	let mcast_group = Some(CString::new("ff03::fd").expect("CString::new failed"));
+        // TODO: SECURITY
+        unsafe {
+		//TODO: Why is None not allowed here, but is allowed in coap_register_event_handler?
+            coap_join_mcast_group_intf(inner_ref.raw_context, mcast_group.as_ref().map(|v| v.as_ptr()).unwrap_or(std::ptr::null()), std::ptr::null());
+        };
     }
 
     // /// TODO
