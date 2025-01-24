@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: BSD-2-Clause
 /*
+ * Copyright © The libcoap-rs Contributors, all rights reserved.
+ * This file is part of the libcoap-rs project, see the README file for
+ * general information on this project and the NOTICE.md and LICENSE files
+ * for information regarding copyright ownership and terms of use.
+ *
  * lib.rs - Main library entry point for raw libcoap bindings.
- * This file is part of the libcoap-sys crate, see the README and LICENSE files for
- * more information and terms of use.
- * Copyright © 2021-2023 The NAMIB Project Developers, all rights reserved.
- * See the README as well as the LICENSE file for more information.
  */
 
 //! Auto-generated unsafe bindings to [libcoap](https://github.com/obgm/libcoap), generated using
@@ -334,7 +335,6 @@ use openssl_sys as _;
 #[allow(unused_imports)]
 #[cfg(used_dtls_crate = "tinydtls")]
 use tinydtls_sys as _;
-
 
 // Add check whether the libcoap component is enabled when building for the ESP-IDF.
 #[cfg(all(target_os = "espidf", not(esp_idf_comp_espressif__coap_enabled)))]

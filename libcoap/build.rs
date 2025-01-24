@@ -1,4 +1,12 @@
-// SPDX-License-Identifier: BSD-2-CLAUSE
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * Copyright © The libcoap-rs Contributors, all rights reserved.
+ * This file is part of the libcoap-rs project, see the README file for
+ * general information on this project and the NOTICE.md and LICENSE files
+ * for information regarding copyright ownership and terms of use.
+ *
+ * build.rs - build script for libcoap-rs.
+ */
 
 use std::env::VarError;
 

@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: BSD-2-Clause
 /*
+ * Copyright © The libcoap-rs Contributors, all rights reserved.
+ * This file is part of the libcoap-rs project, see the README file for
+ * general information on this project and the NOTICE.md and LICENSE files
+ * for information regarding copyright ownership and terms of use.
+ *
  * crypto/pki_rpk/rpk.rs - Interfaces and types for RPK support in libcoap-rs.
- * This file is part of the libcoap-rs crate, see the README and LICENSE files for
- * more information and terms of use.
- * Copyright © 2021-2024 The NAMIB Project Developers, all rights reserved.
- * See the README as well as the LICENSE file for more information.
  */
 
 use std::{ffi::CString, fmt::Debug};
@@ -12,8 +13,7 @@ use std::{ffi::CString, fmt::Debug};
 use libcoap_sys::{
     coap_const_char_ptr_t, coap_dtls_key_t, coap_dtls_key_t__bindgen_ty_1, coap_dtls_pki_t, coap_pki_define_t,
     coap_pki_define_t_COAP_PKI_KEY_DEF_PEM, coap_pki_define_t_COAP_PKI_KEY_DEF_PKCS11_RPK,
-    coap_pki_define_t_COAP_PKI_KEY_DEF_RPK_BUF, coap_pki_key_define_t, coap_pki_key_t,
-    coap_pki_key_t_COAP_PKI_KEY_DEFINE,
+    coap_pki_define_t_COAP_PKI_KEY_DEF_RPK_BUF, coap_pki_key_define_t, coap_pki_key_t_COAP_PKI_KEY_DEFINE,
 };
 
 use crate::{

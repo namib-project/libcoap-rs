@@ -14,13 +14,17 @@ this crate.
 
 ## License
 
-The libcoap-sys binding is licensed under the 2-Clause/Simplified BSD License, matching the license of the libcoap C
-library it is a binding to.
+Copyright © 2021-2025 Hugo Hakim Damer, the NAMIB Project Members, and the other libcoap-rs Contributors.
+All rights reserved.
 
-Note that for the libcoap-sys binding and generated binaries, the license terms of the libcoap C library as well as
-linked dependencies (e.g. TLS libraries) may apply.
+Matching the license of the libcoap C library, the libcoap-sys and the libcoap-rs crates are licensed under
+the 2-Clause/Simplified BSD License ([LICENSE-BSD-2-Clause](LICENSE-BSD-2-CLAUSE)
+or https://opensource.org/licenses/BSD-2-Clause).
 
-Additionally, the libcoap C library contains some third-party code, for which different licensing terms apply.
+See the [NOTICE](NOTICE.md) file for more information regarding copyright ownership, terms of use, and
+third-party code.
 
-See https://github.com/obgm/libcoap/blob/develop/LICENSE as well as the licenses of dependencies for more
-information and terms.
+## Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you, shall be licensed as above, without any additional terms or conditions.
