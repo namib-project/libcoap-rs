@@ -54,6 +54,9 @@
 //! the three DTLS variant features while using a TLS library that does not support this feature
 //! will result in either a compilation error or a panic on when calling [`CoapContext::new`](crate::CoapContext::new),
 //! irrespective of whether you actually use DTLS.
+//!
+//! Refer to the [libcoap_sys] documentation for more information on the build process specifics
+//! regarding DTLS libraries.
 
 #[cfg(any(feature = "dtls-rpk", feature = "dtls-pki"))]
 pub mod pki_rpk;

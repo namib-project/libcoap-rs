@@ -14,8 +14,9 @@
 //! made in this library are generated automatically using bindgen, for further documentation on how
 //! to use them, refer to the [libcoap documentation](https://libcoap.net/documentation.html).
 //!
-//! In most cases you probably want to use the safe wrapper provided by the libcoap-rs crate or
-//! another coap library written in pure Rust such as [coap-rs](https://github.com/covertness/coap-rs)
+//! In most cases you probably want to use the safe wrapper provided by the
+//! [libcoap_rs](https://github.com/namib-project/libcoap-rs/tree/main/libcoap) crate or another
+//! CoAP library written in pure Rust such as [coap-rs](https://github.com/covertness/coap-rs)
 //! instead.
 //!
 //! The TLDR for building libcoap-sys (and resolving the most common Build Issues)
@@ -193,7 +194,7 @@
 //! against, which could also cause difficult-to-debug issues and indicates a more severe problem
 //! with the build process.
 //!
-//! [^3]: For this reason, using this method [is noted to be unsafe in `libcoap`'s documentation](https://libcoap.net/doc/reference/4.3.5/man_coap_supported.html).
+//! [^3]: For this reason, using this method while cross-compiling [is noted to be unsafe in `libcoap`'s documentation](https://libcoap.net/doc/reference/4.3.5/man_coap_supported.html).
 //!
 //! ## Vendored Build System
 //!
@@ -333,6 +334,7 @@ use openssl_sys as _;
 #[allow(unused_imports)]
 #[cfg(used_dtls_crate = "tinydtls")]
 use tinydtls_sys as _;
+
 
 // Add check whether the libcoap component is enabled when building for the ESP-IDF.
 #[cfg(all(target_os = "espidf", not(esp_idf_comp_espressif__coap_enabled)))]

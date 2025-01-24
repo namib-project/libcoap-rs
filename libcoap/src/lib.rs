@@ -39,7 +39,7 @@
 //! libcoap-rs is based on libcoap-sys, which provide many different ways to obtain and link against
 //! a system-provided or vendored version of the libcoap C library.
 //!
-//! Refer to [its documentation](https://docs.rs/libcoap-sys) for detailed instructions on how to
+//! Refer to [its documentation](libcoap_sys) for detailed instructions on how to
 //! build libcoap-sys as well as this library.
 //!
 //! Most of these instructions can be applied to libcoap-rs directly, although libcoap-rs does
@@ -50,48 +50,6 @@
 //! `dtls-<LIBRARY NAME>-sys` features).
 //! This way, you don't need to add libcoap-sys as a dependency yourself, and may just enable the
 //! feature in this crate instead.
-//!
-//! ## Building on the ESP32
-//!
-//! libcoap-rs and libcoap-sys support building for the ESP32.
-//! This is done by using the version of libcoap provided by the ESP-IDF as a managed component
-//! and generating bindings for it.
-//!
-//! In order to build for the ESP, ensure that the following preconditions are met:
-//!
-//! - The version of `esp-idf-sys` used by your crate matches the one used by `libcoap-sys`.
-//! - Ensure that your `sdkconfig.defaults` enables the features required by your chosen
-//!   feature set of `libcoap-rs`
-//! - Ensure that the ESP-IDF version you link against is supported. `libcoap-rs` _should_
-//!   compile on at least ESP-IDF 5.1.3 and 5.3.
-//!   If it does not (or you require support for newer versions of ESP-IDF), please open an issue
-//!   in the [`libcoap-rs` issue tracker](https://github.com/namib-project/libcoap-rs/issues).
-//!
-//! An example for a typical excerpt from `sdkconfig.defaults` can be found here:
-//! ```ini
-//! # libcoap base functionality (client and server)
-//! CONFIG_COAP_SERVER_SUPPORT=y
-//! CONFIG_COAP_CLIENT_SUPPORT=y
-//!
-//! # enable DTLS in libcoap
-//! CONFIG_COAP_MBEDTLS_PSK=y
-//! CONFIG_COAP_MBEDTLS_PKI=y
-//! CONFIG_MBEDTLS_SSL_PROTO_DTLS=y
-//! CONFIG_MBEDTLS_PSK_MODES=y
-//! CONFIG_MBEDTLS_KEY_EXCHANGE_PSK=y
-//! ```
-//!
-//! # Using cryptography
-//! If you wish to use CoAP over DTLS, you have to provide credential and key information to
-//! libcoap. See the documentation of the [`crypto`] module for more information and examples.
-//!
-//! libcoap requires a DTLS library to be selected for DTLS functionality. By default, libcoap-rs
-//! will use `openssl` for this purpose. If you wish to use one of the other supported DTLS
-//! libraries (GnuTLS, MbedTLS, tinydtls), disable the `dtls_openssl` feature and replace it with
-//! the feature for the library of your choice.
-//!
-//! Note that enabling multiple backends is not possible and doing so will result in a single
-//! backend being chosen based on the priority order (gnutls > openssl > mbedtls > tinydtls).
 //!
 //! # Examples
 //!
