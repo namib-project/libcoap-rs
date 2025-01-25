@@ -9,11 +9,13 @@
 
 //! Code related to memory handling, especially for passing objects through FFI
 
-use std::cell::{Ref, RefCell, RefMut};
-use std::ffi::c_void;
-use std::fmt::{Debug, Formatter};
-use std::ops::{Deref, DerefMut};
-use std::rc::{Rc, Weak};
+use std::{
+    cell::{Ref, RefCell, RefMut},
+    ffi::c_void,
+    fmt::{Debug, Formatter},
+    ops::{Deref, DerefMut},
+    rc::{Rc, Weak},
+};
 
 /// Trait implemented by libcoap wrapper structs that contain an inner value that may be dropped
 /// exclusively, i.e., that can be dropped with the additional check that there are no further

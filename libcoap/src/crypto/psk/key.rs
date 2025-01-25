@@ -7,10 +7,9 @@
  * See the README as well as the LICENSE file for more information.
  */
 
+use std::{borrow::Cow, marker::PhantomData, ptr::NonNull};
+
 use libcoap_sys::{coap_bin_const_t, coap_dtls_cpsk_info_t, coap_dtls_spsk_info_t};
-use std::borrow::Cow;
-use std::marker::PhantomData;
-use std::ptr::NonNull;
 
 /// A pre-shared DTLS key.
 #[derive(Debug, Clone)]

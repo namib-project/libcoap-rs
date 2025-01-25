@@ -9,41 +9,35 @@
 
 //! Types required for conversion between libcoap C library abstractions and Rust types.
 
-use std::ffi::CString;
-use std::fmt::{Display, Formatter};
-use std::marker::PhantomPinned;
-use std::pin::Pin;
+use core::ffi::c_ushort;
 use std::{
-    fmt::Debug,
+    ffi::{CStr, CString},
+    fmt::{Debug, Display, Formatter},
+    marker::PhantomPinned,
     mem::MaybeUninit,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs},
     os::raw::c_int,
+    pin::Pin,
     str::FromStr,
 };
 
-use libc::{c_ushort, in6_addr, in_addr, sa_family_t, sockaddr_in, sockaddr_in6, socklen_t, AF_INET, AF_INET6};
+use libcoap_sys::{
+    c_stdlib::{in6_addr, in_addr, sa_family_t, sockaddr_in, sockaddr_in6, socklen_t, AF_INET, AF_INET6},
+    coap_address_t, coap_delete_optlist, coap_mid_t, coap_proto_t, coap_proto_t_COAP_PROTO_DTLS,
+    coap_proto_t_COAP_PROTO_NONE, coap_proto_t_COAP_PROTO_TCP, coap_proto_t_COAP_PROTO_TLS,
+    coap_proto_t_COAP_PROTO_UDP, coap_split_proxy_uri, coap_split_uri, coap_str_const_t, coap_string_equal,
+    coap_uri_into_optlist, coap_uri_scheme_t, coap_uri_scheme_t_COAP_URI_SCHEME_COAP,
+    coap_uri_scheme_t_COAP_URI_SCHEME_COAPS, coap_uri_scheme_t_COAP_URI_SCHEME_COAPS_TCP,
+    coap_uri_scheme_t_COAP_URI_SCHEME_COAPS_WS, coap_uri_scheme_t_COAP_URI_SCHEME_COAP_TCP,
+    coap_uri_scheme_t_COAP_URI_SCHEME_COAP_WS, coap_uri_scheme_t_COAP_URI_SCHEME_HTTP,
+    coap_uri_scheme_t_COAP_URI_SCHEME_HTTPS, coap_uri_t, COAP_URI_SCHEME_SECURE_MASK,
+};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 #[cfg(feature = "url")]
 use url::Url;
 
-use libcoap_sys::coap_uri_scheme_t::{COAP_URI_SCHEME_COAPS_WS, COAP_URI_SCHEME_COAP_WS};
-use libcoap_sys::{
-    coap_address_t, coap_delete_optlist, coap_mid_t, coap_proto_t,
-    coap_proto_t::{COAP_PROTO_DTLS, COAP_PROTO_NONE, COAP_PROTO_TCP, COAP_PROTO_TLS, COAP_PROTO_UDP},
-    coap_split_proxy_uri, coap_split_uri, coap_str_const_t, coap_string_equal, coap_uri_into_options,
-    coap_uri_scheme_t,
-    coap_uri_scheme_t::{
-        COAP_URI_SCHEME_COAP, COAP_URI_SCHEME_COAPS, COAP_URI_SCHEME_COAPS_TCP, COAP_URI_SCHEME_COAP_TCP,
-        COAP_URI_SCHEME_HTTP, COAP_URI_SCHEME_HTTPS,
-    },
-    coap_uri_t, COAP_URI_SCHEME_SECURE_MASK,
-};
-
-use crate::context::ensure_coap_started;
-use crate::error::UriParsingError;
-use crate::message::CoapOption;
-use crate::protocol::UriPort;
+use crate::{context::ensure_coap_started, error::UriParsingError, message::CoapOption, protocol::UriPort};
 
 /// Interface index used internally by libcoap to refer to an endpoint.
 pub type IfIndex = c_int;
@@ -92,11 +86,11 @@ impl ToSocketAddrs for CoapAddress {
         // SAFETY: That the underlying value of addr is a valid sockaddr is an invariant, the only
         // way the value could be invalid is if as_mut_coap_address_t() (an unsafe function) is used
         // incorrectly.
-        let socketaddr = match unsafe { self.0.addr.sa.as_ref().sa_family } as i32 {
+        let socketaddr = match unsafe { self.0.addr.sa.sa_family as _ } {
             AF_INET => {
                 // SAFETY: Validity of addr is an invariant, and we checked that the type of the
                 // underlying sockaddr is actually sockaddr_in.
-                let raw_addr = unsafe { self.0.addr.sin.as_ref() };
+                let raw_addr = unsafe { self.0.addr.sin };
                 SocketAddrV4::new(
                     Ipv4Addr::from(raw_addr.sin_addr.s_addr.to_ne_bytes()),
                     u16::from_be(raw_addr.sin_port),
@@ -106,9 +100,17 @@ impl ToSocketAddrs for CoapAddress {
             AF_INET6 => {
                 // SAFETY: Validity of addr is an invariant, and we checked that the type of the
                 // underlying sockaddr is actually sockaddr_in6.
-                let raw_addr = unsafe { self.0.addr.sin6.as_ref() };
+                let raw_addr = unsafe { self.0.addr.sin6 };
+
+                // The esp_idf_sys definition of sockaddr_in6 differs slightly.
+                #[cfg(not(target_os = "espidf"))]
+                let raw_addr_bytes = raw_addr.sin6_addr.s6_addr;
+                #[cfg(target_os = "espidf")]
+                // SAFETY: Both representations are valid.
+                let raw_addr_bytes = unsafe { raw_addr.sin6_addr.un.u8_addr };
+
                 SocketAddrV6::new(
-                    Ipv6Addr::from(raw_addr.sin6_addr.s6_addr),
+                    Ipv6Addr::from(raw_addr_bytes),
                     u16::from_be(raw_addr.sin6_port),
                     raw_addr.sin6_flowinfo,
                     raw_addr.sin6_scope_id,
@@ -135,7 +137,7 @@ impl From<SocketAddr> for CoapAddress {
                         addr: std::mem::zeroed(),
                     };
 
-                    *coap_addr.addr.sin.as_mut() = sockaddr_in {
+                    coap_addr.addr.sin = sockaddr_in {
                         #[cfg(any(
                             target_os = "freebsd",
                             target_os = "dragonfly",
@@ -167,7 +169,9 @@ impl From<SocketAddr> for CoapAddress {
                         addr: std::mem::zeroed(),
                     };
 
-                    *coap_addr.addr.sin6.as_mut() = sockaddr_in6 {
+                    // Representation of sockaddr_in6 differs depending on the used OS, therefore
+                    // some fields are a bit different.
+                    coap_addr.addr.sin6 = sockaddr_in6 {
                         #[cfg(any(
                             target_os = "freebsd",
                             target_os = "dragonfly",
@@ -182,7 +186,12 @@ impl From<SocketAddr> for CoapAddress {
                         sin6_family: AF_INET6 as sa_family_t,
                         sin6_port: addr.port().to_be(),
                         sin6_addr: in6_addr {
+                            #[cfg(not(target_os = "espidf"))]
                             s6_addr: addr.ip().octets(),
+                            #[cfg(target_os = "espidf")]
+                            un: libcoap_sys::c_stdlib::in6_addr__bindgen_ty_1 {
+                                u8_addr: addr.ip().octets(),
+                            },
                         },
                         sin6_flowinfo: addr.flowinfo(),
                         sin6_scope_id: addr.scope_id(),
@@ -217,14 +226,14 @@ impl From<&coap_address_t> for CoapAddress {
 #[repr(u32)]
 #[derive(Copy, Clone, FromPrimitive, Debug, PartialEq, Eq, Hash)]
 pub enum CoapUriScheme {
-    Coap = COAP_URI_SCHEME_COAP as u32,
-    Coaps = COAP_URI_SCHEME_COAPS as u32,
-    CoapTcp = COAP_URI_SCHEME_COAP_TCP as u32,
-    CoapsTcp = COAP_URI_SCHEME_COAPS_TCP as u32,
-    Http = COAP_URI_SCHEME_HTTP as u32,
-    Https = COAP_URI_SCHEME_HTTPS as u32,
-    CoapWs = COAP_URI_SCHEME_COAP_WS as u32,
-    CoapsWs = COAP_URI_SCHEME_COAPS_WS as u32,
+    Coap = coap_uri_scheme_t_COAP_URI_SCHEME_COAP as u32,
+    Coaps = coap_uri_scheme_t_COAP_URI_SCHEME_COAPS as u32,
+    CoapTcp = coap_uri_scheme_t_COAP_URI_SCHEME_COAP_TCP as u32,
+    CoapsTcp = coap_uri_scheme_t_COAP_URI_SCHEME_COAPS_TCP as u32,
+    Http = coap_uri_scheme_t_COAP_URI_SCHEME_HTTP as u32,
+    Https = coap_uri_scheme_t_COAP_URI_SCHEME_HTTPS as u32,
+    CoapWs = coap_uri_scheme_t_COAP_URI_SCHEME_COAP_WS as u32,
+    CoapsWs = coap_uri_scheme_t_COAP_URI_SCHEME_COAPS_WS as u32,
 }
 
 impl CoapUriScheme {
@@ -589,48 +598,12 @@ impl CoapUri {
         // TODO this is a lot of copying around, however, fixing that would require an entire
         //      rewrite of the option handling code, so it's better kept for a separate PR.
 
-        // Set size of temporary buffer for option storage.
-        // TODO remove when updating minimum libcoap version to 4.3.5, as this buffer is no longer
-        //      used there.
-        #[cfg(coap_uri_buf_unused)]
-        let mut buf = [];
-        #[cfg(not(coap_uri_buf_unused))]
-        let mut buf = {
-            let buf_len =
-                // Length of UriHost option (length of host + max. 5 bytes of option header)
-                self.host().map(|v| v.len()+5).unwrap_or(0)
-                // Length of UriPort option (max. 2 bytes for the port number + max. 5 bytes of
-                // option header)
-                + self.port().map(|v| 7).unwrap_or(0)
-                // Length of path segment
-                + self.path().map(|v| v.len()).unwrap_or(0)
-                // Length of option headers for path segments.
-                // Each path segment has its own header, which can be up to 5 bytes in size.
-                + self.path().map(|v| (v.iter().filter(|c| **c as char == '/').count()+1)*5).unwrap_or(0)
-                // Length of query segment
-                + self.query().map(|v| v.len()).unwrap_or(0)
-                // Length of option headers for query segments.
-                // Each query segment has its own header, which can be up to 5 bytes in size.
-                + self.query().map(|v| (v.iter().filter(|c| **c as char == '?' || **c as char == '&').count()+1)*5).unwrap_or(0);
-            vec![0u8; buf_len]
-        };
-
         let mut optlist = std::ptr::null_mut();
         // SAFETY: self.raw_uri is always valid after construction. The destination may be a null
         //         pointer, optlist may be a null pointer at the start (it will be set to a valid
         //         pointer by this call). Buf and create_port_host_opt are set according to the
         //         libcoap documentation.
-        if unsafe {
-            coap_uri_into_options(
-                &self.raw_uri,
-                std::ptr::null(),
-                &mut optlist,
-                1,
-                buf.as_mut_ptr(),
-                buf.len(),
-            )
-        } < 0
-        {
+        if unsafe { coap_uri_into_optlist(&self.raw_uri, std::ptr::null(), &mut optlist, 1) } < 0 {
             // We have already parsed this URI. If converting it into options fails, something went
             // terribly wrong.
             panic!("could not convert valid coap URI into options");
@@ -749,7 +722,7 @@ impl CoapUri {
                     length: 0,
                     s: std::ptr::null(),
                 },
-                scheme: coap_uri_scheme_t::COAP_URI_SCHEME_COAP,
+                scheme: coap_uri_scheme_t_COAP_URI_SCHEME_COAP,
             },
             uri_str,
             is_proxy,
@@ -776,7 +749,7 @@ impl CoapUri {
         if unsafe {
             parsing_fn(
                 uri.uri_str.0.as_ptr() as *const u8,
-                libc::strlen(uri.uri_str.0.as_ptr()),
+                CStr::from_ptr(uri.uri_str.0.as_ptr()).count_bytes(),
                 std::ptr::from_mut(&mut uri.raw_uri),
             )
         } < 0
@@ -833,10 +806,10 @@ impl PartialEq for CoapUri {
             //         corresponding parts of the underlying string, which is pinned. Therefore, the
             //         pointer and length are valid for the lifetime of this struct.
             && unsafe {
-                coap_string_equal!(&self.raw_uri.host, &other.raw_uri.host)
-                    && coap_string_equal!(&self.raw_uri.path, &other.raw_uri.path)
-                    && coap_string_equal!(&self.raw_uri.query, &other.raw_uri.query)
-            }
+            coap_string_equal!(&self.raw_uri.host, &other.raw_uri.host)
+                && coap_string_equal!(&self.raw_uri.path, &other.raw_uri.path)
+                && coap_string_equal!(&self.raw_uri.query, &other.raw_uri.query)
+        }
     }
 }
 
@@ -878,11 +851,11 @@ impl Display for CoapUri {
 #[non_exhaustive]
 #[derive(Copy, Clone, FromPrimitive, PartialEq, Eq, Hash)]
 pub enum CoapProtocol {
-    None = COAP_PROTO_NONE as u32,
-    Udp = COAP_PROTO_UDP as u32,
-    Dtls = COAP_PROTO_DTLS as u32,
-    Tcp = COAP_PROTO_TCP as u32,
-    Tls = COAP_PROTO_TLS as u32,
+    None = coap_proto_t_COAP_PROTO_NONE as u32,
+    Udp = coap_proto_t_COAP_PROTO_UDP as u32,
+    Dtls = coap_proto_t_COAP_PROTO_DTLS as u32,
+    Tcp = coap_proto_t_COAP_PROTO_TCP as u32,
+    Tls = coap_proto_t_COAP_PROTO_TLS as u32,
 }
 
 impl CoapProtocol {

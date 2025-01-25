@@ -16,30 +16,31 @@ authors = ["Hugo Hakim Damer <hdamer@uni-bremen.de>"]
 categories = ["api-bindings", "network-programming", "embedded"]
 keywords = ["coap", "libcoap"]
 resolver = "2"
-# Current reason for MSRV (please update when increasing MSRV): Transient dependency "home" requires Rust 1.81.
-rust-version = "1.81.0"
+# Current reason for MSRV (please update when increasing MSRV): bindgen generates unsafe extern "C" blocks, which are 
+# not supported on Rust < 1.82, and Rust < 1.84 is not MSRV aware, so we can't just increase libcoap-sys's MSRV.
+# See also: https://doc.rust-lang.org/nightly/edition-guide/rust-2024/unsafe-extern.html
+rust-version = "1.82.0"
 
 [features]
-default = ["dtls-psk", "tcp", "dtls_openssl", "vendored", "libcoap-sys/default"]
-dtls_tinydtls = ["libcoap-sys/dtls_backend_tinydtls"]
-dtls_tinydtls_vendored = ["dtls_tinydtls", "libcoap-sys/dtls_backend_tinydtls_vendored"]
-dtls_openssl = ["libcoap-sys/dtls_backend_openssl"]
-dtls_openssl_vendored = ["dtls_openssl", "libcoap-sys/dtls_backend_openssl_vendored"]
-dtls_gnutls = ["libcoap-sys/dtls_backend_gnutls"]
-dtls_mbedtls = ["libcoap-sys/dtls_backend_mbedtls"]
-dtls_mbedtls_vendored = ["dtls_mbedtls", "libcoap-sys/dtls_backend_mbedtls_vendored"]
-dtls-psk = ["libcoap-sys/dtls", "libcoap-sys/dtls-psk"]
-dtls-pki = ["libcoap-sys/dtls", "libcoap-sys/dtls-pki"]
-dtls-rpk = ["libcoap-sys/dtls", "libcoap-sys/dtls-rpk"]
+default = ["dtls-psk", "tcp"]
+dtls = ["libcoap-sys/dtls"]
+dtls-psk = ["dtls", "libcoap-sys/dtls-psk"]
+dtls-pki = ["dtls", "libcoap-sys/dtls-pki"]
+dtls-rpk = ["dtls", "libcoap-sys/dtls-rpk"]
+dtls-cid = ["dtls-psk", "libcoap-sys/dtls-cid"]
 tcp = ["libcoap-sys/tcp"]
 tls = ["libcoap-sys/tls"]
 rand = ["dep:rand", "dep:rand_core"]
 vendored = ["libcoap-sys/vendored"]
+dtls-openssl-sys = ["libcoap-sys/dtls-openssl-sys"]
+dtls-mbedtls-sys = ["libcoap-sys/dtls-mbedtls-sys"]
+dtls-tinydtls-sys = ["libcoap-sys/dtls-tinydtls-sys"]
+dtls-openssl-sys-vendored = ["libcoap-sys/dtls-openssl-sys-vendored"]
+dtls-tinydtls-sys-vendored = ["libcoap-sys/dtls-tinydtls-sys-vendored"]
 oscore = ["libcoap-sys/oscore"]
 
 [dependencies]
 libcoap-sys = { version = "^0.2.2", path = "../libcoap-sys", default-features = false, features = ["client", "server"] }
-libc = { version = "^0.2.95" }
 num-derive = { version = "^0.3.3" }
 num-traits = { version = "^0.2.14" }
 url = { version = "^2.2", optional = true }
@@ -49,6 +50,18 @@ thiserror = "^1.0"
 
 [build-dependencies]
 version-compare = "0.2.0"
+anyhow = "1.0.95"
 
 [package.metadata.docs.rs]
 features = ["dtls", "dtls_openssl", "vendored", "url"]
+
+[target.'cfg(target_os="espidf")'.dependencies]
+esp-idf-sys = { version = "0.36.1" }
+
+# For ESP-IDF builds, we need to add the espressif/coap component ourselves here,
+# as esp-idf-sys only inspects the metadata for direct dependencies.
+# Otherwise, users of this library would always also have to depend on libcoap-sys
+# or add this snippet themselves.
+[[package.metadata.esp-idf-sys.extra_components]]
+remote_component = { name = "espressif/coap", version = "4.3.5~3" }
+bindings_header = "src/wrapper.h"

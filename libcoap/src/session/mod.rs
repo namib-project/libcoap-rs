@@ -19,12 +19,17 @@ use std::{
 
 use libcoap_sys::{
     coap_context_t, coap_fixed_point_t, coap_mid_t, coap_new_message_id, coap_pdu_get_token, coap_pdu_t,
-    coap_response_t, coap_send, coap_session_get_ack_random_factor, coap_session_get_ack_timeout,
-    coap_session_get_addr_local, coap_session_get_addr_remote, coap_session_get_ifindex,
-    coap_session_get_max_retransmit, coap_session_get_proto, coap_session_get_state, coap_session_get_type,
-    coap_session_init_token, coap_session_max_pdu_size, coap_session_new_token, coap_session_send_ping,
-    coap_session_set_ack_random_factor, coap_session_set_ack_timeout, coap_session_set_max_retransmit,
-    coap_session_set_mtu, coap_session_state_t, coap_session_t, coap_session_type_t,
+    coap_response_t, coap_response_t_COAP_RESPONSE_FAIL, coap_response_t_COAP_RESPONSE_OK, coap_send,
+    coap_session_get_ack_random_factor, coap_session_get_ack_timeout, coap_session_get_addr_local,
+    coap_session_get_addr_remote, coap_session_get_ifindex, coap_session_get_max_retransmit, coap_session_get_proto,
+    coap_session_get_state, coap_session_get_type, coap_session_init_token, coap_session_max_pdu_size,
+    coap_session_new_token, coap_session_send_ping, coap_session_set_ack_random_factor, coap_session_set_ack_timeout,
+    coap_session_set_max_retransmit, coap_session_set_mtu, coap_session_state_t,
+    coap_session_state_t_COAP_SESSION_STATE_CONNECTING, coap_session_state_t_COAP_SESSION_STATE_CSM,
+    coap_session_state_t_COAP_SESSION_STATE_ESTABLISHED, coap_session_state_t_COAP_SESSION_STATE_HANDSHAKE,
+    coap_session_state_t_COAP_SESSION_STATE_NONE, coap_session_t, coap_session_type_t_COAP_SESSION_TYPE_CLIENT,
+    coap_session_type_t_COAP_SESSION_TYPE_HELLO, coap_session_type_t_COAP_SESSION_TYPE_NONE,
+    coap_session_type_t_COAP_SESSION_TYPE_SERVER,
 };
 #[cfg(feature = "dtls-psk")]
 use libcoap_sys::{coap_session_get_psk_hint, coap_session_get_psk_identity, coap_session_get_psk_key};
@@ -45,21 +50,24 @@ pub mod server;
 /// Representation of the states that a session can be in.
 #[repr(u32)]
 pub enum CoapSessionState {
-    None = coap_session_state_t::COAP_SESSION_STATE_NONE as u32,
-    Connecting = coap_session_state_t::COAP_SESSION_STATE_CONNECTING as u32,
-    Handshake = coap_session_state_t::COAP_SESSION_STATE_HANDSHAKE as u32,
-    Csm = coap_session_state_t::COAP_SESSION_STATE_CSM as u32,
-    Established = coap_session_state_t::COAP_SESSION_STATE_ESTABLISHED as u32,
+    None = coap_session_state_t_COAP_SESSION_STATE_NONE as u32,
+    Connecting = coap_session_state_t_COAP_SESSION_STATE_CONNECTING as u32,
+    Handshake = coap_session_state_t_COAP_SESSION_STATE_HANDSHAKE as u32,
+    Csm = coap_session_state_t_COAP_SESSION_STATE_CSM as u32,
+    Established = coap_session_state_t_COAP_SESSION_STATE_ESTABLISHED as u32,
 }
 
 impl From<coap_session_state_t> for CoapSessionState {
     fn from(raw_state: coap_session_state_t) -> Self {
+        // Variant names are named by bindgen, we have no influence on this.
+        // Ref: https://github.com/rust-lang/rust/issues/39371
+        #[allow(non_upper_case_globals)]
         match raw_state {
-            coap_session_state_t::COAP_SESSION_STATE_NONE => CoapSessionState::None,
-            coap_session_state_t::COAP_SESSION_STATE_CONNECTING => CoapSessionState::Connecting,
-            coap_session_state_t::COAP_SESSION_STATE_HANDSHAKE => CoapSessionState::Handshake,
-            coap_session_state_t::COAP_SESSION_STATE_CSM => CoapSessionState::Csm,
-            coap_session_state_t::COAP_SESSION_STATE_ESTABLISHED => CoapSessionState::Established,
+            coap_session_state_t_COAP_SESSION_STATE_NONE => CoapSessionState::None,
+            coap_session_state_t_COAP_SESSION_STATE_CONNECTING => CoapSessionState::Connecting,
+            coap_session_state_t_COAP_SESSION_STATE_HANDSHAKE => CoapSessionState::Handshake,
+            coap_session_state_t_COAP_SESSION_STATE_CSM => CoapSessionState::Csm,
+            coap_session_state_t_COAP_SESSION_STATE_ESTABLISHED => CoapSessionState::Established,
             _ => unreachable!("unknown session state added"),
         }
     }
@@ -112,7 +120,7 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     }
 
     /// Sets the application-specific data stored alongside this session.
-    fn set_app_data<T: 'static+Any>(&self, value: Option<T>) {
+    fn set_app_data<T: 'static + Any>(&self, value: Option<T>) {
         let mut inner = self.inner_mut();
         let new_box: Option<Rc<dyn Any>> = value.map(|v| Rc::new(v) as Rc<dyn Any>);
         inner.app_data = new_box;
@@ -447,12 +455,16 @@ impl<'a> CoapSession<'a> {
     pub(crate) unsafe fn from_raw(raw_session: *mut coap_session_t) -> CoapSession<'a> {
         assert!(!raw_session.is_null(), "provided raw session was null");
         let raw_session_type = coap_session_get_type(raw_session);
+
+        // Variant names are named by bindgen, we have no influence on this.
+        // Ref: https://github.com/rust-lang/rust/issues/39371
+        #[allow(non_upper_case_globals)]
         match raw_session_type {
-            coap_session_type_t::COAP_SESSION_TYPE_NONE => panic!("provided session has no type"),
+            coap_session_type_t_COAP_SESSION_TYPE_NONE => panic!("provided session has no type"),
 
-            coap_session_type_t::COAP_SESSION_TYPE_CLIENT => CoapClientSession::from_raw(raw_session).into(),
+            coap_session_type_t_COAP_SESSION_TYPE_CLIENT => CoapClientSession::from_raw(raw_session).into(),
 
-            coap_session_type_t::COAP_SESSION_TYPE_SERVER | coap_session_type_t::COAP_SESSION_TYPE_HELLO => {
+            coap_session_type_t_COAP_SESSION_TYPE_SERVER | coap_session_type_t_COAP_SESSION_TYPE_HELLO => {
                 CoapServerSession::from_raw(raw_session).into()
             },
             _ => unreachable!("unknown session type"),
@@ -542,7 +554,6 @@ impl CoapRequestHandle {
 }
 
 // This is fine, we don't read the C-type struct, we return it.
-#[allow(improper_ctypes_definitions)]
 pub(crate) unsafe extern "C" fn session_response_handler(
     session: *mut coap_session_t,
     _sent: *const coap_pdu_t,
@@ -555,12 +566,12 @@ pub(crate) unsafe extern "C" fn session_response_handler(
     let raw_token = coap_pdu_get_token(received);
     let token: CoapToken = CoapToken::from(std::slice::from_raw_parts(raw_token.s, raw_token.length));
     if !client.is_waiting_for_token(&token) {
-        return coap_response_t::COAP_RESPONSE_FAIL;
+        return coap_response_t_COAP_RESPONSE_FAIL;
     }
     if let Ok(message) = CoapMessage::from_raw_pdu(received).and_then(CoapResponse::from_message) {
         client.add_response(message);
-        coap_response_t::COAP_RESPONSE_OK
+        coap_response_t_COAP_RESPONSE_OK
     } else {
-        coap_response_t::COAP_RESPONSE_FAIL
+        coap_response_t_COAP_RESPONSE_FAIL
     }
 }

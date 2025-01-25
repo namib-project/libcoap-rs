@@ -1,4 +1,3 @@
-use libc::uint64_t;
 use libcoap_sys::{
     coap_bin_const_t, coap_new_oscore_conf, coap_oscore_conf_t, coap_oscore_save_seq_num_t, coap_str_const_t,
 };
@@ -13,7 +12,7 @@ use std::{
 // TODO: An even more insecure place to save the sequence number :)
 static OSCORE_SEQ_SAFE_FILE_PATH: &str = "oscore.seq";
 
-extern "C" fn save_seq_num(seq_num: uint64_t, _param: *mut c_void) -> i32 {
+extern "C" fn save_seq_num(seq_num: u64, _param: *mut c_void) -> i32 {
     let mut oscore_seq_safe_file = match OpenOptions::new()
         .write(true)
         .create(true)
@@ -45,7 +44,7 @@ pub struct OscoreConf {
 }
 
 impl OscoreConf {
-    pub fn new(seq_initial: uint64_t, oscore_conf_file_path: &str) -> OscoreConf {
+    pub fn new(seq_initial: u64, oscore_conf_file_path: &str) -> OscoreConf {
         let oscore_conf_file = fs::read_to_string(oscore_conf_file_path).expect("ERROR: File could not be read.");
         let conf = coap_str_const_t {
             length: oscore_conf_file.len(),

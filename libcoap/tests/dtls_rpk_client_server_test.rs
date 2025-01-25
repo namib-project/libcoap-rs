@@ -9,9 +9,9 @@
 
 #![cfg(feature = "dtls-rpk")]
 
+use libcoap_rs::crypto::pki_rpk::{NonCertVerifying, PkiRpkContextBuilder, Rpk, RpkKeyDef};
+
 use crate::common::dtls::dtls_client_server_request_common;
-use libcoap_rs::crypto::pki_rpk::{NonCertVerifying, PkiRpkContextBuilder};
-use libcoap_rs::crypto::pki_rpk::{Rpk, RpkKeyDef};
 
 mod common;
 

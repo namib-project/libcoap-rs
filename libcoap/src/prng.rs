@@ -15,22 +15,20 @@
 //! [rand] crate that allow using the libcoap PRNG as a [rand::Rng] or setting the libcoap PRNG to
 //! an existing [rand::Rng].
 
-use std::ffi::{c_uint, c_void};
 #[cfg(feature = "rand")]
 use std::ffi::c_int;
-use std::sync::Mutex;
+use std::{
+    ffi::{c_uint, c_void},
+    sync::Mutex,
+};
 
 #[cfg(feature = "rand")]
-use libc::size_t;
+use libcoap_sys::coap_set_prng;
+use libcoap_sys::{coap_prng, coap_prng_init};
 #[cfg(feature = "rand")]
 use rand::{CryptoRng, RngCore};
 
-use libcoap_sys::{coap_prng, coap_prng_init};
-#[cfg(feature = "rand")]
-use libcoap_sys::coap_set_prng;
-
-use crate::context::ensure_coap_started;
-use crate::error::RngError;
+use crate::{context::ensure_coap_started, error::RngError};
 
 // TODO If we can assert that libcoap's own thread-safety features are enabled at some point, we
 //      don't need these mutexes.
@@ -186,7 +184,7 @@ pub fn set_coap_prng<RNG: RngCore + CryptoRng + Send + Sync + 'static>(rng: RNG)
 /// This function is intended as a [libcoap_sys::coap_rand_func_t], therefore `out` should be valid
 /// and point to the start of an area of memory that can be filled with `len` bytes.
 #[cfg(feature = "rand")]
-unsafe extern "C" fn prng_callback(out: *mut c_void, len: size_t) -> c_int {
+unsafe extern "C" fn prng_callback(out: *mut c_void, len: usize) -> c_int {
     let out_slice = std::slice::from_raw_parts_mut(out as *mut u8, len);
     match COAP_RNG_FN_MUTEX.lock() {
         Ok(mut rng_fn) => rng_fn
