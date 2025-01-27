@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: BSD-2-Clause
 /*
- * dtls_rpk_client_server_test.rs - Tests for DTLS RPK clients+servers.
- * This file is part of the libcoap-rs crate, see the README and LICENSE files for
- * more information and terms of use.
- * Copyright © 2021-2024 The NAMIB Project Developers, all rights reserved.
- * See the README as well as the LICENSE file for more information.
+ * Copyright © The libcoap-rs Contributors, all rights reserved.
+ * This file is part of the libcoap-rs project, see the README file for
+ * general information on this project and the NOTICE.md and LICENSE files
+ * for information regarding copyright ownership and terms of use.
+ *
+ * tests/dtls_rpk_client_server_test.rs - Tests for DTLS RPK clients+servers.
  */
 
 #![cfg(feature = "dtls-rpk")]

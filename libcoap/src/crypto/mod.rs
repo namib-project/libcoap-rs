@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: BSD-2-Clause
 /*
+ * Copyright © The libcoap-rs Contributors, all rights reserved.
+ * This file is part of the libcoap-rs project, see the README file for
+ * general information on this project and the NOTICE.md and LICENSE files
+ * for information regarding copyright ownership and terms of use.
+ *
  * crypto/mod.rs - CoAP cryptography provider interfaces and types.
- * This file is part of the libcoap-rs crate, see the README and LICENSE files for
- * more information and terms of use.
- * Copyright © 2021-2024 The NAMIB Project Developers, all rights reserved.
- * See the README as well as the LICENSE file for more information.
  */
 
 //! Cryptography interfaces and types.
@@ -54,6 +55,9 @@
 //! the three DTLS variant features while using a TLS library that does not support this feature
 //! will result in either a compilation error or a panic on when calling [`CoapContext::new`](crate::CoapContext::new),
 //! irrespective of whether you actually use DTLS.
+//!
+//! Refer to the [libcoap_sys] documentation for more information on the build process specifics
+//! regarding DTLS libraries.
 
 #[cfg(any(feature = "dtls-rpk", feature = "dtls-pki"))]
 pub mod pki_rpk;

@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: BSD-2-Clause
 /*
+ * Copyright © The libcoap-rs Contributors, all rights reserved.
+ * This file is part of the libcoap-rs project, see the README file for
+ * general information on this project and the NOTICE.md and LICENSE files
+ * for information regarding copyright ownership and terms of use.
+ *
  * resource.rs - Types relating to CoAP resource management.
- * This file is part of the libcoap-rs crate, see the README and LICENSE files for
- * more information and terms of use.
- * Copyright © 2021-2023 The NAMIB Project Developers, all rights reserved.
- * See the README as well as the LICENSE file for more information.
  */
 
 //! Resource and resource handler descriptions

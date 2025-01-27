@@ -14,6 +14,14 @@
       <excludeFolder url="file://$MODULE_DIR$/target" />
       <excludeFolder url="file://$MODULE_DIR$/libcoap-sys/examples/esp-idf/target" />
       <excludeFolder url="file://$MODULE_DIR$/libcoap/examples/esp-idf/target" />
+      <excludeFolder url="file://$MODULE_DIR$/libcoap-sys/examples/esp-idf/.embuild" />
+      <excludeFolder url="file://$MODULE_DIR$/libcoap-sys/src/libcoap/autom4te.cache" />
+      <excludeFolder url="file://$MODULE_DIR$/libcoap-sys/src/libcoap/examples/.deps" />
+      <excludeFolder url="file://$MODULE_DIR$/libcoap-sys/src/libcoap/man/.deps" />
+      <excludeFolder url="file://$MODULE_DIR$/libcoap-sys/src/libcoap/src/.deps" />
+      <excludeFolder url="file://$MODULE_DIR$/libcoap-sys/src/libcoap/src/oscore/.deps" />
+      <excludeFolder url="file://$MODULE_DIR$/libcoap-sys/src/libcoap/tests/.deps" />
+      <excludeFolder url="file://$MODULE_DIR$/libcoap/examples/esp-idf/.embuild" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
