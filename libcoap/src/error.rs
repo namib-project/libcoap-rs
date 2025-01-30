@@ -10,8 +10,10 @@
 
 //! Error types
 
-use std::{ffi::NulError, string::FromUtf8Error, sync::PoisonError};
+use std::{ffi::NulError, fmt::Debug, string::FromUtf8Error, sync::PoisonError};
 
+use coap_message::{error::RenderableOnMinimal, MinimalWritableMessage};
+use libcoap_sys::coap_pdu_code_t;
 use thiserror::Error;
 
 use crate::protocol::{CoapMessageType, CoapOptionType};
@@ -93,7 +95,10 @@ impl<T> From<PoisonError<T>> for RngError {
 }
 
 #[derive(Error, Debug, Clone, Eq, PartialEq)]
-pub enum OptionValueError {
+pub enum OptionParsingError {
+    /// Option is malformed and could not be parsed.
+    #[error("CoAP option is malformed")]
+    MalformedOption,
     /// Provided value for option is too short.
     #[error("CoAP option has invalid value: too short")]
     TooShort,
@@ -127,8 +132,11 @@ pub enum UriParsingError {
 #[derive(Error, Debug, Clone, Eq, PartialEq)]
 pub enum MessageConversionError {
     /// Value of an option is invalid.
-    #[error("CoAP message conversion error: invalid option value for {:?}", .0)]
-    InvalidOptionValue(Option<CoapOptionType>, #[source] OptionValueError),
+    #[error("CoAP message parsing error: invalid option value for {:?}", .0)]
+    InvalidOptionValue(Option<CoapOptionType>, #[source] OptionParsingError),
+    /// Message payload is too large.
+    #[error("CoAP message parsing error: message payload has size {} and is therefore too large for a &[u8]", .0)]
+    TooLarge(usize),
     /// Message has an option that is specific for another message type (i.e., request option in
     /// response message).
     #[error("CoAP message conversion error: option of type {:?} invalid for message type", .0)]
@@ -170,14 +178,35 @@ impl From<UriParsingError> for MessageConversionError {
     }
 }
 
+// TODO: This makes coap_pdu_code_t part of this library's public interface, which might be a
+//       stability issue (libcoap-sys makes no stability guarantees regarding the underlying type
+//       of coap_pdu_code_t.
 #[derive(Error, Debug, Copy, Clone, Eq, PartialEq)]
 pub enum MessageCodeError {
     /// Provided message code for request was not a request code.
-    #[error("CoAP message code conversion error: not a request code")]
-    NotARequestCode,
+    #[error("CoAP message code conversion error: {} is not a known request code", .0)]
+    NotARequestCode(coap_pdu_code_t),
     /// Provided message code for response was not a response code.
-    #[error("CoAP message code conversion error: not a response code")]
-    NotAResponseCode,
+    #[error("CoAP message code conversion error: {} is not a known response code", .0)]
+    NotAResponseCode(coap_pdu_code_t),
+}
+
+impl MessageCodeError {
+    pub fn new_non_request_code(value: u8) -> Self {
+        Self::NotARequestCode(value as coap_pdu_code_t)
+    }
+
+    pub fn new_non_response_code(value: u8) -> Self {
+        Self::NotAResponseCode(value as coap_pdu_code_t)
+    }
+}
+
+impl RenderableOnMinimal for MessageCodeError {
+    type Error<IE: RenderableOnMinimal + Debug> = IE;
+
+    fn render<M: MinimalWritableMessage>(self, message: &mut M) -> Result<(), Self::Error<M::UnionError>> {
+        todo!()
+    }
 }
 
 #[derive(Error, Debug, Copy, Clone, Eq, PartialEq)]

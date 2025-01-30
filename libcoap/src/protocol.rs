@@ -15,6 +15,7 @@ use std::{
     fmt::{Display, Formatter},
 };
 
+use coap_message::Code;
 use libcoap_sys::{
     coap_option_num_t, coap_pdu_code_t, coap_pdu_code_t_COAP_EMPTY_CODE, coap_pdu_code_t_COAP_REQUEST_CODE_DELETE,
     coap_pdu_code_t_COAP_REQUEST_CODE_FETCH, coap_pdu_code_t_COAP_REQUEST_CODE_GET,
@@ -56,10 +57,9 @@ use libcoap_sys::{
     COAP_OPTION_Q_BLOCK2, COAP_OPTION_RTAG, COAP_OPTION_SIZE1, COAP_OPTION_SIZE2, COAP_OPTION_URI_HOST,
     COAP_OPTION_URI_PATH, COAP_OPTION_URI_PORT, COAP_OPTION_URI_QUERY,
 };
-use num_derive::FromPrimitive;
-use num_traits::FromPrimitive;
+use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
 
-use crate::error::{MessageCodeError, UnknownOptionError};
+use crate::error::MessageCodeError;
 
 pub type ETag = Box<[u8]>;
 pub type MaxAge = u32;
@@ -103,7 +103,7 @@ pub enum CoapMatch {
 /// list of option numbers registered with the IANA.
 #[repr(u16)]
 #[non_exhaustive]
-#[derive(FromPrimitive, Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(FromPrimitive, IntoPrimitive, Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum CoapOptionType {
     /// If-Match option ([RFC 7252, Section 5.10.8.1](https://datatracker.ietf.org/doc/html/rfc7252#section-5.10.8.1)).
     IfMatch = COAP_OPTION_IF_MATCH as u16,
@@ -157,84 +157,82 @@ pub enum CoapOptionType {
     NoResponse = COAP_OPTION_NORESPONSE as u16,
     /// Request-Tag option ([RFC 9175, Section 3.2](https://datatracker.ietf.org/doc/html/rfc9175#section-3.2)).
     RTag = COAP_OPTION_RTAG as u16,
+    #[num_enum(catch_all)]
+    Other(u16),
 }
 
 impl CoapOptionType {
     /// Returns the option number this type belongs to.
     pub fn to_raw_option_num(self) -> coap_option_num_t {
-        self as u16
+        self.into()
     }
 
-    /// Returns the maximum size in bytes that a value of this option type should have.
-    pub fn max_len(&self) -> usize {
+    /// Returns the maximum size in bytes that a value of this option type should have, or None
+    /// if the maximum size is unknown.
+    pub fn max_len(&self) -> Option<usize> {
         match self {
-            CoapOptionType::IfMatch => 8,
-            CoapOptionType::UriHost => 255,
-            CoapOptionType::ETag => 8,
-            CoapOptionType::IfNoneMatch => 0,
-            CoapOptionType::UriPort => 2,
-            CoapOptionType::LocationPath => 255,
-            CoapOptionType::UriPath => 255,
-            CoapOptionType::ContentFormat => 2,
-            CoapOptionType::MaxAge => 4,
-            CoapOptionType::UriQuery => 255,
-            CoapOptionType::Accept => 2,
-            CoapOptionType::LocationQuery => 255,
-            CoapOptionType::ProxyUri => 1034,
-            CoapOptionType::ProxyScheme => 255,
-            CoapOptionType::Size1 => 4,
-            CoapOptionType::Size2 => 4,
-            CoapOptionType::Block1 => 3,
-            CoapOptionType::Block2 => 3,
-            CoapOptionType::HopLimit => 1,
-            CoapOptionType::NoResponse => 1,
-            CoapOptionType::Observe => 3,
-            CoapOptionType::Oscore => 255,
-            CoapOptionType::Echo => 40,
-            CoapOptionType::RTag => 8,
-            CoapOptionType::QBlock1 => 3,
-            CoapOptionType::QBlock2 => 3,
+            CoapOptionType::IfMatch => Some(8),
+            CoapOptionType::UriHost => Some(255),
+            CoapOptionType::ETag => Some(8),
+            CoapOptionType::IfNoneMatch => Some(0),
+            CoapOptionType::UriPort => Some(2),
+            CoapOptionType::LocationPath => Some(255),
+            CoapOptionType::UriPath => Some(255),
+            CoapOptionType::ContentFormat => Some(2),
+            CoapOptionType::MaxAge => Some(4),
+            CoapOptionType::UriQuery => Some(255),
+            CoapOptionType::Accept => Some(2),
+            CoapOptionType::LocationQuery => Some(255),
+            CoapOptionType::ProxyUri => Some(1034),
+            CoapOptionType::ProxyScheme => Some(255),
+            CoapOptionType::Size1 => Some(4),
+            CoapOptionType::Size2 => Some(4),
+            CoapOptionType::Block1 => Some(3),
+            CoapOptionType::Block2 => Some(3),
+            CoapOptionType::HopLimit => Some(1),
+            CoapOptionType::NoResponse => Some(1),
+            CoapOptionType::Observe => Some(3),
+            CoapOptionType::Oscore => Some(255),
+            CoapOptionType::Echo => Some(40),
+            CoapOptionType::RTag => Some(8),
+            CoapOptionType::QBlock1 => Some(3),
+            CoapOptionType::QBlock2 => Some(3),
+            CoapOptionType::Other(_v) => None,
         }
     }
 
-    /// Returns the minimum size in bytes that a value of this option type should have.
-    pub fn min_len(&self) -> usize {
+    /// Returns the minimum size in bytes that a value of this option type should have, or None
+    /// if the maximum size is unknown.
+    pub fn min_len(&self) -> Option<usize> {
         match self {
-            CoapOptionType::IfMatch => 0,
-            CoapOptionType::UriHost => 1,
-            CoapOptionType::ETag => 1,
-            CoapOptionType::IfNoneMatch => 0,
-            CoapOptionType::UriPort => 0,
-            CoapOptionType::LocationPath => 0,
-            CoapOptionType::UriPath => 0,
-            CoapOptionType::ContentFormat => 0,
-            CoapOptionType::MaxAge => 0,
-            CoapOptionType::UriQuery => 0,
-            CoapOptionType::Accept => 0,
-            CoapOptionType::LocationQuery => 0,
-            CoapOptionType::ProxyUri => 1,
-            CoapOptionType::ProxyScheme => 1,
-            CoapOptionType::Size1 => 0,
-            CoapOptionType::Size2 => 0,
-            CoapOptionType::Block1 => 0,
-            CoapOptionType::Block2 => 0,
-            CoapOptionType::HopLimit => 1,
-            CoapOptionType::NoResponse => 0,
-            CoapOptionType::Observe => 0,
-            CoapOptionType::Oscore => 0,
-            CoapOptionType::Echo => 1,
-            CoapOptionType::RTag => 0,
-            CoapOptionType::QBlock1 => 0,
-            CoapOptionType::QBlock2 => 0,
+            CoapOptionType::IfMatch => Some(0),
+            CoapOptionType::UriHost => Some(1),
+            CoapOptionType::ETag => Some(1),
+            CoapOptionType::IfNoneMatch => Some(0),
+            CoapOptionType::UriPort => Some(0),
+            CoapOptionType::LocationPath => Some(0),
+            CoapOptionType::UriPath => Some(0),
+            CoapOptionType::ContentFormat => Some(0),
+            CoapOptionType::MaxAge => Some(0),
+            CoapOptionType::UriQuery => Some(0),
+            CoapOptionType::Accept => Some(0),
+            CoapOptionType::LocationQuery => Some(0),
+            CoapOptionType::ProxyUri => Some(1),
+            CoapOptionType::ProxyScheme => Some(1),
+            CoapOptionType::Size1 => Some(0),
+            CoapOptionType::Size2 => Some(0),
+            CoapOptionType::Block1 => Some(0),
+            CoapOptionType::Block2 => Some(0),
+            CoapOptionType::HopLimit => Some(1),
+            CoapOptionType::NoResponse => Some(0),
+            CoapOptionType::Observe => Some(0),
+            CoapOptionType::Oscore => Some(0),
+            CoapOptionType::Echo => Some(1),
+            CoapOptionType::RTag => Some(0),
+            CoapOptionType::QBlock1 => Some(0),
+            CoapOptionType::QBlock2 => Some(0),
+            CoapOptionType::Other(_v) => None,
         }
-    }
-}
-
-impl TryFrom<coap_option_num_t> for CoapOptionType {
-    type Error = UnknownOptionError;
-
-    fn try_from(num: coap_option_num_t) -> Result<Self, Self::Error> {
-        <CoapOptionType as FromPrimitive>::from_u16(num).ok_or(UnknownOptionError::Unknown)
     }
 }
 
@@ -278,13 +276,8 @@ pub enum CoapContentFormat {
     CoapGroupJson = COAP_MEDIATYPE_APPLICATION_COAP_GROUP_JSON as u16,
     MbCborSeq = COAP_MEDIATYPE_APPLICATION_MB_CBOR_SEQ as u16,
     Oscore = COAP_MEDIATYPE_APPLICATION_OSCORE as u16,
-    Other,
-}
-
-impl From<ContentFormat> for CoapContentFormat {
-    fn from(value: u16) -> Self {
-        <CoapContentFormat as FromPrimitive>::from_u16(value).unwrap_or(CoapContentFormat::Other)
-    }
+    #[num_enum(catch_all)]
+    Other(u16),
 }
 
 /// Representation of a CoAP message code.
@@ -298,6 +291,14 @@ pub enum CoapMessageCode {
     Empty,
     Request(CoapRequestCode),
     Response(CoapResponseCode),
+}
+
+impl Code for CoapMessageCode {
+    type Error = MessageCodeError;
+
+    fn new(code: u8) -> Result<Self, <Self as Code>::Error> {
+        Self::try_from(code as coap_pdu_code_t)
+    }
 }
 
 impl CoapMessageCode {
@@ -340,13 +341,32 @@ impl TryFrom<coap_pdu_code_t> for CoapMessageCode {
     }
 }
 
+impl TryFrom<u8> for CoapMessageCode {
+    type Error = MessageCodeError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        Self::try_from(value as coap_pdu_code_t)
+    }
+}
+
+impl Into<u8> for CoapMessageCode {
+    fn into(self) -> u8 {
+        match self {
+            CoapMessageCode::Empty => coap_pdu_code_t_COAP_EMPTY_CODE as u8,
+            CoapMessageCode::Request(v) => v.into(),
+            CoapMessageCode::Response(v) => v.into(),
+        }
+    }
+}
+
 /// Representation of a CoAP request/method code.
 ///
 /// See <https://www.iana.org/assignments/core-parameters/core-parameters.xhtml#method-codes> for the
 /// values currently registered with the IANA.
 #[repr(u8)]
 #[non_exhaustive]
-#[derive(FromPrimitive, Clone, Copy, Eq, PartialEq, Hash, Debug)]
+#[derive(TryFromPrimitive, IntoPrimitive, Clone, Copy, Eq, PartialEq, Hash, Debug)]
+#[num_enum(error_type(name = MessageCodeError, constructor = MessageCodeError::new_non_request_code))]
 pub enum CoapRequestCode {
     Get = coap_pdu_code_t_COAP_REQUEST_CODE_GET as u8,
     Put = coap_pdu_code_t_COAP_REQUEST_CODE_PUT as u8,
@@ -377,16 +397,17 @@ impl CoapRequestCode {
 
     /// Returns the raw [coap_pdu_code_t](coap_pdu_code_t) corresponding to this
     /// request code.
+    #[deprecated(note = "Use the provided Into<u8> implementation instead")]
     pub fn to_raw_pdu_code(self) -> coap_pdu_code_t {
-        match self {
-            CoapRequestCode::Get => coap_pdu_code_t_COAP_REQUEST_CODE_GET,
-            CoapRequestCode::Put => coap_pdu_code_t_COAP_REQUEST_CODE_PUT,
-            CoapRequestCode::Delete => coap_pdu_code_t_COAP_REQUEST_CODE_FETCH,
-            CoapRequestCode::Post => coap_pdu_code_t_COAP_REQUEST_CODE_POST,
-            CoapRequestCode::Fetch => coap_pdu_code_t_COAP_REQUEST_CODE_FETCH,
-            CoapRequestCode::IPatch => coap_pdu_code_t_COAP_REQUEST_CODE_IPATCH,
-            CoapRequestCode::Patch => coap_pdu_code_t_COAP_REQUEST_CODE_PATCH,
-        }
+        <Self as Into<u8>>::into(self) as coap_request_t
+    }
+}
+
+impl Code for CoapRequestCode {
+    type Error = MessageCodeError;
+
+    fn new(code: u8) -> Result<Self, <Self as Code>::Error> {
+        Self::try_from(code as coap_pdu_code_t)
     }
 }
 
@@ -394,7 +415,7 @@ impl TryFrom<coap_pdu_code_t> for CoapRequestCode {
     type Error = MessageCodeError;
 
     fn try_from(value: coap_pdu_code_t) -> Result<Self, Self::Error> {
-        <CoapRequestCode as FromPrimitive>::from_u32(value as u32).ok_or(MessageCodeError::NotARequestCode)
+        Self::try_from(value as u8)
     }
 }
 
@@ -404,7 +425,8 @@ impl TryFrom<coap_pdu_code_t> for CoapRequestCode {
 /// the possible values currently registered with the IANA.
 #[repr(u8)]
 #[non_exhaustive]
-#[derive(Clone, Copy, FromPrimitive, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, TryFromPrimitive, IntoPrimitive, Debug, Eq, PartialEq, Hash)]
+#[num_enum(error_type(name = MessageCodeError, constructor = MessageCodeError::new_non_response_code))]
 pub enum CoapResponseCode {
     Content = coap_pdu_code_t_COAP_RESPONSE_CODE_CONTENT as u8,
     BadGateway = coap_pdu_code_t_COAP_RESPONSE_CODE_BAD_GATEWAY as u8,
@@ -471,6 +493,14 @@ impl CoapResponseCode {
     }
 }
 
+impl Code for CoapResponseCode {
+    type Error = MessageCodeError;
+
+    fn new(code: u8) -> Result<Self, <Self as Code>::Error> {
+        Self::try_from(code as coap_pdu_code_t)
+    }
+}
+
 impl Display for CoapResponseCode {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let response_phrase = unsafe {
@@ -492,14 +522,14 @@ impl TryFrom<coap_pdu_code_t> for CoapResponseCode {
     type Error = MessageCodeError;
 
     fn try_from(value: coap_pdu_code_t) -> Result<Self, Self::Error> {
-        <CoapResponseCode as FromPrimitive>::from_u32(value as u32).ok_or(MessageCodeError::NotAResponseCode)
+        Self::try_from(value as u8)
     }
 }
 
 /// CoAP message types as defined in [RFC 7252, Section 3](https://datatracker.ietf.org/doc/html/rfc7252#section-3)
 /// and described in [RFC 7252, Section 4.2 and 4.3](https://datatracker.ietf.org/doc/html/rfc7252#section-4.2).
 #[repr(u8)]
-#[derive(Copy, Clone, Hash, Eq, PartialEq, FromPrimitive, Debug)]
+#[derive(Copy, Clone, Hash, Eq, PartialEq, TryFromPrimitive, Debug)]
 pub enum CoapMessageType {
     /// Confirmable message, i.e. a message whose reception should be confirmed by the peer.
     Con = coap_pdu_type_t_COAP_MESSAGE_CON as u8,
@@ -521,11 +551,5 @@ impl CoapMessageType {
             CoapMessageType::Ack => coap_pdu_type_t_COAP_MESSAGE_ACK,
             CoapMessageType::Rst => coap_pdu_type_t_COAP_MESSAGE_RST,
         }
-    }
-}
-
-impl From<coap_pdu_type_t> for CoapMessageType {
-    fn from(raw_type: coap_pdu_type_t) -> Self {
-        FromPrimitive::from_u32(raw_type as u32).expect("unknown PDU type")
     }
 }
