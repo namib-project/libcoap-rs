@@ -1,10 +1,7 @@
-use libcoap_sys::{
-    coap_bin_const_t, coap_new_oscore_conf, coap_oscore_conf_t, coap_oscore_save_seq_num_t, coap_str_const_t,
-};
+use libcoap_sys::{coap_bin_const_t, coap_new_oscore_conf, coap_oscore_conf_t, coap_str_const_t};
 use std::{
-    ffi::CStr,
     fs::{self, File, OpenOptions},
-    io::{BufRead, BufReader, Read, Seek, SeekFrom, Write},
+    io::{BufRead, BufReader, Write},
     os::raw::c_void,
     ptr,
 };
@@ -57,12 +54,9 @@ impl OscoreConf {
         };
 
         // TODO: SECURITY
-        let mut oscore_conf = unsafe { coap_new_oscore_conf(conf, Some(save_seq_num), ptr::null_mut(), seq_initial) };
+        let oscore_conf = unsafe { coap_new_oscore_conf(conf, Some(save_seq_num), ptr::null_mut(), seq_initial) };
 
-        // TODO: SECURITY
-        OscoreConf {
-            conf: unsafe { oscore_conf },
-        }
+        OscoreConf { conf: oscore_conf }
     }
     // TODO: SECURITY
     pub fn as_mut_raw_conf(&mut self) -> *mut coap_oscore_conf_t {
@@ -88,6 +82,7 @@ impl OscoreConf {
     }
 }
 
+#[derive(Debug)]
 pub struct OscoreRecipient<'a> {
     recipient_id: &'a str,
     recipient: *mut coap_bin_const_t,
@@ -95,7 +90,7 @@ pub struct OscoreRecipient<'a> {
 
 impl OscoreRecipient<'_> {
     pub fn new(recipient_id: &str) -> OscoreRecipient {
-        let mut recipient = coap_bin_const_t {
+        let recipient = coap_bin_const_t {
             length: recipient_id.len(),
             s: recipient_id.as_ptr(),
         };
@@ -109,5 +104,8 @@ impl OscoreRecipient<'_> {
     }
     pub fn get_c_struct(&self) -> *mut coap_bin_const_t {
         self.recipient
+    }
+    pub fn get_recipient_id(&self) -> &str {
+        self.recipient_id
     }
 }

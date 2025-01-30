@@ -43,9 +43,7 @@ use libcoap_sys::{
     COAP_BLOCK_USE_LIBCOAP, COAP_IO_WAIT,
 };
 #[cfg(feature = "oscore")]
-use libcoap_sys::{
-    coap_bin_const_t, coap_context_oscore_server, coap_delete_oscore_recipient, coap_new_oscore_recipient,
-};
+use libcoap_sys::{coap_context_oscore_server, coap_delete_oscore_recipient, coap_new_oscore_recipient};
 
 #[cfg(any(feature = "dtls-rpk", feature = "dtls-pki"))]
 use crate::crypto::pki_rpk::ServerPkiRpkCryptoContext;
@@ -88,6 +86,9 @@ struct CoapContextInner<'a> {
     /// PKI context for encrypted server-side sessions.
     #[cfg(any(feature = "dtls-pki", feature = "dtls-rpk"))]
     pki_rpk_context: Option<ServerPkiRpkCryptoContext<'a>>,
+    /// A list of recipients associated with this context.
+    #[cfg(feature = "oscore")]
+    recipients: Vec<OscoreRecipient<'a>>,
 }
 
 /// A CoAP Context — container for general state and configuration information relating to CoAP
@@ -136,6 +137,8 @@ impl<'a> CoapContext<'a> {
             psk_context: None,
             #[cfg(any(feature = "dtls-pki", feature = "dtls-rpk"))]
             pki_rpk_context: None,
+            #[cfg(feature = "oscore")]
+            recipients: Vec::new(),
         });
 
         // SAFETY: We checked that the raw context is not null, the provided function is valid and
@@ -407,7 +410,7 @@ impl CoapContext<'_> {
     /// Adds an existing OscoreConf object to the CoapContext.
     #[cfg(feature = "oscore")]
     pub fn add_oscore_conf(&mut self, mut oscore_conf: OscoreConf) {
-        let mut inner_ref = self.inner.borrow_mut();
+        let inner_ref = self.inner.borrow_mut();
         // TODO: SECURITY
         unsafe {
             coap_context_oscore_server(inner_ref.raw_context, oscore_conf.as_mut_raw_conf());
@@ -417,22 +420,51 @@ impl CoapContext<'_> {
     /// Adds an existing OscoreRecipient object to the CoapContext.
     /// TODO: guarantee valid oscore (server)
     #[cfg(feature = "oscore")]
-    pub fn add_new_oscore_recipient(&mut self, recipient: OscoreRecipient) {
+    pub fn add_new_oscore_recipient(&mut self, recipient_id: &str) {
         let mut inner_ref = self.inner.borrow_mut();
+
+        if inner_ref
+            .recipients
+            .iter()
+            .any(|elem| elem.get_recipient_id() == recipient_id)
+        {
+            return;
+        }
+
+        let recipient = OscoreRecipient::new(recipient_id);
+
         // TODO: SECURITY
         unsafe {
             coap_new_oscore_recipient(inner_ref.raw_context, recipient.get_c_struct());
         };
+
+        // TODO: fix this
+        //inner_ref.recipients.push(recipient);
     }
 
     /// Removes an existing OscoreRecipient from the CoapContext.
     /// TODO: same as above
     #[cfg(feature = "oscore")]
-    pub fn delete_oscore_recipient(&mut self, recipient: OscoreRecipient) {
+    pub fn delete_oscore_recipient(&mut self, recipient_id: &str) {
         let mut inner_ref = self.inner.borrow_mut();
-        // TODO: SECURITY
-        unsafe {
-            coap_delete_oscore_recipient(inner_ref.raw_context, recipient.get_c_struct());
+
+        // Search for the recipient_id and recomove the OscoreRecipient if found.
+        if let Some(index) = inner_ref
+            .recipients
+            .iter()
+            .position(|elem| elem.get_recipient_id() == recipient_id)
+        {
+            let recipient = inner_ref
+                .recipients
+                .get(index)
+                .expect("could not get recipient from context, invalid index?");
+
+            // TODO: SECURITY
+            unsafe {
+                coap_delete_oscore_recipient(inner_ref.raw_context, recipient.get_c_struct());
+            }
+
+            inner_ref.recipients.remove(index);
         }
     }
 

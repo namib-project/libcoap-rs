@@ -13,7 +13,7 @@ use std::{
 };
 
 #[cfg(feature = "oscore")]
-use libcoap_sys::{coap_context_oscore_server, coap_new_client_session_oscore, coap_new_oscore_conf, coap_str_const_t};
+use libcoap_sys::coap_new_client_session_oscore;
 use libcoap_sys::{
     coap_new_client_session, coap_proto_t_COAP_PROTO_DTLS, coap_proto_t_COAP_PROTO_TCP, coap_proto_t_COAP_PROTO_UDP,
     coap_register_event_handler, coap_session_get_app_data, coap_session_get_context, coap_session_get_type,
@@ -23,10 +23,10 @@ use libcoap_sys::{
 };
 
 use super::{CoapSessionCommon, CoapSessionInner, CoapSessionInnerProvider};
-#[cfg(feature = "oscore")]
-use crate::oscore::OscoreConf;
 #[cfg(feature = "dtls")]
 use crate::crypto::ClientCryptoContext;
+#[cfg(feature = "oscore")]
+use crate::oscore::OscoreConf;
 use crate::{
     context::CoapContext,
     error::SessionCreationError,
