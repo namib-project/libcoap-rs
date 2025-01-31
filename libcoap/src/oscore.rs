@@ -42,10 +42,13 @@ pub struct OscoreConf {
 
 impl OscoreConf {
     pub fn new(seq_initial: u64, oscore_conf_file_path: &str) -> OscoreConf {
-        let oscore_conf_file = fs::read_to_string(oscore_conf_file_path).expect("ERROR: File could not be read.");
+        let oscore_conf_bytes = fs::read(oscore_conf_file_path).expect("ERROR: Could not read oscore_conf file.");
+        OscoreConf::new_from_bytes(seq_initial, &oscore_conf_bytes)
+    }
+    pub fn new_from_bytes(seq_initial: u64, oscore_conf_bytes: &[u8]) -> OscoreConf {
         let conf = coap_str_const_t {
-            length: oscore_conf_file.len(),
-            s: oscore_conf_file.as_ptr(),
+            length: oscore_conf_bytes.len(),
+            s: oscore_conf_bytes.as_ptr(),
         };
 
         let seq_initial = match OscoreConf::read_initial_sequence_number() {
