@@ -417,7 +417,7 @@ impl CoapContext<'_> {
 
     /// Creates a new OscoreConf from bytes provded and adds it to the context
     #[cfg(feature = "oscore")]
-    pub fn add_oscore_conf_from_bytes(&mut self, seq_initial: u64, oscore_conf_bytes: &[u8]) {
+    pub fn add_oscore_conf(&mut self, seq_initial: u64, oscore_conf_bytes: &[u8]) {
         let mut oscore_conf = OscoreConf::new(seq_initial, oscore_conf_bytes);
         let mut inner_ref = self.inner.borrow_mut();
         inner_ref.oscore_conf = oscore_conf_bytes.to_vec();
