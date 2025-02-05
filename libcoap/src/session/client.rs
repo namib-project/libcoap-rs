@@ -199,7 +199,7 @@ impl CoapClientSession<'_> {
         })
     }
 
-    /// Create an encrypted session with the given peer over UDP using OSCORE
+    /// Create an encrypted session with the given peer over UDP using OSCORE.
     ///
     /// Will return a [SessionCreationError] if libcoap was unable to create a session
     /// (most likely because it was not possible to bind to a port).
@@ -207,8 +207,11 @@ impl CoapClientSession<'_> {
     pub fn connect_oscore<'a>(
         ctx: &mut CoapContext<'a>,
         addr: SocketAddr,
-        conf: OscoreConf,
+        seq_initial: u64,
+        conf: &[u8],
     ) -> Result<CoapClientSession<'a>, SessionCreationError> {
+        let conf = OscoreConf::new(seq_initial, conf);
+
         // TODO: SAFETY
         let session = unsafe {
             coap_new_client_session_oscore(

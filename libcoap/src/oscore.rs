@@ -28,7 +28,7 @@ extern "C" fn save_seq_num(seq_num: u64, _param: *mut c_void) -> i32 {
         return 0;
     }
 
-    // TODO: remove debug
+    #[cfg(debug_assertions)]
     println!("DEBUG: Saving sequence number: {}", seq_num);
 
     1
@@ -36,16 +36,12 @@ extern "C" fn save_seq_num(seq_num: u64, _param: *mut c_void) -> i32 {
 
 // Represents a oscore conf object which stores the underlying
 // coap_oscore_conf_t strcut.
-pub struct OscoreConf {
+pub(crate) struct OscoreConf {
     conf: *mut coap_oscore_conf_t,
 }
 
 impl OscoreConf {
-    pub fn new(seq_initial: u64, oscore_conf_file_path: &str) -> OscoreConf {
-        let oscore_conf_bytes = fs::read(oscore_conf_file_path).expect("ERROR: Could not read oscore_conf file.");
-        OscoreConf::new_from_bytes(seq_initial, &oscore_conf_bytes)
-    }
-    pub fn new_from_bytes(seq_initial: u64, oscore_conf_bytes: &[u8]) -> OscoreConf {
+    pub(crate) fn new(seq_initial: u64, oscore_conf_bytes: &[u8]) -> OscoreConf {
         let conf = coap_str_const_t {
             length: oscore_conf_bytes.len(),
             s: oscore_conf_bytes.as_ptr(),
@@ -62,7 +58,7 @@ impl OscoreConf {
         OscoreConf { conf: oscore_conf }
     }
     // TODO: SECURITY
-    pub fn as_mut_raw_conf(&mut self) -> *mut coap_oscore_conf_t {
+    pub(crate) fn as_mut_raw_conf(&mut self) -> *mut coap_oscore_conf_t {
         self.conf
     }
 
@@ -86,13 +82,13 @@ impl OscoreConf {
 }
 
 #[derive(Debug)]
-pub struct OscoreRecipient<'a> {
-    recipient_id: &'a str,
+pub(crate) struct OscoreRecipient {
+    recipient_id: String,
     recipient: *mut coap_bin_const_t,
 }
 
-impl OscoreRecipient<'_> {
-    pub fn new(recipient_id: &str) -> OscoreRecipient {
+impl OscoreRecipient {
+    pub(crate) fn new(recipient_id: &str) -> OscoreRecipient {
         let recipient = coap_bin_const_t {
             length: recipient_id.len(),
             s: recipient_id.as_ptr(),
@@ -101,14 +97,14 @@ impl OscoreRecipient<'_> {
         let recipient: *mut coap_bin_const_t = Box::into_raw(Box::new(recipient));
 
         OscoreRecipient {
-            recipient_id,
+            recipient_id: recipient_id.to_string(),
             recipient,
         }
     }
-    pub fn get_c_struct(&self) -> *mut coap_bin_const_t {
+    pub(crate) fn get_c_struct(&self) -> *mut coap_bin_const_t {
         self.recipient
     }
-    pub fn get_recipient_id(&self) -> &str {
-        self.recipient_id
+    pub(crate) fn get_recipient_id(&self) -> &str {
+        self.recipient_id.as_str()
     }
 }

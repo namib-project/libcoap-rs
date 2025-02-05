@@ -94,7 +94,7 @@ struct CoapContextInner<'a> {
     oscore_conf: Vec<u8>,
     /// A list of recipients associated with this context.
     #[cfg(feature = "oscore")]
-    recipients: Vec<OscoreRecipient<'a>>,
+    recipients: Vec<OscoreRecipient>,
 }
 
 /// A CoAP Context — container for general state and configuration information relating to CoAP
@@ -415,21 +415,10 @@ impl CoapContext<'_> {
         self.add_endpoint(addr, coap_proto_t_COAP_PROTO_TCP)
     }
 
-    /// Adds an existing OscoreConf object to the CoapContext.
-    #[cfg(feature = "oscore")]
-    #[deprecated(note = "potentially unsafe - does not safe the oscore_conf in the context")]
-    pub fn add_oscore_conf(&mut self, mut oscore_conf: OscoreConf) {
-        let inner_ref = self.inner.borrow_mut();
-        // TODO: SECURITY
-        unsafe {
-            coap_context_oscore_server(inner_ref.raw_context, oscore_conf.as_mut_raw_conf());
-        };
-    }
-
     /// Creates a new OscoreConf from bytes provded and adds it to the context
     #[cfg(feature = "oscore")]
     pub fn add_oscore_conf_from_bytes(&mut self, seq_initial: u64, oscore_conf_bytes: &[u8]) {
-        let mut oscore_conf = OscoreConf::new_from_bytes(seq_initial, oscore_conf_bytes);
+        let mut oscore_conf = OscoreConf::new(seq_initial, oscore_conf_bytes);
         let mut inner_ref = self.inner.borrow_mut();
         inner_ref.oscore_conf = oscore_conf_bytes.to_vec();
         unsafe {
@@ -441,7 +430,7 @@ impl CoapContext<'_> {
     /// TODO: guarantee valid oscore (server)
     #[cfg(feature = "oscore")]
     pub fn add_new_oscore_recipient(&mut self, recipient_id: &str) {
-        let inner_ref = self.inner.borrow_mut();
+        let mut inner_ref = self.inner.borrow_mut();
 
         if inner_ref
             .recipients
@@ -459,7 +448,7 @@ impl CoapContext<'_> {
         };
 
         // TODO: fix this
-        //inner_ref.recipients.push(recipient);
+        inner_ref.recipients.push(recipient);
     }
 
     /// Removes an existing OscoreRecipient from the CoapContext.
