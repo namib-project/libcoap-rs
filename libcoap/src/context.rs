@@ -57,9 +57,7 @@ use crate::{
 };
 
 //TODO: New feature?
-use libcoap_sys::{
-    coap_join_mcast_group_intf,
-};
+use libcoap_sys::coap_join_mcast_group_intf;
 use std::ffi::CString;
 
 static COAP_STARTUP_ONCE: Once = Once::new();
@@ -413,16 +411,20 @@ impl CoapContext<'_> {
     }
 
     // TODO: Find correct naming and placement in file
-    // TODO: Parameterize (look at set_pki_root_ca_paths for an example)
     // TODO: Documentation
     // TODO: Possibly wrap in feature?
-    pub fn join_mcast_group_intf(&mut self) {
-        let mut inner_ref = self.inner.borrow_mut();
-	let mcast_group = Some(CString::new("ff03::fd").expect("CString::new failed"));
+    // TODO: Error handling
+    pub fn join_mcast_group_intf(&mut self, groupname: &str, ifname: Option<&str>) {
+        let inner_ref = self.inner.borrow();
+        let mcast_groupname = CString::new(groupname).expect("CString::new failed");
+        let mcast_ifname = ifname.and_then(|if_in| Some(CString::new(if_in).expect("CString::new failed")));
+        let mcast_ifname_ptr = match mcast_ifname {
+            Some(if_in) => if_in.as_ptr(),
+            None => std::ptr::null(),
+        };
         // TODO: SECURITY
         unsafe {
-		//TODO: Why is None not allowed here, but is allowed in coap_register_event_handler?
-            coap_join_mcast_group_intf(inner_ref.raw_context, mcast_group.as_ref().map(|v| v.as_ptr()).unwrap_or(std::ptr::null()), std::ptr::null());
+            coap_join_mcast_group_intf(inner_ref.raw_context, mcast_groupname.as_ptr(), mcast_ifname_ptr);
         };
     }
 
