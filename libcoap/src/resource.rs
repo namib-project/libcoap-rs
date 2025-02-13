@@ -21,9 +21,8 @@ use libcoap_sys::{
     coap_add_attr, coap_delete_resource, coap_new_str_const, coap_pdu_t, coap_register_request_handler,
     coap_resource_get_uri_path, coap_resource_get_userdata, coap_resource_init, coap_resource_notify_observers,
     coap_resource_set_get_observable, coap_resource_set_mode, coap_resource_set_userdata, coap_resource_t,
-    coap_send_rst, coap_session_t, coap_str_const_t, coap_string_t, COAP_ATTR_FLAGS_RELEASE_NAME,
-    COAP_ATTR_FLAGS_RELEASE_VALUE, COAP_RESOURCE_FLAGS_NOTIFY_CON, COAP_RESOURCE_FLAGS_NOTIFY_NON,
-    COAP_RESOURCE_FLAGS_RELEASE_URI,
+    coap_send_rst, coap_session_t, coap_string_t, COAP_ATTR_FLAGS_RELEASE_NAME, COAP_ATTR_FLAGS_RELEASE_VALUE,
+    COAP_RESOURCE_FLAGS_NOTIFY_CON, COAP_RESOURCE_FLAGS_NOTIFY_NON, COAP_RESOURCE_FLAGS_RELEASE_URI,
 };
 
 use crate::{
