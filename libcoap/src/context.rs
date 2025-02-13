@@ -48,7 +48,7 @@ use crate::crypto::pki_rpk::ServerPkiRpkCryptoContext;
 #[cfg(feature = "dtls-psk")]
 use crate::crypto::psk::ServerPskContext;
 use crate::{
-    error::{ContextConfigurationError, EndpointCreationError, IoProcessError},
+    error::{ContextConfigurationError, EndpointCreationError, IoProcessError, MulticastGroupJoinError},
     event::{event_handler_callback, CoapEventHandler},
     mem::{CoapLendableFfiRcCell, CoapLendableFfiWeakCell, DropInnerExclusively},
     resource::{CoapResource, UntypedCoapResource},
@@ -413,8 +413,11 @@ impl CoapContext<'_> {
     // TODO: Find correct naming and placement in file
     // TODO: Documentation
     // TODO: Possibly wrap in feature?
-    // TODO: Error handling
-    pub fn join_mcast_group_intf(&mut self, groupname: &str, ifname: Option<&str>) {
+    pub fn join_mcast_group_intf(
+        &mut self,
+        groupname: &str,
+        ifname: Option<&str>,
+    ) -> Result<(), MulticastGroupJoinError> {
         let inner_ref = self.inner.borrow();
         let mcast_groupname = CString::new(groupname).expect("CString::new failed");
         let mcast_ifname = ifname.and_then(|if_in| Some(CString::new(if_in).expect("CString::new failed")));
@@ -424,8 +427,12 @@ impl CoapContext<'_> {
         };
         // TODO: SECURITY
         unsafe {
-            coap_join_mcast_group_intf(inner_ref.raw_context, mcast_groupname.as_ptr(), mcast_ifname_ptr);
+            let ret = coap_join_mcast_group_intf(inner_ref.raw_context, mcast_groupname.as_ptr(), mcast_ifname_ptr);
+            if ret != 0 {
+                return Err(MulticastGroupJoinError::Unknown);
+            }
         };
+        Ok(())
     }
 
     // /// TODO

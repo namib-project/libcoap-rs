@@ -315,6 +315,7 @@ impl<D: Any + ?Sized + Debug> CoapResource<D> {
     }
 
     // TODO: Decide on naming and placement
+    // TODO: Documentation
     pub fn add_attr(&self, name: &str, val: Option<&str>) {
         let mut inner = self.inner.borrow_mut();
         //TODO: Verify Security
