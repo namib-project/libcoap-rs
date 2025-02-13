@@ -18,10 +18,12 @@ use std::{
 };
 
 use libcoap_sys::{
-    coap_add_attr, coap_delete_resource, coap_new_str_const, coap_pdu_t, coap_register_request_handler, coap_resource_get_uri_path,
-    coap_resource_get_userdata, coap_resource_init, coap_resource_notify_observers, coap_resource_set_get_observable,
-    coap_resource_set_mode, coap_resource_set_userdata, coap_resource_t, coap_send_rst, coap_session_t, coap_string_t,
-    COAP_RESOURCE_FLAGS_NOTIFY_CON, COAP_RESOURCE_FLAGS_NOTIFY_NON, COAP_RESOURCE_FLAGS_RELEASE_URI,
+    coap_add_attr, coap_delete_resource, coap_new_str_const, coap_pdu_t, coap_register_request_handler,
+    coap_resource_get_uri_path, coap_resource_get_userdata, coap_resource_init, coap_resource_notify_observers,
+    coap_resource_set_get_observable, coap_resource_set_mode, coap_resource_set_userdata, coap_resource_t,
+    coap_send_rst, coap_session_t, coap_str_const_t, coap_string_t, COAP_ATTR_FLAGS_RELEASE_NAME,
+    COAP_ATTR_FLAGS_RELEASE_VALUE, COAP_RESOURCE_FLAGS_NOTIFY_CON, COAP_RESOURCE_FLAGS_NOTIFY_NON,
+    COAP_RESOURCE_FLAGS_RELEASE_URI,
 };
 
 use crate::{
@@ -314,15 +316,22 @@ impl<D: Any + ?Sized + Debug> CoapResource<D> {
     }
 
     // TODO: Decide on naming and placement
-    // TODO: Parameterize (look at new for an example)
-    pub fn add_attr(&self) {
+    pub fn add_attr(&self, name: &str, val: Option<&str>) {
         let mut inner = self.inner.borrow_mut();
-	//TODO: Security
+        //TODO: Verify Security
         unsafe {
-            let name = coap_new_str_const("title".as_ptr(), "title".len());
-            let value = coap_new_str_const("foobar".as_ptr(), "foobar".len());
+            let attr_name = coap_new_str_const(name.as_ptr(), name.len());
+            let attr_val = match val {
+                Some(val_str) => coap_new_str_const(val_str.as_ptr(), val_str.len()),
+                None => std::ptr::null_mut(),
+            };
+            // coap_new_str_const allocates memory, which should be freed when
+            // the resource is deleted. Freeing a null pointer is a no-op here
             coap_add_attr(
-                inner.raw_resource, name, value, 0 //TODO: Check if 0 is wrong here
+                inner.raw_resource,
+                attr_name,
+                attr_val,
+                (COAP_ATTR_FLAGS_RELEASE_NAME | COAP_ATTR_FLAGS_RELEASE_VALUE) as i32,
             );
         }
     }
