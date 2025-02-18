@@ -86,12 +86,6 @@ struct CoapContextInner<'a> {
     /// PKI context for encrypted server-side sessions.
     #[cfg(any(feature = "dtls-pki", feature = "dtls-rpk"))]
     pki_rpk_context: Option<ServerPkiRpkCryptoContext<'a>>,
-    /// The bytes representing the oscore_conf added to the context.
-    /// NOTE: This might be unnecessary depending if libcoap only
-    /// needs the data once and copies it somewhere!
-    /// TODO: CHECK
-    #[cfg(feature = "oscore")]
-    oscore_conf: Vec<u8>,
     /// A list of recipients associated with this context.
     #[cfg(feature = "oscore")]
     recipients: Vec<OscoreRecipient>,
@@ -143,8 +137,6 @@ impl<'a> CoapContext<'a> {
             psk_context: None,
             #[cfg(any(feature = "dtls-pki", feature = "dtls-rpk"))]
             pki_rpk_context: None,
-            #[cfg(feature = "oscore")]
-            oscore_conf: Vec::new(),
             #[cfg(feature = "oscore")]
             recipients: Vec::new(),
         });
@@ -420,7 +412,6 @@ impl CoapContext<'_> {
     pub fn add_oscore_conf(&mut self, seq_initial: u64, oscore_conf_bytes: &[u8]) {
         let mut oscore_conf = OscoreConf::new(seq_initial, oscore_conf_bytes);
         let mut inner_ref = self.inner.borrow_mut();
-        inner_ref.oscore_conf = oscore_conf_bytes.to_vec();
         unsafe {
             coap_context_oscore_server(inner_ref.raw_context, oscore_conf.as_mut_raw_conf());
         }
