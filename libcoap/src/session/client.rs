@@ -210,7 +210,7 @@ impl CoapClientSession<'_> {
         seq_initial: u64,
         conf: &[u8],
     ) -> Result<CoapClientSession<'a>, SessionCreationError> {
-        let conf = OscoreConf::new(seq_initial, conf);
+        let conf = OscoreConf::new(seq_initial, conf).expect("invalid oscore_conf provided");
 
         // TODO: SAFETY
         let session = unsafe {

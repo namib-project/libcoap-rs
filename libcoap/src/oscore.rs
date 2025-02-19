@@ -41,7 +41,7 @@ pub(crate) struct OscoreConf {
 }
 
 impl OscoreConf {
-    pub(crate) fn new(seq_initial: u64, oscore_conf_bytes: &[u8]) -> OscoreConf {
+    pub(crate) fn new(seq_initial: u64, oscore_conf_bytes: &[u8]) -> Option<OscoreConf> {
         let conf = coap_str_const_t {
             length: oscore_conf_bytes.len(),
             s: oscore_conf_bytes.as_ptr(),
@@ -55,7 +55,10 @@ impl OscoreConf {
         // TODO: SECURITY
         let oscore_conf = unsafe { coap_new_oscore_conf(conf, Some(save_seq_num), ptr::null_mut(), seq_initial) };
 
-        OscoreConf { conf: oscore_conf }
+        if (oscore_conf.is_null()) {
+            return None;
+        }
+        Some(OscoreConf { conf: oscore_conf })
     }
     // TODO: SECURITY
     pub(crate) fn as_mut_raw_conf(&mut self) -> *mut coap_oscore_conf_t {
