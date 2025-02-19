@@ -86,6 +86,10 @@ struct CoapContextInner<'a> {
     /// PKI context for encrypted server-side sessions.
     #[cfg(any(feature = "dtls-pki", feature = "dtls-rpk"))]
     pki_rpk_context: Option<ServerPkiRpkCryptoContext<'a>>,
+    /// Saves if appropriate oscore information has been added to the raw_context as stated by
+    /// libcoap to assume before adding/removing additional recipient_id's to it.
+    #[cfg(feature = "oscore")]
+    provided_oscore_information: bool,
     /// A list of recipients associated with this context.
     #[cfg(feature = "oscore")]
     recipients: Vec<OscoreRecipient>,
@@ -137,6 +141,8 @@ impl<'a> CoapContext<'a> {
             psk_context: None,
             #[cfg(any(feature = "dtls-pki", feature = "dtls-rpk"))]
             pki_rpk_context: None,
+            #[cfg(feature = "oscore")]
+            provided_oscore_information: false,
             #[cfg(feature = "oscore")]
             recipients: Vec::new(),
         });
@@ -413,17 +419,28 @@ impl CoapContext<'_> {
         let mut oscore_conf = OscoreConf::new(seq_initial, oscore_conf_bytes);
         let mut inner_ref = self.inner.borrow_mut();
 
+        let mut result = 0;
+
         // TODO: SAFETY
         unsafe {
-            coap_context_oscore_server(inner_ref.raw_context, oscore_conf.as_mut_raw_conf());
+            result = coap_context_oscore_server(inner_ref.raw_context, oscore_conf.as_mut_raw_conf());
+        }
+
+        if result != 0 {
+            inner_ref.provided_oscore_information = true;
         }
     }
 
     /// Adds an existing OscoreRecipient object to the CoapContext.
-    /// TODO: guarantee valid oscore (server)
     #[cfg(feature = "oscore")]
     pub fn add_new_oscore_recipient(&mut self, recipient_id: &str) {
         let mut inner_ref = self.inner.borrow_mut();
+
+        // Return if context has no appropriate oscore information.
+        if (!inner_ref.provided_oscore_information) {
+            eprintln!("tried adding recipient to context with no appropriate oscore information");
+            return;
+        }
 
         // Return if the recipient_id is already added as the coap_new_oscore_recipient
         // would free the raw struct for duplicate recipient_id's.
@@ -459,10 +476,15 @@ impl CoapContext<'_> {
     }
 
     /// Removes an existing OscoreRecipient from the CoapContext.
-    /// TODO: same as above
     #[cfg(feature = "oscore")]
     pub fn delete_oscore_recipient(&mut self, recipient_id: &str) {
         let mut inner_ref = self.inner.borrow_mut();
+
+        // Return if context has no appropriate oscore information.
+        if (!inner_ref.provided_oscore_information) {
+            eprintln!("tried removing recipient from context with no appropriate oscore information");
+            return;
+        }
 
         // Search for the recipient_id and recomove the OscoreRecipient if found.
         if let Some(index) = inner_ref
