@@ -412,6 +412,8 @@ impl CoapContext<'_> {
     pub fn add_oscore_conf(&mut self, seq_initial: u64, oscore_conf_bytes: &[u8]) {
         let mut oscore_conf = OscoreConf::new(seq_initial, oscore_conf_bytes);
         let mut inner_ref = self.inner.borrow_mut();
+
+        // TODO: SAFETY
         unsafe {
             coap_context_oscore_server(inner_ref.raw_context, oscore_conf.as_mut_raw_conf());
         }
@@ -423,6 +425,10 @@ impl CoapContext<'_> {
     pub fn add_new_oscore_recipient(&mut self, recipient_id: &str) {
         let mut inner_ref = self.inner.borrow_mut();
 
+        // Return if the recipient_id is already added as the coap_new_oscore_recipient
+        // would free the raw struct for duplicate recipient_id's.
+        // As we can't check why adding the recipient_id failed we have to filter
+        // this case to prevent a double free.
         if inner_ref
             .recipients
             .iter()
@@ -432,14 +438,24 @@ impl CoapContext<'_> {
         }
 
         let recipient = OscoreRecipient::new(recipient_id);
+        let mut result = 0;
 
-        // TODO: SECURITY
+        // SAFETY: If adding the recipient to the context fails we drop its underlying raw
+        // struct manually as it's not handled by the raw_context. There is one case where
+        // libcoap would already free the raw struct, which is filtered out above as we
+        // prevent adding a duplicate recipient_id to the context and return.
         unsafe {
-            coap_new_oscore_recipient(inner_ref.raw_context, recipient.get_c_struct());
+            result = coap_new_oscore_recipient(inner_ref.raw_context, recipient.get_c_struct());
         };
 
-        // TODO: fix this
-        inner_ref.recipients.push(recipient);
+        if result != 0 {
+            // Save the recipient to keep alive the pointer to its raw struct...
+            inner_ref.recipients.push(recipient);
+            println!("{}", result); // TODO: REMOVE DEBUG
+        } else {
+            // ...or else drop the raw struct if adding it failed.
+            recipient.drop();
+        }
     }
 
     /// Removes an existing OscoreRecipient from the CoapContext.
@@ -459,12 +475,19 @@ impl CoapContext<'_> {
                 .get(index)
                 .expect("could not get recipient from context, invalid index?");
 
-            // TODO: SECURITY
+            let mut result = 0;
+
+            // SAFETY: If libcoap successfully removed the recipient_id from the raw_context
+            // it's underlying raw strcut is also freed.
             unsafe {
-                coap_delete_oscore_recipient(inner_ref.raw_context, recipient.get_c_struct());
+                result = coap_delete_oscore_recipient(inner_ref.raw_context, recipient.get_c_struct());
             }
 
-            inner_ref.recipients.remove(index);
+            // Remove the OscoreRecipient from the CoapContext if it has been removed from the
+            // raw_context.
+            if result != 0 {
+                inner_ref.recipients.remove(index);
+            }
         }
     }
 
@@ -744,6 +767,9 @@ impl Drop for CoapContextInner<'_> {
         }
         // Clear endpoints because coap_free_context() would free their underlying raw structs.
         self.endpoints.clear();
+        // Clear OscoreRecipients because coap_free_context() would free their underlying raw structs.
+        #[cfg(feature = "oscore")]
+        self.recipients.clear();
         // Extract reference to CoapContextInner from raw context and drop it.
         // SAFETY: Value is set upon construction of the inner context and never deleted.
         unsafe {

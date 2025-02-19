@@ -107,4 +107,10 @@ impl OscoreRecipient {
     pub(crate) fn get_recipient_id(&self) -> &str {
         self.recipient_id.as_str()
     }
+    pub(crate) fn drop(&self) {
+        // TODO: SAFETY
+        unsafe {
+            Box::from_raw(self.get_c_struct());
+        }
+    }
 }
