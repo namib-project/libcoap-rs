@@ -25,8 +25,6 @@ use libcoap_sys::{
 use super::{CoapSessionCommon, CoapSessionInner, CoapSessionInnerProvider};
 #[cfg(feature = "dtls")]
 use crate::crypto::ClientCryptoContext;
-#[cfg(feature = "oscore")]
-use crate::oscore::OscoreConf;
 use crate::{
     context::CoapContext,
     error::SessionCreationError,
@@ -35,6 +33,8 @@ use crate::{
     prng::coap_prng_try_fill,
     types::CoapAddress,
 };
+#[cfg(feature = "oscore")]
+use crate::{error::OscoreConfigCreationError, oscore::OscoreConf};
 
 #[derive(Debug)]
 struct CoapClientSessionInner<'a> {
@@ -210,9 +210,12 @@ impl CoapClientSession<'_> {
         seq_initial: u64,
         conf: &[u8],
     ) -> Result<CoapClientSession<'a>, SessionCreationError> {
-        let conf = OscoreConf::new(seq_initial, conf).expect("invalid oscore_conf provided");
-
-        // TODO: SAFETY
+        let conf = match OscoreConf::new(seq_initial, conf) {
+            Ok(conf) => conf,
+            Err(OscoreConfigCreationError::Unknown) => return Err(SessionCreationError::OscoreConfigError),
+        };
+        // SAFETY: self.raw_context is guaranteed to be valid, local if can be null.
+        // OscoreConf was just checked for validity.
         let session = unsafe {
             coap_new_client_session_oscore(
                 ctx.as_mut_raw_context(),
@@ -225,7 +228,7 @@ impl CoapClientSession<'_> {
         if session.is_null() {
             return Err(SessionCreationError::Unknown);
         }
-        // TODO: SAFETY
+        // SAFETY: Session was just checked for validity.
         Ok(CoapClientSession {
             inner: unsafe { CoapClientSessionInner::new(session) },
         })

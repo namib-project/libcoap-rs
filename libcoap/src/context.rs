@@ -59,7 +59,10 @@ use crate::{
 };
 
 #[cfg(feature = "oscore")]
-use crate::{OscoreConf, OscoreRecipient};
+use crate::{
+    error::{OscoreConfigCreationError, OscoreRecipientError, OscoreServerCreationError},
+    OscoreConf, OscoreRecipient,
+};
 
 static COAP_STARTUP_ONCE: Once = Once::new();
 
@@ -415,31 +418,44 @@ impl CoapContext<'_> {
 
     /// Creates a new OscoreConf from bytes provded and adds it to the context
     #[cfg(feature = "oscore")]
-    pub fn add_oscore_conf(&mut self, seq_initial: u64, oscore_conf_bytes: &[u8]) {
-        let mut oscore_conf = OscoreConf::new(seq_initial, oscore_conf_bytes).expect("invalid oscore_config provided");
+    pub fn add_oscore_conf(
+        &mut self,
+        seq_initial: u64,
+        oscore_conf_bytes: &[u8],
+    ) -> Result<(), OscoreServerCreationError> {
+        let mut oscore_conf = match OscoreConf::new(seq_initial, oscore_conf_bytes) {
+            Ok(conf) => conf,
+            Err(OscoreConfigCreationError::Unknown) => return Err(OscoreServerCreationError::OscoreConfigError),
+        };
+
         let mut inner_ref = self.inner.borrow_mut();
+        let result: i32;
 
-        let mut result = 0;
-
-        // TODO: SAFETY
+        // SAFETY: OscoreConf was just checked for validity, which also means it raw struct has to
+        // be valid.
         unsafe {
             result = coap_context_oscore_server(inner_ref.raw_context, oscore_conf.as_mut_raw_conf());
+        };
+
+        // Check whether adding the config to the context failed.
+        if result == 0 {
+            return Err(OscoreServerCreationError::Unknown);
         }
 
-        if result != 0 {
-            inner_ref.provided_oscore_information = true;
-        }
+        inner_ref.provided_oscore_information = true;
+        Ok(())
     }
 
     /// Adds an existing OscoreRecipient object to the CoapContext.
     #[cfg(feature = "oscore")]
-    pub fn add_new_oscore_recipient(&mut self, recipient_id: &str) {
+    pub fn add_new_oscore_recipient(&mut self, recipient_id: &str) -> Result<(), OscoreRecipientError> {
         let mut inner_ref = self.inner.borrow_mut();
 
         // Return if context has no appropriate oscore information.
-        if (!inner_ref.provided_oscore_information) {
+        if !inner_ref.provided_oscore_information {
+            #[cfg(debug_assertions)]
             eprintln!("tried adding recipient to context with no appropriate oscore information");
-            return;
+            return Err(OscoreRecipientError::NoOscoreContext);
         }
 
         // Return if the recipient_id is already added as the coap_new_oscore_recipient
@@ -451,11 +467,11 @@ impl CoapContext<'_> {
             .iter()
             .any(|elem| elem.get_recipient_id() == recipient_id)
         {
-            return;
+            return Err(OscoreRecipientError::DuplicateId);
         }
 
         let recipient = OscoreRecipient::new(recipient_id);
-        let mut result = 0;
+        let result: i32;
 
         // SAFETY: If adding the recipient to the context fails we drop its underlying raw
         // struct manually as it's not handled by the raw_context. There is one case where
@@ -465,28 +481,33 @@ impl CoapContext<'_> {
             result = coap_new_oscore_recipient(inner_ref.raw_context, recipient.get_c_struct());
         };
 
-        if result != 0 {
-            // Save the recipient to keep alive the pointer to its raw struct...
-            inner_ref.recipients.push(recipient);
-            println!("{}", result); // TODO: REMOVE DEBUG
-        } else {
-            // ...or else drop the raw struct if adding it failed.
+        // Drop the raw struct if adding it failed (except for duplicate id)...
+        // SAFETY: This should be safe to use here as 'coap_new_oscore_recipient()' would only
+        // free() the raw strcuct on failure due to a duplicate recipient_id, which is filtered
+        // out above.
+        if result == 0 {
             recipient.drop();
+            return Err(OscoreRecipientError::Unknown);
         }
+
+        // ...or else save the recipient to keep alive the pointer to its raw struct.
+        inner_ref.recipients.push(recipient);
+        Ok(())
     }
 
     /// Removes an existing OscoreRecipient from the CoapContext.
     #[cfg(feature = "oscore")]
-    pub fn delete_oscore_recipient(&mut self, recipient_id: &str) {
+    pub fn delete_oscore_recipient(&mut self, recipient_id: &str) -> Result<(), OscoreRecipientError> {
         let mut inner_ref = self.inner.borrow_mut();
 
         // Return if context has no appropriate oscore information.
-        if (!inner_ref.provided_oscore_information) {
+        if !inner_ref.provided_oscore_information {
+            #[cfg(debug_assertions)]
             eprintln!("tried removing recipient from context with no appropriate oscore information");
-            return;
+            return Err(OscoreRecipientError::NoOscoreContext);
         }
 
-        // Search for the recipient_id and recomove the OscoreRecipient if found.
+        // Search for the recipient_id and try to remove the OscoreRecipient if found.
         if let Some(index) = inner_ref
             .recipients
             .iter()
@@ -497,20 +518,26 @@ impl CoapContext<'_> {
                 .get(index)
                 .expect("could not get recipient from context, invalid index?");
 
-            let mut result = 0;
+            let result: i32;
 
             // SAFETY: If libcoap successfully removed the recipient_id from the raw_context
-            // it's underlying raw strcut is also freed.
+            // it's underlying raw struct is also freed. The recipients raw_struct should always be
+            // valid, as it would have been removed from the context onces deleting it succeeded.
             unsafe {
                 result = coap_delete_oscore_recipient(inner_ref.raw_context, recipient.get_c_struct());
+            };
+
+            // Check whether removing the recipient failed.
+            if result == 0 {
+                return Err(OscoreRecipientError::Unknown);
             }
 
-            // Remove the OscoreRecipient from the CoapContext if it has been removed from the
-            // raw_context.
-            if result != 0 {
-                inner_ref.recipients.remove(index);
-            }
+            // Remove the OscoreRecipient from the CoapContext if it has been successfully removed
+            // from the raw_context.
+            inner_ref.recipients.remove(index);
+            return Ok(());
         }
+        Err(OscoreRecipientError::NotFound)
     }
 
     /// Creates a new DTLS endpoint that is bound to the given address.

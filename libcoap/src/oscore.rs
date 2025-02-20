@@ -6,6 +6,8 @@ use std::{
     ptr,
 };
 
+use crate::error::OscoreConfigCreationError;
+
 // TODO: An even more insecure place to save the sequence number :)
 static OSCORE_SEQ_SAFE_FILE_PATH: &str = "oscore.seq";
 
@@ -41,7 +43,7 @@ pub(crate) struct OscoreConf {
 }
 
 impl OscoreConf {
-    pub(crate) fn new(seq_initial: u64, oscore_conf_bytes: &[u8]) -> Option<OscoreConf> {
+    pub(crate) fn new(seq_initial: u64, oscore_conf_bytes: &[u8]) -> Result<Self, OscoreConfigCreationError> {
         let conf = coap_str_const_t {
             length: oscore_conf_bytes.len(),
             s: oscore_conf_bytes.as_ptr(),
@@ -52,13 +54,14 @@ impl OscoreConf {
             None => seq_initial,
         };
 
-        // TODO: SECURITY
+        // SAFETY: It is expected, that the user provides valid oscore_conf bytes. In case of
+        // failure this will return None which will currently
         let oscore_conf = unsafe { coap_new_oscore_conf(conf, Some(save_seq_num), ptr::null_mut(), seq_initial) };
 
-        if (oscore_conf.is_null()) {
-            return None;
+        if oscore_conf.is_null() {
+            return Err(OscoreConfigCreationError::Unknown);
         }
-        Some(OscoreConf { conf: oscore_conf })
+        Ok(Self { conf: oscore_conf })
     }
     // TODO: SECURITY
     pub(crate) fn as_mut_raw_conf(&mut self) -> *mut coap_oscore_conf_t {
@@ -111,9 +114,14 @@ impl OscoreRecipient {
         self.recipient_id.as_str()
     }
     pub(crate) fn drop(&self) {
-        // TODO: SAFETY
+        // SAFETY: THIS SHOULD NEVER BE CALLED UNLESS YOU'RE SURE THE coap_bin_const_t HAS NOT BEEN
+        // FREED BEFORE!
+        // Currently this is only used in 'add_new_oscore_recipient()' in case the recipient is not
+        // added to the context (which would free the raw pointer when dropped). There is Currently
+        // only one expection, which is filtered out, because trying to add a duplicate recipient
+        // to the oscore context would already trigger a free() in libcoap
         unsafe {
-            Box::from_raw(self.get_c_struct());
+            let _ = Box::from_raw(self.get_c_struct());
         }
     }
 }
