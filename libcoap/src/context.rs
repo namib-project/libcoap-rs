@@ -442,6 +442,20 @@ impl CoapContext<'_> {
             return Err(OscoreServerCreationError::Unknown);
         }
 
+        let mut initial_recipient: Option<&str> = None;
+        let oscore_conf = std::str::from_utf8(oscore_conf_bytes).expect("could not parse config bytes to str");
+        for line in oscore_conf.lines() {
+            if line.starts_with("recipient_id") {
+                let parts: Vec<&str> = line.split(",").collect();
+                initial_recipient = Some(parts[2].trim().trim_matches('"'));
+                break;
+            }
+        }
+        if let Some(initial_recipient) = initial_recipient {
+            let initial_recipient = OscoreRecipient::new(initial_recipient);
+            inner_ref.recipients.push(initial_recipient);
+        }
+
         inner_ref.provided_oscore_information = true;
         Ok(())
     }
