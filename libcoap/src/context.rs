@@ -416,25 +416,20 @@ impl CoapContext<'_> {
         self.add_endpoint(addr, coap_proto_t_COAP_PROTO_TCP)
     }
 
-    /// Creates a new OscoreConf from bytes provded and adds it to the context
+    /// Set the context's default OSCORE configuration for a server.
     #[cfg(feature = "oscore")]
-    pub fn add_oscore_conf(
-        &mut self,
-        seq_initial: u64,
-        oscore_conf_bytes: &[u8],
-    ) -> Result<(), OscoreServerCreationError> {
-        let mut oscore_conf = match OscoreConf::new(seq_initial, oscore_conf_bytes) {
-            Ok(conf) => conf,
-            Err(OscoreConfigCreationError::Unknown) => return Err(OscoreServerCreationError::OscoreConfigError),
-        };
-
+    pub fn oscore_server(&mut self, mut oscore_conf: OscoreConf) -> Result<(), OscoreServerCreationError> {
         let mut inner_ref = self.inner.borrow_mut();
         let result: i32;
 
-        // SAFETY: OscoreConf was just checked for validity, which also means it raw struct has to
-        // be valid.
+        // SAFETY: OscoreConf raw_conf should be always valid.
+        // This will also always free the raw_conf, regardless of the result:
+        // https://libcoap.net/doc/reference/4.3.5/group__oscore.html#ga71ddf56bcd6d6650f8235ee252fde47f
+        // [libcoap 4.3.5]
+        // - src/coap_oscore.c:2046
+        // - src/coap_oscore.c:2055
         unsafe {
-            result = coap_context_oscore_server(inner_ref.raw_context, oscore_conf.as_mut_raw_conf());
+            result = coap_context_oscore_server(inner_ref.raw_context, oscore_conf.clone_mut_raw_conf());
         };
 
         // Check whether adding the config to the context failed.
@@ -442,27 +437,20 @@ impl CoapContext<'_> {
             return Err(OscoreServerCreationError::Unknown);
         }
 
-        let mut initial_recipient: Option<&str> = None;
-        let oscore_conf = std::str::from_utf8(oscore_conf_bytes).expect("could not parse config bytes to str");
-        for line in oscore_conf.lines() {
-            if line.starts_with("recipient_id") {
-                let parts: Vec<&str> = line.split(",").collect();
-                initial_recipient = Some(parts[2].trim().trim_matches('"'));
-                break;
-            }
-        }
-        if let Some(initial_recipient) = initial_recipient {
-            let initial_recipient = OscoreRecipient::new(initial_recipient);
+        // Add the initial_recipient (if present).
+        if let Some(initial_recipient) = oscore_conf.initial_recipient.clone() {
+            let initial_recipient = OscoreRecipient::new(initial_recipient.as_str());
             inner_ref.recipients.push(initial_recipient);
         }
 
+        // Mark context as valid oscore server.
         inner_ref.provided_oscore_information = true;
         Ok(())
     }
 
-    /// Adds an existing OscoreRecipient object to the CoapContext.
+    /// Adds a recipient_id to the OscoreContext.
     #[cfg(feature = "oscore")]
-    pub fn add_new_oscore_recipient(&mut self, recipient_id: &str) -> Result<(), OscoreRecipientError> {
+    pub fn new_oscore_recipient(&mut self, recipient_id: &str) -> Result<(), OscoreRecipientError> {
         let mut inner_ref = self.inner.borrow_mut();
 
         // Return if context has no appropriate oscore information.
@@ -509,7 +497,7 @@ impl CoapContext<'_> {
         Ok(())
     }
 
-    /// Removes an existing OscoreRecipient from the CoapContext.
+    /// Removes a recipient_id from the OscoreContext.
     #[cfg(feature = "oscore")]
     pub fn delete_oscore_recipient(&mut self, recipient_id: &str) -> Result<(), OscoreRecipientError> {
         let mut inner_ref = self.inner.borrow_mut();

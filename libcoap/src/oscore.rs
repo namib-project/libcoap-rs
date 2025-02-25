@@ -11,6 +11,7 @@ use crate::error::OscoreConfigCreationError;
 // TODO: An even more insecure place to save the sequence number :)
 static OSCORE_SEQ_SAFE_FILE_PATH: &str = "oscore.seq";
 
+#[cfg(feature = "std")]
 extern "C" fn save_seq_num(seq_num: u64, _param: *mut c_void) -> i32 {
     let mut oscore_seq_safe_file = match OpenOptions::new()
         .write(true)
@@ -36,54 +37,93 @@ extern "C" fn save_seq_num(seq_num: u64, _param: *mut c_void) -> i32 {
     1
 }
 
+#[cfg(feature = "std")]
+fn read_initial_seq_num() -> Option<u64> {
+    let file = match File::open(OSCORE_SEQ_SAFE_FILE_PATH) {
+        Ok(f) => f,
+        Err(_) => return None,
+    };
+
+    let mut reader = BufReader::new(file);
+
+    let mut line = String::new();
+    if reader.read_line(&mut line).is_ok() {
+        return match line.trim().parse() {
+            Ok(num) => Some(num),
+            Err(_) => None,
+        };
+    }
+    None
+}
+
 // Represents a oscore conf object which stores the underlying
 // coap_oscore_conf_t strcut.
-pub(crate) struct OscoreConf {
-    conf: *mut coap_oscore_conf_t,
+pub struct OscoreConf {
+    raw_conf: *mut coap_oscore_conf_t,
+    pub(crate) initial_recipient: Option<String>,
 }
 
 impl OscoreConf {
-    pub(crate) fn new(seq_initial: u64, oscore_conf_bytes: &[u8]) -> Result<Self, OscoreConfigCreationError> {
+    #[cfg(feature = "std")]
+    pub fn new_std(seq_initial: u64, oscore_conf_bytes: &[u8]) -> Result<Self, OscoreConfigCreationError> {
+        Self::new(seq_initial, oscore_conf_bytes, save_seq_num, read_initial_seq_num)
+    }
+    pub fn new(
+        seq_initial: u64,
+        oscore_conf_bytes: &[u8],
+        save_seq_num_func: extern "C" fn(seq_num: u64, _param: *mut c_void) -> i32,
+        read_initial_seq_num_func: fn() -> Option<u64>,
+    ) -> Result<Self, OscoreConfigCreationError> {
         let conf = coap_str_const_t {
             length: oscore_conf_bytes.len(),
             s: oscore_conf_bytes.as_ptr(),
         };
 
-        let seq_initial = match OscoreConf::read_initial_sequence_number() {
+        let seq_initial = match read_initial_seq_num_func() {
             Some(num) => num,
             None => seq_initial,
         };
 
         // SAFETY: It is expected, that the user provides valid oscore_conf bytes. In case of
-        // failure this will return None which will currently
-        let oscore_conf = unsafe { coap_new_oscore_conf(conf, Some(save_seq_num), ptr::null_mut(), seq_initial) };
+        // failure this will return null which will result in an error beeing thrown.
+        let oscore_conf = unsafe { coap_new_oscore_conf(conf, Some(save_seq_num_func), ptr::null_mut(), seq_initial) };
 
         if oscore_conf.is_null() {
             return Err(OscoreConfigCreationError::Unknown);
         }
-        Ok(Self { conf: oscore_conf })
-    }
-    // TODO: SECURITY
-    pub(crate) fn as_mut_raw_conf(&mut self) -> *mut coap_oscore_conf_t {
-        self.conf
-    }
 
-    fn read_initial_sequence_number() -> Option<u64> {
-        let file = match File::open(OSCORE_SEQ_SAFE_FILE_PATH) {
-            Ok(f) => f,
-            Err(_) => return None,
-        };
-
-        let mut reader = BufReader::new(file);
-
-        let mut line = String::new();
-        if reader.read_line(&mut line).is_ok() {
-            return match line.trim().parse() {
-                Ok(num) => Some(num),
-                Err(_) => None,
-            };
+        // Safe the initial recipient_id (if present). This needs to be added to the context when
+        // calling oscore_server to prevent a double free when trying to add an identical
+        // recipient_id later.
+        let mut initial_recipient: Option<String> = None;
+        let oscore_conf_str = core::str::from_utf8(oscore_conf_bytes).expect("could not parse config bytes to str");
+        for line in oscore_conf_str.lines() {
+            if line.starts_with("recipient_id") {
+                let parts: Vec<&str> = line.split(",").collect();
+                initial_recipient = Some(parts[2].trim().trim_matches('"').to_string());
+                break;
+            }
         }
-        None
+
+        Ok(Self {
+            raw_conf: oscore_conf,
+            initial_recipient,
+        })
+    }
+    /// SAFETY: raw_conf should be always valid until the OscoreConf is dropped, calling this
+    /// function will only return a copy of the raw_conf which has to bee freed by the caller.
+    /// The intitial raw_conf held within the OscoreConf is dropped via its Drop trade.
+    pub(crate) fn clone_mut_raw_conf(&mut self) -> *mut coap_oscore_conf_t {
+        self.raw_conf.clone()
+    }
+}
+
+impl Drop for OscoreConf {
+    fn drop(&mut self) {
+        // SAFETY: The raw_conf is always cloned which means its pointer still has to be valid.
+        unsafe {
+            Box::from_raw(self.raw_conf);
+        }
     }
 }
 
