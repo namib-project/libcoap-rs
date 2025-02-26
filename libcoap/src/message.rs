@@ -1,14 +1,20 @@
-use std::{borrow::Borrow, marker::PhantomData, mem::MaybeUninit};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    marker::PhantomData,
+    mem::MaybeUninit,
+};
 
-use coap_message::{MessageOption, ReadableMessage};
+use coap_message::{MessageOption, MinimalWritableMessage, ReadableMessage};
 use libcoap_sys::{
-    coap_get_data, coap_opt_iterator_t, coap_opt_length, coap_opt_t, coap_opt_value, coap_option_iterator_init,
-    coap_option_next, coap_option_num_t, coap_pdu_get_code, coap_pdu_t,
+    coap_add_data, coap_add_data_large_request, coap_add_option, coap_get_data, coap_opt_iterator_t, coap_opt_length,
+    coap_opt_t, coap_opt_value, coap_option_iterator_init, coap_option_next, coap_option_num_t, coap_pdu_get_code,
+    coap_pdu_set_code, coap_pdu_t,
 };
 
 use crate::{
     error::{MessageConversionError, OptionParsingError},
-    protocol::CoapMessageCode,
+    protocol::{CoapMessageCode, CoapOptionType},
+    session::CoapSession,
 };
 
 pub struct Pdu<T: Borrow<coap_pdu_t>> {
@@ -17,8 +23,18 @@ pub struct Pdu<T: Borrow<coap_pdu_t>> {
     code: CoapMessageCode,
 }
 
-impl<T: Borrow<coap_pdu_t>> Pdu<T> {
-    unsafe fn new(raw_pdu: T) -> Result<Self, MessageConversionError> {
+pub struct PduBuilder<'r, T: BorrowMut<coap_pdu_t>, R: Borrow<coap_pdu_t> = &'static coap_pdu_t> {
+    pdu: Pdu<T>,
+    /// If this is a response to a previous message: The message that is responded to.
+    /// Required in order to use large data responses.
+    in_response_to: &'r Pdu<R>,
+    session: &'r CoapSession<'r>,
+}
+
+impl<'r, T: BorrowMut<coap_pdu_t>, R: Borrow<coap_pdu_t>> PduBuilder<'r, T, R> {}
+
+impl<'r, T: Borrow<coap_pdu_t>, R: Borrow<coap_pdu_t>> Pdu<'r, T, R> {
+    unsafe fn new(raw_pdu: T, in_response_to: Option<&'r Pdu<'r, R>>) -> Result<Self, MessageConversionError> {
         let code = unsafe { CoapMessageCode::try_from(coap_pdu_get_code(raw_pdu.borrow()))? };
 
         // Check message size (because we can still return an error here, but can't do so in the
@@ -31,7 +47,19 @@ impl<T: Borrow<coap_pdu_t>> Pdu<T> {
             return Err(MessageConversionError::TooLarge(payload_len));
         }
 
-        Ok(Self { raw_pdu, code })
+        Ok(Self {
+            raw_pdu,
+            code,
+            in_response_to,
+        })
+    }
+
+    unsafe fn new_request(raw_pdu: T) -> Result<Self, MessageConversionError> {
+        Pdu::new(raw_pdu, None)
+    }
+
+    unsafe fn new_response(raw_pdu: T, in_response_to: &'r Pdu<'r, R>) -> Result<Self, MessageConversionError> {
+        Pdu::new(raw_pdu, Some(in_response_to))
     }
 
     pub(crate) fn into_raw_pdu(self) -> T {
@@ -39,16 +67,18 @@ impl<T: Borrow<coap_pdu_t>> Pdu<T> {
     }
 }
 
-impl<T: Borrow<coap_pdu_t>> ReadableMessage for Pdu<T> {
+impl<'r, T: Borrow<coap_pdu_t>, R: Borrow<coap_pdu_t>> ReadableMessage for Pdu<'r, T, R> {
     type Code = CoapMessageCode;
     type MessageOption<'a>
         = Opt<'a>
     where
-        T: 'a;
+        T: 'a,
+        'r: 'a;
     type OptionsIter<'a>
         = OptIterator<'a>
     where
-        T: 'a;
+        T: 'a,
+        'r: 'a;
 
     fn code(&self) -> Self::Code {
         self.code
@@ -89,16 +119,61 @@ impl<T: Borrow<coap_pdu_t>> ReadableMessage for Pdu<T> {
     }
 }
 
+impl<'r, T: BorrowMut<coap_pdu_t>, R: Borrow<coap_pdu_t>> MinimalWritableMessage for Pdu<'r, T, R> {
+    type AddOptionError = MessageConversionError;
+    type Code = CoapMessageCode;
+    type OptionNumber = CoapOptionType;
+    type SetPayloadError = MessageConversionError;
+    type UnionError = MessageConversionError;
+
+    fn set_code(&mut self, code: Self::Code) {
+        unsafe { coap_pdu_set_code(self.raw_pdu.borrow_mut(), code.to_raw_pdu_code()) }
+    }
+
+    fn add_option(&mut self, number: Self::OptionNumber, value: &[u8]) -> Result<(), Self::AddOptionError> {
+        if unsafe {
+            coap_add_option(
+                self.raw_pdu.borrow_mut(),
+                number.to_raw_option_num(),
+                value.len(),
+                value.as_ptr(),
+            )
+        } == 0
+        {
+            Err(MessageConversionError::Unknown)
+        } else {
+            Ok(())
+        }
+    }
+
+    fn set_payload(&mut self, data: &[u8]) -> Result<(), Self::SetPayloadError> {
+        let data = Vec::from(data).into_boxed_slice();
+        if let Some(in_reponse_to) = self.in_response_to {
+            unsafe { coap_add_data_large_request() }
+        } else {
+            unsafe { coap_add_data_large_request() }
+        }
+        // TODO large data
+        if unsafe { coap_add_data(self.raw_pdu.borrow_mut(), data.len(), data.as_ptr()) } == 1 {
+            Ok(())
+        } else {
+            Err(MessageConversionError::Unknown)
+        }
+    }
+}
+
 pub struct Opt<'a> {
     number: coap_option_num_t,
     raw_option: &'a coap_opt_t,
 }
 
 impl<'a> Opt<'a> {
+    /// SAFETY: `raw_option` must point to a valid instance of `coap_opt_t`.
     unsafe fn new(number: coap_option_num_t, raw_option: &'a coap_opt_t) -> Result<Self, OptionParsingError> {
         // Just some sanity checks that are required to call core::slice::from_raw_parts later on.
         // We perform these checks now, because we can return an error here, while in the
         // MessageOption implementation, we do not return a Result.
+        // TODO maybe use coap_opt_parse to validate the length of the option.
         unsafe {
             let opt_value = coap_opt_value(raw_option);
             // Panicking here is fine, because the return value of coap_opt_length should be
@@ -120,11 +195,10 @@ impl<'a> MessageOption for Opt<'a> {
     }
 
     fn value(&self) -> &[u8] {
-        // SAFETY: By the constructor contract, MessageOpt contains a valid coap_opt_t, so calling
+        // SAFETY: By the constructor contract, raw_option contains a valid coap_opt_t, so calling
         // coap_opt_value and coap_opt_length is safe.
         // coap_opt_value may return a null value if the option is invalid, but we have checked
         // that this is not the case in the constructor.
-        // Therefore,
         unsafe {
             let opt_value = coap_opt_value(self.raw_option);
             // Panicking is fine here, because coap_opt_length should always return a size_t, and if

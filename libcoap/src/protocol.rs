@@ -11,11 +11,12 @@
 //! Various types that are specified and defined in the CoAP standard and its extensions.
 
 use std::{
+    convert::Infallible,
     ffi::CStr,
     fmt::{Display, Formatter},
 };
 
-use coap_message::Code;
+use coap_message::{Code, OptionNumber};
 use libcoap_sys::{
     coap_option_num_t, coap_pdu_code_t, coap_pdu_code_t_COAP_EMPTY_CODE, coap_pdu_code_t_COAP_REQUEST_CODE_DELETE,
     coap_pdu_code_t_COAP_REQUEST_CODE_FETCH, coap_pdu_code_t_COAP_REQUEST_CODE_GET,
@@ -159,6 +160,14 @@ pub enum CoapOptionType {
     RTag = COAP_OPTION_RTAG as u16,
     #[num_enum(catch_all)]
     Other(u16),
+}
+
+impl OptionNumber for CoapOptionType {
+    type Error = Infallible;
+
+    fn new(option: u16) -> Result<Self, <Self as OptionNumber>::Error> {
+        Self::try_from(option)
+    }
 }
 
 impl CoapOptionType {

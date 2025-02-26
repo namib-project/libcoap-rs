@@ -10,7 +10,7 @@
 
 //! Error types
 
-use std::{ffi::NulError, fmt::Debug, string::FromUtf8Error, sync::PoisonError};
+use std::{convert::Infallible, ffi::NulError, fmt::Debug, string::FromUtf8Error, sync::PoisonError};
 
 use coap_message::{error::RenderableOnMinimal, MinimalWritableMessage};
 use libcoap_sys::coap_pdu_code_t;
@@ -170,6 +170,20 @@ pub enum MessageConversionError {
     /// Unknown error inside of libcoap.
     #[error("unknown CoAP message conversion error")]
     Unknown,
+}
+
+impl RenderableOnMinimal for MessageConversionError {
+    type Error<IE: RenderableOnMinimal + Debug> = IE;
+
+    fn render<M: MinimalWritableMessage>(self, message: &mut M) -> Result<(), Self::Error<M::UnionError>> {
+        todo!()
+    }
+}
+
+impl From<Infallible> for MessageConversionError {
+    fn from(_value: Infallible) -> Self {
+        unreachable!()
+    }
 }
 
 impl From<UriParsingError> for MessageConversionError {
