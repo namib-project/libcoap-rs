@@ -314,11 +314,13 @@ impl<D: Any + ?Sized + Debug> CoapResource<D> {
         }
     }
 
-    // TODO: Decide on naming and placement
-    // TODO: Documentation
+    /// Adds an attribute with a name and an optional value to a CoAP resource object.
+    /// # Safety
+    /// libcoap uses the passed pointers "attr_name" and "attr_val" here.
+    /// Because of the passed flags, libcoap takes ownership of these pointers.
+    /// Passing NULL for the value is safe, since libcoap only frees the value, if it's not NULL.
     pub fn add_attr(&self, name: &str, val: Option<&str>) {
         let mut inner = self.inner.borrow_mut();
-        //TODO: Verify Security
         unsafe {
             let attr_name = coap_new_str_const(name.as_ptr(), name.len());
             let attr_val = match val {

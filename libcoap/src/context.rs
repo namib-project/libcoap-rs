@@ -410,9 +410,11 @@ impl CoapContext<'_> {
         self.add_endpoint(addr, coap_proto_t_COAP_PROTO_DTLS)
     }
 
-    // TODO: Find correct naming and placement in file
-    // TODO: Documentation
     // TODO: Possibly wrap in feature?
+    /// Joins a multicastgroup
+    /// # Safety
+    /// The libcoap function does not modify/delete any variables here.
+    /// NULL for the interface is handled internally in the libcoap function, therefore safe.
     pub fn join_mcast_group_intf(
         &mut self,
         groupname: &str,
@@ -425,7 +427,6 @@ impl CoapContext<'_> {
             Some(if_in) => if_in.as_ptr(),
             None => std::ptr::null(),
         };
-        // TODO: SECURITY
         unsafe {
             let ret = coap_join_mcast_group_intf(inner_ref.raw_context, mcast_groupname.as_ptr(), mcast_ifname_ptr);
             if ret != 0 {
