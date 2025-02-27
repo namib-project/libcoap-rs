@@ -1,9 +1,9 @@
+use core::{ffi::c_void, ptr};
 use libcoap_sys::{coap_bin_const_t, coap_new_oscore_conf, coap_oscore_conf_t, coap_str_const_t};
+#[cfg(feature = "std")]
 use std::{
     fs::{self, File, OpenOptions},
     io::{BufRead, BufReader, Write},
-    os::raw::c_void,
-    ptr,
 };
 
 use crate::error::OscoreConfigCreationError;
