@@ -3,19 +3,19 @@ use std::{
     marker::PhantomData,
     mem::MaybeUninit,
 };
-
-use coap_message::{MessageOption, MinimalWritableMessage, ReadableMessage};
-use libcoap_sys::{
-    coap_add_data, coap_add_data_large_request, coap_add_option, coap_get_data, coap_opt_iterator_t, coap_opt_length,
-    coap_opt_t, coap_opt_value, coap_option_iterator_init, coap_option_next, coap_option_num_t, coap_pdu_get_code,
-    coap_pdu_set_code, coap_pdu_t,
-};
+use std::ptr::NonNull;
+use coap_message::{MessageOption, MinimalWritableMessage, ReadableMessage, SeekWritableMessage};
+use libcoap_sys::{coap_add_data, coap_add_data_large_request, coap_add_option, coap_delete_pdu, coap_get_data, coap_insert_optlist, coap_new_optlist, coap_new_pdu, coap_opt_iterator_t, coap_opt_length, coap_opt_t, coap_opt_value, coap_option_iterator_init, coap_option_next, coap_option_num_t, coap_optlist_t, coap_pdu_get_code, coap_pdu_init, coap_pdu_set_code, coap_pdu_t};
 
 use crate::{
     error::{MessageConversionError, OptionParsingError},
     protocol::{CoapMessageCode, CoapOptionType},
     session::CoapSession,
 };
+use crate::error::MessageCreationError;
+use crate::mem::OwnedCoapStructRef;
+use crate::protocol::{CoapMessageType, CoapRequestCode, CoapToken};
+use crate::session::CoapSessionCommon;
 
 pub struct Pdu<T: Borrow<coap_pdu_t>> {
     /// Reference to the raw PDU object that contains the actual data.
@@ -27,15 +27,74 @@ pub struct PduBuilder<'r, T: BorrowMut<coap_pdu_t>, R: Borrow<coap_pdu_t> = &'st
     pdu: Pdu<T>,
     /// If this is a response to a previous message: The message that is responded to.
     /// Required in order to use large data responses.
-    in_response_to: &'r Pdu<R>,
+    in_response_to: Option<&'r Pdu<R>>,
     session: &'r CoapSession<'r>,
+    payload: Option<Box<[u8]>>,
+    optlist: *mut coap_optlist_t,
 }
 
-impl<'r, T: BorrowMut<coap_pdu_t>, R: Borrow<coap_pdu_t>> PduBuilder<'r, T, R> {}
+impl<'r, T: BorrowMut<coap_pdu_t>, R: Borrow<coap_pdu_t>> PduBuilder<'r, T, R> {
+    pub fn with_request_pdu(pdu: Pdu<T>, session: &'r CoapSession<'r>) -> Result<Self, MessageConversionError> {
+        Ok(Self {
+            pdu,
+            in_response_to: None,
+            session,
+            payload: None,
+            optlist: std::ptr::null_mut(),
+        })
+    }
 
-impl<'r, T: Borrow<coap_pdu_t>, R: Borrow<coap_pdu_t>> Pdu<'r, T, R> {
-    unsafe fn new(raw_pdu: T, in_response_to: Option<&'r Pdu<'r, R>>) -> Result<Self, MessageConversionError> {
-        let code = unsafe { CoapMessageCode::try_from(coap_pdu_get_code(raw_pdu.borrow()))? };
+    pub fn with_response_pdu(pdu: Pdu<T>, in_response_to: &'r Pdu<R>, session: &'r CoapSession<'r>) -> Result<Self, MessageConversionError> {
+        Ok(Self {
+            pdu,
+            in_response_to: Some(in_response_to),
+            session,
+            payload: None,
+            optlist: std::ptr::null_mut(),
+        })
+    }
+
+    pub fn build(self) -> Result<Pdu<T>, MessageConversionError> {
+        todo!()
+    }
+}
+
+impl<'a> Pdu<OwnedCoapStructRef<'static, coap_pdu_t>> {
+    pub fn new(type_: CoapMessageType, code: CoapMessageCode, mid: std::ffi::c_int, max_size: usize) -> Result<Self, MessageCreationError> {
+        // SAFETY: calling coap_pdu_init with valid arguments, result is either NULL (which will be
+        // converted into a MessageCreationError) or should be convertible to a reference.
+        // PDU lifetime may be arbitrary, as we are the ones who destruct it
+        let raw_pdu = unsafe {
+            OwnedCoapStructRef::new(
+                NonNull::new(coap_pdu_init(type_.to_raw_pdu_type(), code.to_raw_pdu_code(), mid, max_size)).ok_or(MessageCreationError::Unknown)?.as_mut(),
+                coap_delete_pdu,
+            )
+        };
+
+        Ok(Self {
+            raw_pdu: raw_pdu,
+            code,
+        })
+    }
+
+    pub fn with_request_session(type_: CoapMessageType, code: CoapRequestCode, session: &CoapSession) -> Result<Self, MessageCreationError> {
+        // SAFETY: calling coap_pdu_init with valid arguments, result is either NULL (which will be
+        // converted into a MessageCreationError) or should be convertible to a reference.
+        // PDU lifetime may be arbitrary, as we are the ones who destruct it
+        let raw_pdu = unsafe { OwnedCoapStructRef::new(NonNull::new(coap_new_pdu(type_.to_raw_pdu_type(), code.into(), session.raw_session_mut())).ok_or(MessageCreationError::Unknown)?.as_mut(), coap_delete_pdu) };
+
+        Ok(Self {
+            raw_pdu: raw_pdu,
+            code: code.into(),
+        })
+    }
+}
+
+impl<'r, T: Borrow<coap_pdu_t>> Pdu<T> {
+    /// SAFETY: Pointers referenced in raw_pdu's coap_pdu_t instance must be valid.
+    unsafe fn with_raw_pdu(raw_pdu: T) -> Result<Self, MessageConversionError> {
+        // SAFETY: calling coap_pdu_get_code with any valid PDU is safe.
+        let code = CoapMessageCode::try_from(unsafe { coap_pdu_get_code(raw_pdu.borrow()) })?;
 
         // Check message size (because we can still return an error here, but can't do so in the
         // ReadableMessage trait impl).
@@ -50,16 +109,7 @@ impl<'r, T: Borrow<coap_pdu_t>, R: Borrow<coap_pdu_t>> Pdu<'r, T, R> {
         Ok(Self {
             raw_pdu,
             code,
-            in_response_to,
         })
-    }
-
-    unsafe fn new_request(raw_pdu: T) -> Result<Self, MessageConversionError> {
-        Pdu::new(raw_pdu, None)
-    }
-
-    unsafe fn new_response(raw_pdu: T, in_response_to: &'r Pdu<'r, R>) -> Result<Self, MessageConversionError> {
-        Pdu::new(raw_pdu, Some(in_response_to))
     }
 
     pub(crate) fn into_raw_pdu(self) -> T {
@@ -67,18 +117,16 @@ impl<'r, T: Borrow<coap_pdu_t>, R: Borrow<coap_pdu_t>> Pdu<'r, T, R> {
     }
 }
 
-impl<'r, T: Borrow<coap_pdu_t>, R: Borrow<coap_pdu_t>> ReadableMessage for Pdu<'r, T, R> {
+impl<T: Borrow<coap_pdu_t>> ReadableMessage for Pdu<T> {
     type Code = CoapMessageCode;
     type MessageOption<'a>
         = Opt<'a>
     where
-        T: 'a,
-        'r: 'a;
+        T: 'a;
     type OptionsIter<'a>
         = OptIterator<'a>
     where
-        T: 'a,
-        'r: 'a;
+        T: 'a;
 
     fn code(&self) -> Self::Code {
         self.code
@@ -119,7 +167,7 @@ impl<'r, T: Borrow<coap_pdu_t>, R: Borrow<coap_pdu_t>> ReadableMessage for Pdu<'
     }
 }
 
-impl<'r, T: BorrowMut<coap_pdu_t>, R: Borrow<coap_pdu_t>> MinimalWritableMessage for Pdu<'r, T, R> {
+impl<'r, T: BorrowMut<coap_pdu_t>, R: Borrow<coap_pdu_t>> MinimalWritableMessage for PduBuilder<'r, T, R> {
     type AddOptionError = MessageConversionError;
     type Code = CoapMessageCode;
     type OptionNumber = CoapOptionType;
@@ -127,40 +175,25 @@ impl<'r, T: BorrowMut<coap_pdu_t>, R: Borrow<coap_pdu_t>> MinimalWritableMessage
     type UnionError = MessageConversionError;
 
     fn set_code(&mut self, code: Self::Code) {
-        unsafe { coap_pdu_set_code(self.raw_pdu.borrow_mut(), code.to_raw_pdu_code()) }
+        unsafe { coap_pdu_set_code(self.pdu.raw_pdu.borrow_mut(), code.to_raw_pdu_code()) }
     }
 
     fn add_option(&mut self, number: Self::OptionNumber, value: &[u8]) -> Result<(), Self::AddOptionError> {
-        if unsafe {
-            coap_add_option(
-                self.raw_pdu.borrow_mut(),
-                number.to_raw_option_num(),
-                value.len(),
-                value.as_ptr(),
-            )
-        } == 0
-        {
-            Err(MessageConversionError::Unknown)
-        } else {
-            Ok(())
+        unsafe {
+            let option = NonNull::new(coap_new_optlist(number.to_raw_option_num(), value.len(), value.as_ptr())).ok_or(MessageConversionError::Unknown)?;
+
+            (coap_insert_optlist(&mut self.optlist, option.as_ptr()) == 1).then_some(()).ok_or(MessageConversionError::Unknown)
         }
     }
 
     fn set_payload(&mut self, data: &[u8]) -> Result<(), Self::SetPayloadError> {
         let data = Vec::from(data).into_boxed_slice();
-        if let Some(in_reponse_to) = self.in_response_to {
-            unsafe { coap_add_data_large_request() }
-        } else {
-            unsafe { coap_add_data_large_request() }
-        }
-        // TODO large data
-        if unsafe { coap_add_data(self.raw_pdu.borrow_mut(), data.len(), data.as_ptr()) } == 1 {
-            Ok(())
-        } else {
-            Err(MessageConversionError::Unknown)
-        }
+        self.payload = Some(data);
+        Ok(())
     }
 }
+
+impl<'r, T: BorrowMut<coap_pdu_t>, R: Borrow<coap_pdu_t>> SeekWritableMessage for PduBuilder<'r, T, R> {}
 
 pub struct Opt<'a> {
     number: coap_option_num_t,

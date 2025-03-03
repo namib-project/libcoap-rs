@@ -406,8 +406,14 @@ impl CoapRequestCode {
 
     /// Returns the raw [coap_pdu_code_t](coap_pdu_code_t) corresponding to this
     /// request code.
-    #[deprecated(note = "Use the provided Into<u8> implementation instead")]
+    #[deprecated(note = "Use the provided Into<coap_request_t> implementation instead")]
     pub fn to_raw_pdu_code(self) -> coap_pdu_code_t {
+        self.into()
+    }
+}
+
+impl Into<coap_request_t> for CoapRequestCode {
+    fn into(self) -> coap_request_t {
         <Self as Into<u8>>::into(self) as coap_request_t
     }
 }
@@ -541,6 +547,7 @@ impl TryFrom<coap_pdu_code_t> for CoapResponseCode {
 #[derive(Copy, Clone, Hash, Eq, PartialEq, TryFromPrimitive, Debug)]
 pub enum CoapMessageType {
     /// Confirmable message, i.e. a message whose reception should be confirmed by the peer.
+    /// Note: This is also always set if a reliable transport (TCP, WebSockets) is used.
     Con = coap_pdu_type_t_COAP_MESSAGE_CON as u8,
     /// Non-confirmable message, i.e. a message whose reception should not be confirmed by the peer.
     Non = coap_pdu_type_t_COAP_MESSAGE_NON as u8,

@@ -20,7 +20,7 @@ use std::{
     rc::{Rc, Weak},
 };
 
-pub(crate) struct OwnedCoapStructRef<'a, T>(MaybeUninit<&'a mut T>, unsafe fn(*mut T));
+pub(crate) struct OwnedCoapStructRef<'a, T>(Option<&'a mut T>, unsafe extern "C" fn(*mut T));
 
 impl<'a, T> OwnedCoapStructRef<'a, T> {
     /// SAFETY: `destructor` must be safe to call with a `*mut T` instance once, implementations
@@ -29,37 +29,31 @@ impl<'a, T> OwnedCoapStructRef<'a, T> {
     /// If this struct is used as intended and `destructor` actually refers to a function that frees
     /// the referenced value, this implies that `value` must be assumed to be uninitialized after
     /// the creates struct is dropped.
-    pub(crate) unsafe fn new(value: &'a mut T, destructor: unsafe fn(*mut T)) -> Self {
-        Self(MaybeUninit::new(value), destructor)
+    pub(crate) unsafe fn new(value: &'a mut T, destructor: unsafe extern "C" fn(*mut T)) -> Self {
+        Self(Some(value), destructor)
     }
 }
 
 impl<'a, T> Borrow<T> for OwnedCoapStructRef<'a, T> {
     fn borrow(&self) -> &T {
-        // SAFETY: We know that the contained value is valid, the only place where it is invalidated
-        // is the destructor.
-        unsafe { self.0.assume_init_ref() }
+        *self.0.as_ref().unwrap()
     }
 }
 
 impl<'a, T> BorrowMut<T> for OwnedCoapStructRef<'a, T> {
     fn borrow_mut(&mut self) -> &mut T {
-        // SAFETY: We know that the contained value is valid, the only place where it is invalidated
-        // is the destructor.
-        unsafe { self.0.assume_init_mut() }
+        *self.0.as_mut().unwrap()
     }
 }
 
 impl<'a, T> Drop for OwnedCoapStructRef<'a, T> {
     fn drop(&mut self) {
-        // SAFETY: We know that the contained value is valid, the only place where it is invalidated
-        // is here.
-        // We first convert the reference to a pointer (and let the reference go out of scope)
-        // before calling the destructor, so it is fine that self.0 may reference a freed memory
-        // region (the reference is wrapped in MaybeUninit, and pointers may point to invalid
-        // memory).
+        let ptr = {
+            let reference = self.0.take().unwrap();
+            reference as *mut T
+        };
+        // SAFETY: Reference now no longer exists, we can safely call the destructor as per calling contract.
         unsafe {
-            let ptr = *self.0.as_mut_ptr() as *mut T;
             self.1(ptr);
         }
     }
