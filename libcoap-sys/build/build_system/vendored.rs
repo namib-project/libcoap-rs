@@ -152,6 +152,17 @@ impl VendoredBuildSystem {
                     dtls_libraries_linked_by_other_crates |= DtlsBackend::MbedTls
                 }
             }
+            #[cfg(feature = "dtls-wolfssl-sys")]
+            {
+                let (pkg_config_path, linked) = Self::configure_wolfssl_sys(build_config)?;
+                if let Some(pkg_config_path) = pkg_config_path {
+                    additional_pkg_config_paths.push(pkg_config_path)
+                }
+                if linked {
+                    dtls_libraries_linked_by_other_crates |= DtlsBackend::WolfSsl
+                }
+            }
+            
 
             // Add libcoap's own build directory to the PKG_CONFIG_PATH (might be used later on to
             // find the generated .pc file to link against libcoap).
@@ -194,6 +205,8 @@ impl VendoredBuildSystem {
                 // If we do have a library already linked via a rust dependency, prefer those, but
                 // maintain the order also used in libcoap itself.
                 Some(DtlsBackend::OpenSsl)
+            } else if cfg!(feature = "dtls-wolfssl-sys") {
+                Some(DtlsBackend::WolfSsl)
             } else if cfg!(feature = "dtls-mbedtls-sys") {
                 Some(DtlsBackend::MbedTls)
             } else if cfg!(feature = "dtls-tinydtls-sys") {
@@ -237,6 +250,7 @@ impl VendoredBuildSystem {
         } else {
             // SAFETY: We are still single-threaded here.
             unsafe { env::set_var("PKG_CONFIG_PATH", pkg_config_path_bak.unwrap_or_default()) }
+            println!("cargo:rustc-link-lib=static=coap-3");
             println!(
                 "cargo:rustc-link-search={}",
                 libcoap_build_prefix
@@ -244,7 +258,6 @@ impl VendoredBuildSystem {
                     .to_str()
                     .context("unable to convert OUT_DIR to a valid UTF-8 string.")?
             );
-            println!("cargo:rustc-link-lib=static=coap-3");
             Ok(Self {
                 out_dir,
                 define_info: None,
@@ -297,6 +310,29 @@ impl VendoredBuildSystem {
         }
     }
 
+    #[cfg(feature = "dtls-wolfssl-sys")]
+    fn configure_wolfssl_sys(build_config: &mut autotools::Config) -> Result<(Option<PathBuf>, bool)> {
+        if env::var_os("wolfSSL_CFLAGS").is_some() || env::var_os("wolfSSL_LIBS").is_some() {
+            // Do not use wolfssl-sys if the user manually set either the corresponding LIBS or
+            // CFLAGS variable.
+            // However, do warn the user that this might cause issues.
+            println!("cargo:warning=You have enabled the wolfssl-sys dependency, but have overridden either the wolfSSL_CFLAGS or wolfSSL_LIBS environment variable used by libcoap to find wolfSSL.");
+            println!("cargo:warning=Note that attempting to link more than one version of the same library at once may cause unexpected issues and/or cryptic compilation errors, especially if both versions are statically linked.");
+            Ok((None, false))
+        } else {
+            let wolfssl_root = env::var_os("DEP_WOLFSSL_ROOT")
+                .expect("wolfssl-sys dependency has been added, but DEP_WOLFSSL_ROOT has not been set");
+            let wolfssl_include = env::var_os("DEP_WOLFSSL_INCLUDE")
+                .expect("wolfssl-sys dependency has been added, but DEP_WOLFSSL_INCLUDE has not been set");
+            let wolfssl_libs = Path::new(wolfssl_root.as_os_str())
+                .join("lib");
+            
+            // Set pkg-config path for version and library/include path determination.
+            Ok((Some(wolfssl_libs.join("pkgconfig")), true))
+        }
+    }
+    
+
     #[cfg(feature = "dtls-openssl-sys")]
     fn configure_openssl_sys(_build_config: &mut autotools::Config) -> Result<(Option<PathBuf>, bool)> {
         if env::var_os("OpenSSL_CFLAGS").is_some() || env::var_os("OpenSSL_LIBS").is_some() {
@@ -314,7 +350,7 @@ impl VendoredBuildSystem {
                 .context("DEP_OPENSSL_INCLUDE has no parent directory")?
                 .join("lib");
 
-            // Just add the OpenSSL directory to the PKG_CONFIG_PATH, that way libcoap will find it.
+            // Set pkg-config path for version and library/include path determination.
             Ok((Some(openssl_libs.join("pkgconfig")), true))
         }
     }
