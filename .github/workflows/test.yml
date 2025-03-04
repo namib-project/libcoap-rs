@@ -22,7 +22,7 @@ jobs:
       fail-fast: false
       matrix:
         crate: [ libcoap-sys, libcoap-rs ]
-        dtls_backend: [ openssl, gnutls, tinydtls, mbedtls ]
+        dtls_backend: [ openssl, gnutls, tinydtls, mbedtls, wolfssl ]
         rust_version: [ msrv, stable, nightly ]
     env:
       LLVM_PROFILE_FILE: "${{ github.workspace }}/coverage-data/coverage/libcoap-rs-%p-%m.profraw"
@@ -40,10 +40,12 @@ jobs:
             || (matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'mbedtls' && 'tcp,dtls-psk,dtls-pki,dtls-mbedtls-sys')
             || (matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'openssl' && 'tcp,dtls-psk,dtls-pki,dtls-openssl-sys-vendored')
             || (matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'gnutls' && 'tcp,dtls-psk,dtls-pki,dtls-rpk')
+            || (matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'wolfssl' && 'tcp,dtls-psk,dtls-pki,dtls-rpk,dtls-wolfssl-sys')
             || (matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'tinydtls' && 'dtls,dtls-tinydtls-sys-vendored')
             || (matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'mbedtls' && 'dtls,dtls-mbedtls-sys')
             || (matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'openssl' && 'dtls,dtls-openssl-sys-vendored')
             || (matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'gnutls' && 'dtls')
+            || (matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'wolfssl' && 'dtls,dtls-wolfssl-sys')
             || 'vendored'
         }}
     steps:
