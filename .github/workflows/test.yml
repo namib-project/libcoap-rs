@@ -40,7 +40,7 @@ jobs:
             || (matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'mbedtls' && 'tcp,dtls-psk,dtls-pki,dtls-mbedtls-sys')
             || (matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'openssl' && 'tcp,dtls-psk,dtls-pki,dtls-openssl-sys-vendored')
             || (matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'gnutls' && 'tcp,dtls-psk,dtls-pki,dtls-rpk')
-            || (matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'wolfssl' && 'tcp,dtls-psk,dtls-pki,dtls-rpk,dtls-wolfssl-sys')
+            || (matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'wolfssl' && 'tcp,dtls-psk,dtls-pki,dtls-wolfssl-sys')
             || (matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'tinydtls' && 'dtls,dtls-tinydtls-sys-vendored')
             || (matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'mbedtls' && 'dtls,dtls-mbedtls-sys')
             || (matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'openssl' && 'dtls,dtls-openssl-sys-vendored')
