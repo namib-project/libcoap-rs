@@ -207,22 +207,30 @@ impl CoapClientSession<'_> {
     pub fn connect_oscore<'a>(
         ctx: &mut CoapContext<'a>,
         addr: SocketAddr,
-        oscore_conf: OscoreConf,
+        mut oscore_conf: OscoreConf,
     ) -> Result<CoapClientSession<'a>, SessionCreationError> {
+        // Check whether OscoreConf raw_conf is still valid.
+        if !oscore_conf.raw_conf_valid {
+            return Err(SessionCreationError::OscoreConfigInvalid);
+        }
+
         // SAFETY: self.raw_context is guaranteed to be valid, local if can be null.
-        // OscoreConf raw_conf should be always valid and coap_new_client_session_oscore should
-        // free the raw_conf:
+        // OscoreConf raw_conf way just checked for validity.
+        //
+        // coap_new_client_session_oscore should free the raw_conf:
         // https://libcoap.net/doc/reference/4.3.5/group__oscore.html#ga65ac1a57ebc037b4d14538c8e21c28a7
-        // TODO: Not sure if this is actually the case tho -> libcoap
         let session = unsafe {
             coap_new_client_session_oscore(
                 ctx.as_mut_raw_context(),
                 std::ptr::null(),
                 CoapAddress::from(addr).as_raw_address(),
                 coap_proto_t_COAP_PROTO_UDP,
-                OscoreConf::from(oscore_conf).clone_mut_raw_conf(),
+                oscore_conf.as_mut_raw_conf(),
             )
         };
+
+        // Invalidate the OscoreConf raw_conf as its freed by the call above.
+        oscore_conf.raw_conf_valid = false;
 
         if session.is_null() {
             return Err(SessionCreationError::Unknown);

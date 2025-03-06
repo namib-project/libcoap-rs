@@ -60,6 +60,7 @@ fn read_initial_seq_num() -> Option<u64> {
 // coap_oscore_conf_t strcut.
 pub struct OscoreConf {
     raw_conf: *mut coap_oscore_conf_t,
+    pub(crate) raw_conf_valid: bool,
     pub(crate) initial_recipient: Option<String>,
 }
 
@@ -107,22 +108,28 @@ impl OscoreConf {
 
         Ok(Self {
             raw_conf: oscore_conf,
+            raw_conf_valid: true,
             initial_recipient,
         })
     }
     /// SAFETY: raw_conf should be always valid until the OscoreConf is dropped, calling this
     /// function will only return a copy of the raw_conf which has to bee freed by the caller.
     /// The intitial raw_conf held within the OscoreConf is dropped via its Drop trade.
-    pub(crate) fn clone_mut_raw_conf(&mut self) -> *mut coap_oscore_conf_t {
-        self.raw_conf.clone()
+    pub(crate) fn as_mut_raw_conf(&mut self) -> *mut coap_oscore_conf_t {
+        self.raw_conf
     }
 }
 
 impl Drop for OscoreConf {
     fn drop(&mut self) {
-        // SAFETY: The raw_conf is always cloned which means its pointer still has to be valid.
-        unsafe {
-            Box::from_raw(self.raw_conf);
+        // SAFETY: Drop the raw_conf if the raw_struct is still valid and hasn't been dropped by
+        // libcoap already. The raw_conf might be freed and invalidated already if connect_oscore
+        // or oscore_server have been called with it previously, in which case the raw_conf_valid
+        // has been set to false to prevent a double free here.
+        if self.raw_conf_valid {
+            unsafe {
+                Box::from_raw(self.raw_conf);
+            }
         }
     }
 }

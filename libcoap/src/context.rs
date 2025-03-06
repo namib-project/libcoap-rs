@@ -422,15 +422,23 @@ impl CoapContext<'_> {
         let mut inner_ref = self.inner.borrow_mut();
         let result: i32;
 
-        // SAFETY: OscoreConf raw_conf should be always valid.
-        // This will also always free the raw_conf, regardless of the result:
+        // Check whether OscoreConf raw_conf is still valid.
+        if !oscore_conf.raw_conf_valid {
+            return Err(OscoreServerCreationError::OscoreConfigInvalid);
+        }
+
+        // SAFETY: OscoreConf raw_conf was just checked for validity, properly initialized
+        // CoapContext always has a valid raw_context that is not deleted until the
+        // CoapContextInner is dropped.
+        //
+        // coap_context_oscore_server will also always free the raw_conf, regardless of the result:
         // https://libcoap.net/doc/reference/4.3.5/group__oscore.html#ga71ddf56bcd6d6650f8235ee252fde47f
-        // [libcoap 4.3.5]
-        // - src/coap_oscore.c:2046
-        // - src/coap_oscore.c:2055
         unsafe {
-            result = coap_context_oscore_server(inner_ref.raw_context, oscore_conf.clone_mut_raw_conf());
+            result = coap_context_oscore_server(inner_ref.raw_context, oscore_conf.as_mut_raw_conf());
         };
+
+        // Invalidate the OscoreConf raw_conf as its freed by the call above.
+        oscore_conf.raw_conf_valid = false;
 
         // Check whether adding the config to the context failed.
         if result == 0 {

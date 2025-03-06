@@ -34,9 +34,9 @@ pub enum OscoreConfigCreationError {
 #[cfg(feature = "oscore")]
 #[derive(Error, Debug, Copy, Clone, Eq, PartialEq)]
 pub enum OscoreServerCreationError {
-    /// Oscore config seems to be absent/invalid
-    #[error("Oscore server creation error: oscore config seems to be absent/invalid")]
-    OscoreConfigError,
+    /// Oscore config seems to be invalid, make sure to use it only onces
+    #[error("Oscore server creation error: oscore config seems tot be invalid, make sure to use it only onces")]
+    OscoreConfigInvalid,
     /// Unknown error inside of libcoap
     #[error("Oscore server creation error: unknown error in call to libcoap")]
     Unknown,
@@ -103,10 +103,10 @@ pub enum SessionCreationError {
     /// Unknown error inside of libcoap
     #[error("CoAP session creation error: unknown error in call to libcoap")]
     Unknown,
-    /// Oscore config seems to be absent/invalid
+    /// Oscore config seems to be invalid, make sure to use it only onces
     #[cfg(feature = "oscore")]
-    #[error("CoAP session creation error: oscore config seems to be absent/invalid")]
-    OscoreConfigError,
+    #[error("CoAP session creation error: oscore config seems tot be invalid, make sure to use it only onces")]
+    OscoreConfigInvalid,
 }
 
 #[derive(Error, Debug, Copy, Clone, Eq, PartialEq)]
