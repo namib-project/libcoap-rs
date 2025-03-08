@@ -411,25 +411,19 @@ impl CoapContext<'_> {
         self.add_endpoint(addr, coap_proto_t_COAP_PROTO_DTLS)
     }
 
-    // TODO: Possibly wrap in feature?
-    /// Joins a multicastgroup
-    /// # Safety
-    /// The libcoap function does not modify/delete any variables here.
-    /// NULL for the interface is handled internally in the libcoap function, therefore safe.
+    /// Joins a multicastgroup. The groupname will be a multicast IP-Address in most cases and ifname
+    /// is the used interface. Ifname can also be set to NONE.
     pub fn join_mcast_group_intf(
         &mut self,
-        groupname: &str,
-        ifname: Option<&str>,
+        groupname: impl AsRef<CStr>,
+        ifname: Option<&CStr>,
     ) -> Result<(), MulticastGroupJoinError> {
         let inner_ref = self.inner.borrow();
-        let mcast_groupname = CString::new(groupname).expect("CString::new failed");
-        let mcast_ifname = ifname.and_then(|if_in| Some(CString::new(if_in).expect("CString::new failed")));
-        let mcast_ifname_ptr = match mcast_ifname {
-            Some(if_in) => if_in.as_ptr(),
-            None => std::ptr::null(),
-        };
+        let mcast_groupname = groupname.as_ref().as_ptr();
+        let mcast_ifname = ifname.map(|v| v.as_ptr()).unwrap_or(std::ptr::null());
+        // SAFETY: `inner_ref.raw_context` is always valid by construction of this type, group and interface name are pointers to valid C strings.
         unsafe {
-            let ret = coap_join_mcast_group_intf(inner_ref.raw_context, mcast_groupname.as_ptr(), mcast_ifname_ptr);
+            let ret = coap_join_mcast_group_intf(inner_ref.raw_context, mcast_groupname, mcast_ifname);
             if ret != 0 {
                 return Err(MulticastGroupJoinError::Unknown);
             }
