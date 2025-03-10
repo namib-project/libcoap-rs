@@ -12,14 +12,6 @@
 
 use core::ffi::c_uint;
 #[cfg(feature = "dtls-pki")]
-use std::ffi::CString;
-#[cfg(feature = "dtls")]
-use std::ptr::NonNull;
-use std::{any::Any, ffi::c_void, fmt::Debug, net::SocketAddr, ops::Sub, sync::Once, time::Duration};
-#[cfg(all(feature = "dtls-pki", unix))]
-use std::{os::unix::ffi::OsStrExt, path::Path};
-use std::ffi::CStr;
-#[cfg(feature = "dtls-pki")]
 use libcoap_sys::coap_context_set_pki_root_cas;
 use libcoap_sys::{
     coap_add_resource, coap_can_exit, coap_context_get_csm_max_message_size, coap_context_get_csm_timeout,
@@ -43,6 +35,14 @@ use libcoap_sys::{
     coap_register_response_handler, coap_set_app_data, coap_startup_with_feature_checks, COAP_BLOCK_SINGLE_BODY,
     COAP_BLOCK_USE_LIBCOAP, COAP_IO_WAIT,
 };
+use std::ffi::CStr;
+#[cfg(feature = "dtls-pki")]
+use std::ffi::CString;
+#[cfg(feature = "dtls")]
+use std::ptr::NonNull;
+use std::{any::Any, ffi::c_void, fmt::Debug, net::SocketAddr, ops::Sub, sync::Once, time::Duration};
+#[cfg(all(feature = "dtls-pki", unix))]
+use std::{os::unix::ffi::OsStrExt, path::Path};
 
 #[cfg(any(feature = "dtls-rpk", feature = "dtls-pki"))]
 use crate::crypto::pki_rpk::ServerPkiRpkCryptoContext;
@@ -410,8 +410,10 @@ impl CoapContext<'_> {
         self.add_endpoint(addr, coap_proto_t_COAP_PROTO_DTLS)
     }
 
-    /// Joins a multicastgroup. The groupname will be a multicast IP-Address in most cases and ifname
-    /// is the used interface. Ifname can also be set to NONE.
+    /// Joins a multicast group.
+    ///
+    /// `groupname` is usually a multicast IP address, while `ifname` is the used interface.
+    /// If `ifname` is set to `None`, the first appropriate interface will be chosen by the operating system.
     pub fn join_mcast_group_intf(
         &mut self,
         groupname: impl AsRef<CStr>,
