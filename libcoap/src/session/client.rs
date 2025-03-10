@@ -229,7 +229,8 @@ impl CoapClientSession<'_> {
             )
         };
 
-        // Invalidate the OscoreConf raw_conf as its freed by the call above.
+        // Invalidate the OscoreConf raw_conf as it's freed by the call above, so we don't try to
+        // free it again the future, which would cause a double free.
         oscore_conf.raw_conf_valid = false;
 
         if session.is_null() {

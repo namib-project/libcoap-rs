@@ -11,6 +11,7 @@ use crate::error::OscoreConfigCreationError;
 // TODO: An even more insecure place to save the sequence number :)
 static OSCORE_SEQ_SAFE_FILE_PATH: &str = "oscore.seq";
 
+/// Saves the Sequence Number to file
 #[cfg(feature = "std")]
 extern "C" fn save_seq_num(seq_num: u64, _param: *mut c_void) -> i32 {
     let mut oscore_seq_safe_file = match OpenOptions::new()
@@ -37,6 +38,8 @@ extern "C" fn save_seq_num(seq_num: u64, _param: *mut c_void) -> i32 {
     1
 }
 
+/// Reads the initial sequence Number, if there is any, from the file at OSCORE_SEQ_SAFE_FILE_PATH
+/// If no file is found, or no number is present in this file, None is returned.
 #[cfg(feature = "std")]
 fn read_initial_seq_num() -> Option<u64> {
     let file = match File::open(OSCORE_SEQ_SAFE_FILE_PATH) {
@@ -56,8 +59,8 @@ fn read_initial_seq_num() -> Option<u64> {
     None
 }
 
-// Represents a oscore conf object which stores the underlying
-// coap_oscore_conf_t strcut.
+/// Represents an oscore conf object which stores the underlying
+/// coap_oscore_conf_t struct.
 pub struct OscoreConf {
     raw_conf: *mut coap_oscore_conf_t,
     pub(crate) raw_conf_valid: bool,
@@ -65,10 +68,13 @@ pub struct OscoreConf {
 }
 
 impl OscoreConf {
+    /// Creates a new OscoreConf.
     #[cfg(feature = "std")]
     pub fn new_std(seq_initial: u64, oscore_conf_bytes: &[u8]) -> Result<Self, OscoreConfigCreationError> {
         Self::new(seq_initial, oscore_conf_bytes, save_seq_num, read_initial_seq_num)
     }
+
+    /// Creates a new OscoreConf.
     pub fn new(
         seq_initial: u64,
         oscore_conf_bytes: &[u8],
@@ -80,13 +86,10 @@ impl OscoreConf {
             s: oscore_conf_bytes.as_ptr(),
         };
 
-        let seq_initial = match read_initial_seq_num_func() {
-            Some(num) => num,
-            None => seq_initial,
-        };
+        let seq_initial = read_initial_seq_num_func().unwrap_or_else(|| seq_initial);
 
         // SAFETY: It is expected, that the user provides valid oscore_conf bytes. In case of
-        // failure this will return null which will result in an error beeing thrown.
+        // failure this will return null which will result in an error being thrown.
         let oscore_conf = unsafe { coap_new_oscore_conf(conf, Some(save_seq_num_func), ptr::null_mut(), seq_initial) };
 
         if oscore_conf.is_null() {
@@ -121,11 +124,13 @@ impl OscoreConf {
 }
 
 impl Drop for OscoreConf {
+    /// Drop the OscoreConf.
+    /// The Conf will only be dropped, if the raw_struct hasn't been dropped already.
     fn drop(&mut self) {
         // SAFETY: Drop the raw_conf if the raw_struct is still valid and hasn't been dropped by
         // libcoap already. The raw_conf might be freed and invalidated already if connect_oscore
         // or oscore_server have been called with it previously, in which case the raw_conf_valid
-        // has been set to false to prevent a double free here.
+        // has been set to false, to prevent a double free here.
         if self.raw_conf_valid {
             unsafe {
                 Box::from_raw(self.raw_conf);
@@ -134,6 +139,7 @@ impl Drop for OscoreConf {
     }
 }
 
+/// OscoreRecipient represents a Recipient with an ID, and its underlying C struct.
 #[derive(Debug)]
 pub(crate) struct OscoreRecipient {
     recipient_id: String,
@@ -141,7 +147,9 @@ pub(crate) struct OscoreRecipient {
 }
 
 impl OscoreRecipient {
+    /// Returns a new OscoreRecipient with a given ID.
     pub(crate) fn new(recipient_id: &str) -> OscoreRecipient {
+        // The User only supplies the Recipient ID, we will build the C Struct here
         let recipient = coap_bin_const_t {
             length: recipient_id.len(),
             s: recipient_id.as_ptr(),
@@ -149,23 +157,32 @@ impl OscoreRecipient {
 
         let recipient: *mut coap_bin_const_t = Box::into_raw(Box::new(recipient));
 
+        // And then return the newly created Recipient
         OscoreRecipient {
             recipient_id: recipient_id.to_string(),
             recipient,
         }
     }
+
+    /// Returns the raw C Struct of the Recipient.
     pub(crate) fn get_c_struct(&self) -> *mut coap_bin_const_t {
         self.recipient
     }
+
+    /// Returns the ID of the Recipient.
     pub(crate) fn get_recipient_id(&self) -> &str {
         self.recipient_id.as_str()
     }
+
+    /// Drops the Recipient from Memory.
+    /// Warning: THIS SHOULD NEVER BE CALLED UNLESS YOU'RE SURE THE coap_bin_const_t HAS NOT BEEN FREED BEFORE!
+    /// This will trigger a double free, if coap_bin_const_t has already been freed!
     pub(crate) fn drop(&self) {
         // SAFETY: THIS SHOULD NEVER BE CALLED UNLESS YOU'RE SURE THE coap_bin_const_t HAS NOT BEEN
         // FREED BEFORE!
-        // Currently this is only used in 'add_new_oscore_recipient()' in case the recipient is not
+        // Currently, this is only used in 'add_new_oscore_recipient()' in case the recipient is not
         // added to the context (which would free the raw pointer when dropped). There is Currently
-        // only one expection, which is filtered out, because trying to add a duplicate recipient
+        // only one exception, which is filtered out, because trying to add a duplicate recipient
         // to the oscore context would already trigger a free() in libcoap
         unsafe {
             let _ = Box::from_raw(self.get_c_struct());
