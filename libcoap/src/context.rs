@@ -18,7 +18,7 @@ use std::ptr::NonNull;
 use std::{any::Any, ffi::c_void, fmt::Debug, net::SocketAddr, ops::Sub, sync::Once, time::Duration};
 #[cfg(all(feature = "dtls-pki", unix))]
 use std::{os::unix::ffi::OsStrExt, path::Path};
-
+use std::ffi::CStr;
 #[cfg(feature = "dtls-pki")]
 use libcoap_sys::coap_context_set_pki_root_cas;
 use libcoap_sys::{
@@ -59,7 +59,6 @@ use crate::{
 
 //TODO: New feature?
 use libcoap_sys::coap_join_mcast_group_intf;
-use std::ffi::CString;
 
 static COAP_STARTUP_ONCE: Once = Once::new();
 
