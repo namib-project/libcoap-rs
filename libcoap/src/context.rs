@@ -12,14 +12,6 @@
 
 use core::ffi::c_uint;
 #[cfg(feature = "dtls-pki")]
-use std::ffi::CString;
-#[cfg(feature = "dtls")]
-use std::ptr::NonNull;
-use std::{any::Any, ffi::c_void, fmt::Debug, net::SocketAddr, ops::Sub, sync::Once, time::Duration};
-#[cfg(all(feature = "dtls-pki", unix))]
-use std::{os::unix::ffi::OsStrExt, path::Path};
-
-#[cfg(feature = "dtls-pki")]
 use libcoap_sys::coap_context_set_pki_root_cas;
 use libcoap_sys::{
     coap_add_resource, coap_can_exit, coap_context_get_csm_max_message_size, coap_context_get_csm_timeout,
@@ -43,19 +35,30 @@ use libcoap_sys::{
     coap_register_response_handler, coap_set_app_data, coap_startup_with_feature_checks, COAP_BLOCK_SINGLE_BODY,
     COAP_BLOCK_USE_LIBCOAP, COAP_IO_WAIT,
 };
+use std::ffi::CStr;
+#[cfg(feature = "dtls-pki")]
+use std::ffi::CString;
+#[cfg(feature = "dtls")]
+use std::ptr::NonNull;
+use std::{any::Any, ffi::c_void, fmt::Debug, net::SocketAddr, ops::Sub, sync::Once, time::Duration};
+#[cfg(all(feature = "dtls-pki", unix))]
+use std::{os::unix::ffi::OsStrExt, path::Path};
 
 #[cfg(any(feature = "dtls-rpk", feature = "dtls-pki"))]
 use crate::crypto::pki_rpk::ServerPkiRpkCryptoContext;
 #[cfg(feature = "dtls-psk")]
 use crate::crypto::psk::ServerPskContext;
 use crate::{
-    error::{ContextConfigurationError, EndpointCreationError, IoProcessError},
+    error::{ContextConfigurationError, EndpointCreationError, IoProcessError, MulticastGroupJoinError},
     event::{event_handler_callback, CoapEventHandler},
     mem::{CoapLendableFfiRcCell, CoapLendableFfiWeakCell, DropInnerExclusively},
     resource::{CoapResource, UntypedCoapResource},
     session::{session_response_handler, CoapServerSession, CoapSession},
     transport::CoapEndpoint,
 };
+
+//TODO: New feature?
+use libcoap_sys::coap_join_mcast_group_intf;
 
 static COAP_STARTUP_ONCE: Once = Once::new();
 
@@ -405,6 +408,28 @@ impl CoapContext<'_> {
     #[cfg(feature = "dtls")]
     pub fn add_endpoint_dtls(&mut self, addr: SocketAddr) -> Result<(), EndpointCreationError> {
         self.add_endpoint(addr, coap_proto_t_COAP_PROTO_DTLS)
+    }
+
+    /// Joins a multicast group.
+    ///
+    /// `groupname` is usually a multicast IP address, while `ifname` is the used interface.
+    /// If `ifname` is set to `None`, the first appropriate interface will be chosen by the operating system.
+    pub fn join_mcast_group_intf(
+        &mut self,
+        groupname: impl AsRef<CStr>,
+        ifname: Option<&CStr>,
+    ) -> Result<(), MulticastGroupJoinError> {
+        let inner_ref = self.inner.borrow();
+        let mcast_groupname = groupname.as_ref().as_ptr();
+        let mcast_ifname = ifname.map(|v| v.as_ptr()).unwrap_or(std::ptr::null());
+        // SAFETY: `inner_ref.raw_context` is always valid by construction of this type, group and interface name are pointers to valid C strings.
+        unsafe {
+            let ret = coap_join_mcast_group_intf(inner_ref.raw_context, mcast_groupname, mcast_ifname);
+            if ret != 0 {
+                return Err(MulticastGroupJoinError::Unknown);
+            }
+        };
+        Ok(())
     }
 
     // /// TODO
