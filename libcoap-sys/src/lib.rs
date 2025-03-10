@@ -335,6 +335,8 @@ use openssl_sys as _;
 #[allow(unused_imports)]
 #[cfg(used_dtls_crate = "tinydtls")]
 use tinydtls_sys as _;
+#[cfg(used_dtls_crate = "wolfssl")]
+use wolfssl_sys as _;
 
 // Add check whether the libcoap component is enabled when building for the ESP-IDF.
 #[cfg(all(target_os = "espidf", not(esp_idf_comp_espressif__coap_enabled)))]

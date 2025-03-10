@@ -39,6 +39,7 @@ vendored = ["libcoap-sys/vendored"]
 dtls-openssl-sys = ["libcoap-sys/dtls-openssl-sys"]
 dtls-mbedtls-sys = ["libcoap-sys/dtls-mbedtls-sys"]
 dtls-tinydtls-sys = ["libcoap-sys/dtls-tinydtls-sys"]
+dtls-wolfssl-sys = ["libcoap-sys/dtls-wolfssl-sys"]
 dtls-openssl-sys-vendored = ["libcoap-sys/dtls-openssl-sys-vendored"]
 dtls-tinydtls-sys-vendored = ["libcoap-sys/dtls-tinydtls-sys-vendored"]
 

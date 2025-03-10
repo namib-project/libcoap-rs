@@ -60,9 +60,13 @@ dtls-openssl-sys-vendored = ["dtls-openssl-sys", "openssl-sys/vendored"]
 dtls-mbedtls-sys = ["dep:mbedtls-sys-auto"]
 # Allows using the version of TinyDTLS provided by tinydtls-sys instead of a system-provided one.
 # Note that this does not enforce the use of TinyDTLS in libcoap, see the crate-level documentation for more info.
-dtls-tinydtls-sys = ["dep:tinydtls-sys", "tinydtls-sys/ecc", "tinydtls-sys/psk"]
+dtls-tinydtls-sys = ["dep:tinydtls-sys"]
 # Tell the tinydtls-sys version that is possibly used by libcoap-sys to use the vendored version of its library.
 dtls-tinydtls-sys-vendored = ["dtls-tinydtls-sys", "tinydtls-sys/vendored"]
+# Allows using the version of WolfSSL provided by wolfssl-sys instead of a system-provided one.
+# Note that this does not enforce the use of WolfSSL in libcoap, see the crate-level documentation for more info.
+dtls-wolfssl-sys = ["dep:wolfssl-sys"]
+
 
 # Enabling this feature will allow libcoap-sys to be built with and statically linked to a vendored version of libcoap,
 # This way, it is no longer required to have libcoap installed to use this crate.
@@ -143,7 +147,8 @@ dtls-rpk = ["dtls"]
 [dependencies]
 openssl-sys = { version = "^0.9.74", optional = true }
 mbedtls-sys-auto = { version = "^2.26", optional = true }
-tinydtls-sys = { version = "^0.2.0", default-features = false, optional = true }
+wolfssl-sys = { version = "2.0.0", git = "https://github.com/namib-project/wolfssl-rs.git", branch = "add_sys_cargo_metadata", optional = true, features = ["aesccm", "hmac", "psk", "opensslall", "ex_data", "alpn", "dh"] }
+tinydtls-sys = { version = "^0.2.0", default-features = false, optional = true, features = ["ecc", "psk"] }
 
 [target.'cfg(target_os="espidf")'.dependencies]
 esp-idf-sys = { version = "0.36.1" }
