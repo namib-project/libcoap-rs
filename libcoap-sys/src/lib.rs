@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: BSD-2-Clause
 /*
+ * Copyright © The libcoap-rs Contributors, all rights reserved.
+ * This file is part of the libcoap-rs project, see the README file for
+ * general information on this project and the NOTICE.md and LICENSE files
+ * for information regarding copyright ownership and terms of use.
+ *
  * lib.rs - Main library entry point for raw libcoap bindings.
- * This file is part of the libcoap-sys crate, see the README and LICENSE files for
- * more information and terms of use.
- * Copyright © 2021-2023 The NAMIB Project Developers, all rights reserved.
- * See the README as well as the LICENSE file for more information.
  */
 
 //! Auto-generated unsafe bindings to [libcoap](https://github.com/obgm/libcoap), generated using
@@ -14,8 +15,9 @@
 //! made in this library are generated automatically using bindgen, for further documentation on how
 //! to use them, refer to the [libcoap documentation](https://libcoap.net/documentation.html).
 //!
-//! In most cases you probably want to use the safe wrapper provided by the libcoap-rs crate or
-//! another coap library written in pure Rust such as [coap-rs](https://github.com/covertness/coap-rs)
+//! In most cases you probably want to use the safe wrapper provided by the
+//! [libcoap_rs](https://github.com/namib-project/libcoap-rs/tree/main/libcoap) crate or another
+//! CoAP library written in pure Rust such as [coap-rs](https://github.com/covertness/coap-rs)
 //! instead.
 //!
 //! The TLDR for building libcoap-sys (and resolving the most common Build Issues)
@@ -193,7 +195,7 @@
 //! against, which could also cause difficult-to-debug issues and indicates a more severe problem
 //! with the build process.
 //!
-//! [^3]: For this reason, using this method [is noted to be unsafe in `libcoap`'s documentation](https://libcoap.net/doc/reference/4.3.5/man_coap_supported.html).
+//! [^3]: For this reason, using this method while cross-compiling [is noted to be unsafe in `libcoap`'s documentation](https://libcoap.net/doc/reference/4.3.5/man_coap_supported.html).
 //!
 //! ## Vendored Build System
 //!

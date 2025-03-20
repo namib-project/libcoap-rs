@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: BSD-2-Clause
 /*
+ * Copyright © The libcoap-rs Contributors, all rights reserved.
+ * This file is part of the libcoap-rs project, see the README file for
+ * general information on this project and the NOTICE.md and LICENSE files
+ * for information regarding copyright ownership and terms of use.
+ *
  * resource.rs - Types relating to CoAP resource management.
- * This file is part of the libcoap-rs crate, see the README and LICENSE files for
- * more information and terms of use.
- * Copyright © 2021-2023 The NAMIB Project Developers, all rights reserved.
- * See the README as well as the LICENSE file for more information.
  */
 
 //! Resource and resource handler descriptions
@@ -18,9 +19,10 @@ use std::{
 };
 
 use libcoap_sys::{
-    coap_delete_resource, coap_new_str_const, coap_pdu_t, coap_register_request_handler, coap_resource_get_uri_path,
-    coap_resource_get_userdata, coap_resource_init, coap_resource_notify_observers, coap_resource_set_get_observable,
-    coap_resource_set_mode, coap_resource_set_userdata, coap_resource_t, coap_send_rst, coap_session_t, coap_string_t,
+    coap_add_attr, coap_delete_resource, coap_new_str_const, coap_pdu_t, coap_register_request_handler,
+    coap_resource_get_uri_path, coap_resource_get_userdata, coap_resource_init, coap_resource_notify_observers,
+    coap_resource_set_get_observable, coap_resource_set_mode, coap_resource_set_userdata, coap_resource_t,
+    coap_send_rst, coap_session_t, coap_string_t, COAP_ATTR_FLAGS_RELEASE_NAME, COAP_ATTR_FLAGS_RELEASE_VALUE,
     COAP_RESOURCE_FLAGS_NOTIFY_CON, COAP_RESOURCE_FLAGS_NOTIFY_NON, COAP_RESOURCE_FLAGS_RELEASE_URI,
 };
 
@@ -309,6 +311,29 @@ impl<D: Any + ?Sized + Debug> CoapResource<D> {
                 inner.raw_resource,
                 code.to_raw_request(),
                 inner.handlers.handler(code).map(|h| h.raw_handler),
+            );
+        }
+    }
+
+    /// Adds an attribute with a name and an optional value to a CoAP resource object.
+    pub fn add_attr(&self, name: &str, val: Option<&str>) {
+        let mut inner = self.inner.borrow_mut();
+        // SAFETY: libcoap uses the passed pointers "attr_name" and "attr_val" here.
+        // Because of the passed flags, libcoap takes ownership of these pointers.
+        // Passing NULL for the value is safe, since libcoap only frees the value, if it's not NULL.
+        unsafe {
+            let attr_name = coap_new_str_const(name.as_ptr(), name.len());
+            let attr_val = match val {
+                Some(val_str) => coap_new_str_const(val_str.as_ptr(), val_str.len()),
+                None => std::ptr::null_mut(),
+            };
+            // coap_new_str_const allocates memory, which should be freed when
+            // the resource is deleted. Freeing a null pointer is a no-op here
+            coap_add_attr(
+                inner.raw_resource,
+                attr_name,
+                attr_val,
+                (COAP_ATTR_FLAGS_RELEASE_NAME | COAP_ATTR_FLAGS_RELEASE_VALUE) as i32,
             );
         }
     }

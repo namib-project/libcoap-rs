@@ -1,3 +1,13 @@
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * Copyright © The libcoap-rs Contributors, all rights reserved.
+ * This file is part of the libcoap-rs project, see the README file for
+ * general information on this project and the NOTICE.md and LICENSE files
+ * for information regarding copyright ownership and terms of use.
+ *
+ * tests/common/dtls.rs - common code for DTLS tests.
+ */
+
 use std::{ffi::CStr, path::PathBuf, time::Duration};
 
 use libcoap_rs::{
