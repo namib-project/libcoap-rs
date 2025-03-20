@@ -25,6 +25,8 @@ use libcoap_sys::{
 use super::{CoapSessionCommon, CoapSessionInner, CoapSessionInnerProvider};
 #[cfg(feature = "dtls")]
 use crate::crypto::ClientCryptoContext;
+#[cfg(feature = "oscore")]
+use crate::oscore::OscoreConf;
 use crate::{
     context::CoapContext,
     error::SessionCreationError,
@@ -33,8 +35,6 @@ use crate::{
     prng::coap_prng_try_fill,
     types::CoapAddress,
 };
-#[cfg(feature = "oscore")]
-use crate::{error::OscoreConfigCreationError, oscore::OscoreConf};
 
 #[derive(Debug)]
 struct CoapClientSessionInner<'a> {

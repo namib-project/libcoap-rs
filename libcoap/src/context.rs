@@ -60,7 +60,7 @@ use crate::{
 
 #[cfg(feature = "oscore")]
 use crate::{
-    error::{OscoreConfigCreationError, OscoreRecipientError, OscoreServerCreationError},
+    error::{OscoreRecipientError, OscoreServerCreationError},
     OscoreConf, OscoreRecipient,
 };
 

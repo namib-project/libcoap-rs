@@ -38,7 +38,6 @@ dtls-tinydtls-sys = ["libcoap-sys/dtls-tinydtls-sys"]
 dtls-openssl-sys-vendored = ["libcoap-sys/dtls-openssl-sys-vendored"]
 dtls-tinydtls-sys-vendored = ["libcoap-sys/dtls-tinydtls-sys-vendored"]
 oscore = ["libcoap-sys/oscore"]
-std = []
 
 [dependencies]
 libcoap-sys = { version = "^0.2.2", path = "../libcoap-sys", default-features = false, features = ["client", "server"] }

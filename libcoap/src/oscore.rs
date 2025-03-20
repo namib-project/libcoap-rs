@@ -1,63 +1,7 @@
 use core::{ffi::c_void, ptr};
 use libcoap_sys::{coap_bin_const_t, coap_new_oscore_conf, coap_oscore_conf_t, coap_str_const_t};
-#[cfg(feature = "std")]
-use std::{
-    fs::{self, File, OpenOptions},
-    io::{BufRead, BufReader, Write},
-};
 
 use crate::error::OscoreConfigCreationError;
-
-// TODO: An even more insecure place to save the sequence number :)
-static OSCORE_SEQ_SAFE_FILE_PATH: &str = "oscore.seq";
-
-/// Saves the Sequence Number to file
-#[cfg(feature = "std")]
-extern "C" fn save_seq_num(seq_num: u64, _param: *mut c_void) -> i32 {
-    let mut oscore_seq_safe_file = match OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .open(OSCORE_SEQ_SAFE_FILE_PATH)
-    {
-        Ok(file) => file,
-        Err(_) => return 0,
-    };
-
-    // TODO: refactor this
-    if let Err(_) = writeln!(oscore_seq_safe_file, "{}\n", seq_num) {
-        return 0;
-    }
-    if let Err(_) = oscore_seq_safe_file.flush() {
-        return 0;
-    }
-
-    #[cfg(debug_assertions)]
-    println!("DEBUG: Saving sequence number: {}", seq_num);
-
-    1
-}
-
-/// Reads the initial sequence Number, if there is any, from the file at OSCORE_SEQ_SAFE_FILE_PATH
-/// If no file is found, or no number is present in this file, None is returned.
-#[cfg(feature = "std")]
-fn read_initial_seq_num() -> Option<u64> {
-    let file = match File::open(OSCORE_SEQ_SAFE_FILE_PATH) {
-        Ok(f) => f,
-        Err(_) => return None,
-    };
-
-    let mut reader = BufReader::new(file);
-
-    let mut line = String::new();
-    if reader.read_line(&mut line).is_ok() {
-        return match line.trim().parse() {
-            Ok(num) => Some(num),
-            Err(_) => None,
-        };
-    }
-    None
-}
 
 /// Represents an oscore conf object which stores the underlying
 /// coap_oscore_conf_t struct.
@@ -69,24 +13,15 @@ pub struct OscoreConf {
 
 impl OscoreConf {
     /// Creates a new OscoreConf.
-    #[cfg(feature = "std")]
-    pub fn new_std(seq_initial: u64, oscore_conf_bytes: &[u8]) -> Result<Self, OscoreConfigCreationError> {
-        Self::new(seq_initial, oscore_conf_bytes, save_seq_num, read_initial_seq_num)
-    }
-
-    /// Creates a new OscoreConf.
     pub fn new(
         seq_initial: u64,
         oscore_conf_bytes: &[u8],
         save_seq_num_func: extern "C" fn(seq_num: u64, _param: *mut c_void) -> i32,
-        read_initial_seq_num_func: fn() -> Option<u64>,
     ) -> Result<Self, OscoreConfigCreationError> {
         let conf = coap_str_const_t {
             length: oscore_conf_bytes.len(),
             s: oscore_conf_bytes.as_ptr(),
         };
-
-        let seq_initial = read_initial_seq_num_func().unwrap_or_else(|| seq_initial);
 
         // SAFETY: It is expected, that the user provides valid oscore_conf bytes. In case of
         // failure this will return null which will result in an error being thrown.
@@ -133,7 +68,7 @@ impl Drop for OscoreConf {
         // has been set to false, to prevent a double free here.
         if self.raw_conf_valid {
             unsafe {
-                Box::from_raw(self.raw_conf);
+                let _ = Box::from_raw(self.raw_conf);
             }
         }
     }
