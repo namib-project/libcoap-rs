@@ -35,6 +35,8 @@ use libcoap_sys::{
     coap_register_response_handler, coap_set_app_data, coap_startup_with_feature_checks, COAP_BLOCK_SINGLE_BODY,
     COAP_BLOCK_USE_LIBCOAP, COAP_IO_WAIT,
 };
+#[cfg(feature = "oscore")]
+use libcoap_sys::{coap_context_oscore_server, coap_delete_oscore_recipient, coap_new_oscore_recipient};
 use std::ffi::CStr;
 #[cfg(feature = "dtls-pki")]
 use std::ffi::CString;
@@ -43,8 +45,6 @@ use std::ptr::NonNull;
 use std::{any::Any, ffi::c_void, fmt::Debug, net::SocketAddr, ops::Sub, sync::Once, time::Duration};
 #[cfg(all(feature = "dtls-pki", unix))]
 use std::{os::unix::ffi::OsStrExt, path::Path};
-#[cfg(feature = "oscore")]
-use libcoap_sys::{coap_context_oscore_server, coap_delete_oscore_recipient, coap_new_oscore_recipient};
 
 #[cfg(any(feature = "dtls-rpk", feature = "dtls-pki"))]
 use crate::crypto::pki_rpk::ServerPkiRpkCryptoContext;
@@ -60,12 +60,12 @@ use crate::{
 };
 
 //TODO: New feature?
-use libcoap_sys::coap_join_mcast_group_intf;
 #[cfg(feature = "oscore")]
 use crate::{
     error::{OscoreRecipientError, OscoreServerCreationError},
     OscoreConf, OscoreRecipient,
 };
+use libcoap_sys::coap_join_mcast_group_intf;
 
 static COAP_STARTUP_ONCE: Once = Once::new();
 
@@ -420,24 +420,21 @@ impl CoapContext<'_> {
     }
 
     /// Set the context's default OSCORE configuration for a server.
+    ///
+    /// # Errors
+    /// Will return a [OscoreServerCreationError] if adding the oscore configuration fails.
     #[cfg(feature = "oscore")]
     pub fn oscore_server(&mut self, mut oscore_conf: OscoreConf) -> Result<(), OscoreServerCreationError> {
         let mut inner_ref = self.inner.borrow_mut();
         let result: i32;
 
-        // Check whether OscoreConf raw_conf is still valid.
-        if !oscore_conf.raw_conf_valid {
-            return Err(OscoreServerCreationError::OscoreConfigInvalid);
-        }
-
-        // SAFETY: OscoreConf raw_conf was just checked for validity, properly initialized
-        // CoapContext always has a valid raw_context that is not deleted until the
-        // CoapContextInner is dropped.
+        // SAFETY: Properly initialized CoapContext always has a valid raw_context that is not deleted until
+        // the CoapContextInner is dropped. OscoreConf raw_conf should be valid, else return an error.
         //
         // coap_context_oscore_server will also always free the raw_conf, regardless of the result:
-        // https://libcoap.net/doc/reference/4.3.5/group__oscore.html#ga71ddf56bcd6d6650f8235ee252fde47f
+        // [libcoap docs](https://libcoap.net/doc/reference/4.3.5/group__oscore.html#ga71ddf56bcd6d6650f8235ee252fde47f)
         unsafe {
-            result = coap_context_oscore_server(inner_ref.raw_context, oscore_conf.as_mut_raw_conf());
+            result = coap_context_oscore_server(inner_ref.raw_context, oscore_conf.as_mut_raw_conf()?);
         };
 
         // Invalidate the OscoreConf raw_conf as its freed by the call above.
@@ -460,6 +457,13 @@ impl CoapContext<'_> {
     }
 
     /// Adds a recipient_id to the OscoreContext.
+    ///
+    /// # Errors
+    /// Will return a [OscoreRecipientError] if adding the recipient failed.
+    /// You might want to check the error to determine if adding the recipient failed
+    /// due to the recipient_id beeing already added to the context.
+    /// Trying to call this on a CoapContext without appropriate oscore information will
+    /// also result in an error.
     #[cfg(feature = "oscore")]
     pub fn new_oscore_recipient(&mut self, recipient_id: &str) -> Result<(), OscoreRecipientError> {
         let mut inner_ref = self.inner.borrow_mut();
@@ -509,6 +513,13 @@ impl CoapContext<'_> {
     }
 
     /// Removes a recipient_id from the OscoreContext.
+    ///
+    /// # Errors
+    /// Will return a [OscoreRecipientError] if removing the recipient failed.
+    /// You might want to check the error to determine if removing the recipient failed
+    /// due to the recipient_id beeing not present within the context.
+    /// Trying to call this on a CoapContext without appropriate oscore information will
+    /// also result in an error.
     #[cfg(feature = "oscore")]
     pub fn delete_oscore_recipient(&mut self, recipient_id: &str) -> Result<(), OscoreRecipientError> {
         let mut inner_ref = self.inner.borrow_mut();

@@ -1,10 +1,10 @@
 use core::{ffi::c_void, ptr};
 use libcoap_sys::{coap_bin_const_t, coap_new_oscore_conf, coap_oscore_conf_t, coap_str_const_t};
 
-use crate::error::OscoreConfigCreationError;
+use crate::error::OscoreConfigError;
 
-/// Represents an oscore conf object which stores the underlying
-/// coap_oscore_conf_t struct.
+/// Represents an oscore config object which stores the underlying
+/// coap_oscore_conf_t C struct.
 pub struct OscoreConf {
     raw_conf: *mut coap_oscore_conf_t,
     pub(crate) raw_conf_valid: bool,
@@ -13,11 +13,16 @@ pub struct OscoreConf {
 
 impl OscoreConf {
     /// Creates a new OscoreConf.
+    ///
+    /// # Errors
+    /// Will return a [OscoreConfigError] if creating the oscore config fails (most likely due to
+    /// invalid oscore config bytes provided).
     pub fn new(
         seq_initial: u64,
         oscore_conf_bytes: &[u8],
         save_seq_num_func: extern "C" fn(seq_num: u64, _param: *mut c_void) -> i32,
-    ) -> Result<Self, OscoreConfigCreationError> {
+    ) -> Result<Self, OscoreConfigError> {
+        // Build the configs C struct from bytes.
         let conf = coap_str_const_t {
             length: oscore_conf_bytes.len(),
             s: oscore_conf_bytes.as_ptr(),
@@ -26,9 +31,8 @@ impl OscoreConf {
         // SAFETY: It is expected, that the user provides valid oscore_conf bytes. In case of
         // failure this will return null which will result in an error being thrown.
         let oscore_conf = unsafe { coap_new_oscore_conf(conf, Some(save_seq_num_func), ptr::null_mut(), seq_initial) };
-
         if oscore_conf.is_null() {
-            return Err(OscoreConfigCreationError::Unknown);
+            return Err(OscoreConfigError::Unknown);
         }
 
         // Safe the initial recipient_id (if present). This needs to be added to the context when
@@ -44,23 +48,36 @@ impl OscoreConf {
             }
         }
 
+        // Return the valid OscoreConf.
         Ok(Self {
             raw_conf: oscore_conf,
             raw_conf_valid: true,
             initial_recipient,
         })
     }
-    /// SAFETY: raw_conf should be always valid until the OscoreConf is dropped, calling this
-    /// function will only return a copy of the raw_conf which has to bee freed by the caller.
-    /// The intitial raw_conf held within the OscoreConf is dropped via its Drop trade.
-    pub(crate) fn as_mut_raw_conf(&mut self) -> *mut coap_oscore_conf_t {
-        self.raw_conf
+
+    /// Return the underlying C representation of the oscore config, if its still marked as valid.
+    /// Fails with an error otherwise.
+    ///
+    /// # Errors
+    /// Will return a [OscoreConfigError] if trying to read the raw_config's C struct on an already
+    /// invalidated OscoreConf. Please make sure to only use the OscoreConf onces as connect_oscore
+    /// and oscore_server would free off the underlying C struct of this config and mark it as invalid.
+    ///
+    /// WARNING: If you clear this pointer you have to mark the raw_conf as invalid by setting the
+    /// raw_conf_valid to false to prevent a double free()!
+    pub(crate) fn as_mut_raw_conf(&mut self) -> Result<*mut coap_oscore_conf_t, OscoreConfigError> {
+        if self.raw_conf_valid {
+            Ok(self.raw_conf)
+        } else {
+            Err(OscoreConfigError::Invalid)
+        }
     }
 }
 
 impl Drop for OscoreConf {
     /// Drop the OscoreConf.
-    /// The Conf will only be dropped, if the raw_struct hasn't been dropped already.
+    /// The config will only be dropped, if the raw_struct hasn't been dropped already.
     fn drop(&mut self) {
         // SAFETY: Drop the raw_conf if the raw_struct is still valid and hasn't been dropped by
         // libcoap already. The raw_conf might be freed and invalidated already if connect_oscore
@@ -74,7 +91,7 @@ impl Drop for OscoreConf {
     }
 }
 
-/// OscoreRecipient represents a Recipient with an ID, and its underlying C struct.
+/// OscoreRecipient represents a recipient with an ID, and its underlying C struct.
 #[derive(Debug)]
 pub(crate) struct OscoreRecipient {
     recipient_id: String,
@@ -84,7 +101,7 @@ pub(crate) struct OscoreRecipient {
 impl OscoreRecipient {
     /// Returns a new OscoreRecipient with a given ID.
     pub(crate) fn new(recipient_id: &str) -> OscoreRecipient {
-        // The User only supplies the Recipient ID, we will build the C Struct here
+        // The user only supplies the recipients ID, we will build the recipients C struct here.
         let recipient = coap_bin_const_t {
             length: recipient_id.len(),
             s: recipient_id.as_ptr(),
@@ -92,33 +109,31 @@ impl OscoreRecipient {
 
         let recipient: *mut coap_bin_const_t = Box::into_raw(Box::new(recipient));
 
-        // And then return the newly created Recipient
+        // And then return the newly created recipient.
         OscoreRecipient {
             recipient_id: recipient_id.to_string(),
             recipient,
         }
     }
 
-    /// Returns the raw C Struct of the Recipient.
+    /// Returns the raw C struct of the recipient.
     pub(crate) fn get_c_struct(&self) -> *mut coap_bin_const_t {
         self.recipient
     }
 
-    /// Returns the ID of the Recipient.
+    /// Returns the ID of the recipient.
     pub(crate) fn get_recipient_id(&self) -> &str {
         self.recipient_id.as_str()
     }
 
-    /// Drops the Recipient from Memory.
-    /// Warning: THIS SHOULD NEVER BE CALLED UNLESS YOU'RE SURE THE coap_bin_const_t HAS NOT BEEN FREED BEFORE!
-    /// This will trigger a double free, if coap_bin_const_t has already been freed!
+    /// Drops the recipient from memory.
+    /// This will trigger a double free uf coap_bin_const_t has already been freed!
+    /// WARNING: THIS SHOULD NEVER BE CALLED UNLESS YOU'RE SURE THE coap_bin_const_t HAS NOT BEEN FREED BEFORE!
     pub(crate) fn drop(&self) {
-        // SAFETY: THIS SHOULD NEVER BE CALLED UNLESS YOU'RE SURE THE coap_bin_const_t HAS NOT BEEN
-        // FREED BEFORE!
-        // Currently, this is only used in 'add_new_oscore_recipient()' in case the recipient is not
-        // added to the context (which would free the raw pointer when dropped). There is Currently
-        // only one exception, which is filtered out, because trying to add a duplicate recipient
-        // to the oscore context would already trigger a free() in libcoap
+        // SAFETY: Currently, this is only used in 'add_new_oscore_recipient()' in case the recipient
+        // is not added to the context. There is currently only one exception, which is filtered out,
+        // because trying to add a duplicate recipient to the oscore context would already trigger a
+        // free() in libcoap.
         unsafe {
             let _ = Box::from_raw(self.get_c_struct());
         }

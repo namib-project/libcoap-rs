@@ -202,6 +202,7 @@ impl CoapClientSession<'_> {
 
     /// Create an encrypted session with the given peer over UDP using OSCORE.
     ///
+    /// # Errors
     /// Will return a [SessionCreationError] if libcoap was unable to create a session
     /// (most likely because it was not possible to bind to a port).
     #[cfg(feature = "oscore")]
@@ -210,28 +211,23 @@ impl CoapClientSession<'_> {
         addr: SocketAddr,
         mut oscore_conf: OscoreConf,
     ) -> Result<CoapClientSession<'a>, SessionCreationError> {
-        // Check whether OscoreConf raw_conf is still valid.
-        if !oscore_conf.raw_conf_valid {
-            return Err(SessionCreationError::OscoreConfigInvalid);
-        }
-
         // SAFETY: self.raw_context is guaranteed to be valid, local if can be null.
-        // OscoreConf raw_conf way just checked for validity.
+        // OscoreConf raw_conf should be valid, else we return an error.
         //
         // coap_new_client_session_oscore should free the raw_conf:
-        // https://libcoap.net/doc/reference/4.3.5/group__oscore.html#ga65ac1a57ebc037b4d14538c8e21c28a7
+        // [libcoap docs](https://libcoap.net/doc/reference/4.3.5/group__oscore.html#ga65ac1a57ebc037b4d14538c8e21c28a7)
         let session = unsafe {
             coap_new_client_session_oscore(
                 ctx.as_mut_raw_context(),
                 std::ptr::null(),
                 CoapAddress::from(addr).as_raw_address(),
                 coap_proto_t_COAP_PROTO_UDP,
-                oscore_conf.as_mut_raw_conf(),
+                oscore_conf.as_mut_raw_conf()?,
             )
         };
 
         // Invalidate the OscoreConf raw_conf as it's freed by the call above, so we don't try to
-        // free it again the future, which would cause a double free.
+        // free it again the future, which would cause a double free().
         oscore_conf.raw_conf_valid = false;
 
         if session.is_null() {

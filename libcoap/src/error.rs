@@ -32,10 +32,13 @@ pub enum EndpointCreationError {
 
 #[cfg(feature = "oscore")]
 #[derive(Error, Debug, Copy, Clone, Eq, PartialEq)]
-pub enum OscoreConfigCreationError {
+pub enum OscoreConfigError {
+    /// Tried to get oscore config as raw struct which has been invalidated before
+    #[error("Oscore config error: tried to get oscore config as raw struct which has been invalidated before")]
+    Invalid,
     /// Unknown error inside of libcoap, propably due to missing/invalid entries in your oscore
     /// config
-    #[error("Oscore config creation error: unknown error in call to libcoap, propably due to missing/invalid entries in your oscore config")]
+    #[error("Oscore config error: unknown error in call to libcoap, propably due to missing/invalid entries in your oscore config")]
     Unknown,
 }
 
@@ -43,11 +46,17 @@ pub enum OscoreConfigCreationError {
 #[derive(Error, Debug, Copy, Clone, Eq, PartialEq)]
 pub enum OscoreServerCreationError {
     /// Oscore config seems to be invalid, make sure to use it only onces
-    #[error("Oscore server creation error: oscore config seems tot be invalid, make sure to use it only onces")]
+    #[error("Oscore server creation error: oscore config seems to be invalid, make sure to use it only onces")]
     OscoreConfigInvalid,
     /// Unknown error inside of libcoap
     #[error("Oscore server creation error: unknown error in call to libcoap")]
     Unknown,
+}
+#[cfg(feature = "oscore")]
+impl From<OscoreConfigError> for OscoreServerCreationError {
+    fn from(error: OscoreConfigError) -> Self {
+        OscoreServerCreationError::OscoreConfigInvalid
+    }
 }
 
 #[cfg(feature = "oscore")]
@@ -113,8 +122,14 @@ pub enum SessionCreationError {
     Unknown,
     /// Oscore config seems to be invalid, make sure to use it only onces
     #[cfg(feature = "oscore")]
-    #[error("CoAP session creation error: oscore config seems tot be invalid, make sure to use it only onces")]
+    #[error("CoAP session creation error: oscore config seems to be invalid, make sure to use it only onces")]
     OscoreConfigInvalid,
+}
+#[cfg(feature = "oscore")]
+impl From<OscoreConfigError> for SessionCreationError {
+    fn from(error: OscoreConfigError) -> Self {
+        SessionCreationError::OscoreConfigInvalid
+    }
 }
 
 #[derive(Error, Debug, Copy, Clone, Eq, PartialEq)]
