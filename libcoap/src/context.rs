@@ -12,6 +12,22 @@
 
 use core::ffi::c_uint;
 #[cfg(feature = "dtls-pki")]
+use std::ffi::CString;
+#[cfg(feature = "dtls")]
+use std::ptr::NonNull;
+use std::{
+    any::Any,
+    ffi::{c_void, CStr},
+    fmt::Debug,
+    net::SocketAddr,
+    ops::Sub,
+    sync::Once,
+    time::Duration,
+};
+#[cfg(all(feature = "dtls-pki", unix))]
+use std::{os::unix::ffi::OsStrExt, path::Path};
+
+#[cfg(feature = "dtls-pki")]
 use libcoap_sys::coap_context_set_pki_root_cas;
 use libcoap_sys::{
     coap_add_resource, coap_can_exit, coap_context_get_csm_max_message_size, coap_context_get_csm_timeout,
@@ -30,21 +46,13 @@ use libcoap_sys::{
     coap_event_t_COAP_EVENT_SESSION_FAILED, coap_event_t_COAP_EVENT_TCP_CLOSED, coap_event_t_COAP_EVENT_TCP_CONNECTED,
     coap_event_t_COAP_EVENT_TCP_FAILED, coap_event_t_COAP_EVENT_WS_CLOSED, coap_event_t_COAP_EVENT_WS_CONNECTED,
     coap_event_t_COAP_EVENT_WS_PACKET_SIZE, coap_event_t_COAP_EVENT_XMIT_BLOCK_FAIL, coap_free_context,
-    coap_get_app_data, coap_io_process, coap_new_context, coap_proto_t, coap_proto_t_COAP_PROTO_DTLS,
-    coap_proto_t_COAP_PROTO_TCP, coap_proto_t_COAP_PROTO_UDP, coap_register_event_handler,
-    coap_register_response_handler, coap_set_app_data, coap_startup_with_feature_checks, COAP_BLOCK_SINGLE_BODY,
-    COAP_BLOCK_USE_LIBCOAP, COAP_IO_WAIT,
+    coap_get_app_data, coap_io_process, coap_join_mcast_group_intf, coap_new_context, coap_proto_t,
+    coap_proto_t_COAP_PROTO_DTLS, coap_proto_t_COAP_PROTO_TCP, coap_proto_t_COAP_PROTO_UDP,
+    coap_register_event_handler, coap_register_response_handler, coap_set_app_data, coap_startup_with_feature_checks,
+    COAP_BLOCK_SINGLE_BODY, COAP_BLOCK_USE_LIBCOAP, COAP_IO_WAIT,
 };
 #[cfg(feature = "oscore")]
 use libcoap_sys::{coap_context_oscore_server, coap_delete_oscore_recipient, coap_new_oscore_recipient};
-use std::ffi::CStr;
-#[cfg(feature = "dtls-pki")]
-use std::ffi::CString;
-#[cfg(feature = "dtls")]
-use std::ptr::NonNull;
-use std::{any::Any, ffi::c_void, fmt::Debug, net::SocketAddr, ops::Sub, sync::Once, time::Duration};
-#[cfg(all(feature = "dtls-pki", unix))]
-use std::{os::unix::ffi::OsStrExt, path::Path};
 
 #[cfg(any(feature = "dtls-rpk", feature = "dtls-pki"))]
 use crate::crypto::pki_rpk::ServerPkiRpkCryptoContext;
@@ -58,14 +66,12 @@ use crate::{
     session::{session_response_handler, CoapServerSession, CoapSession},
     transport::CoapEndpoint,
 };
-
 //TODO: New feature?
 #[cfg(feature = "oscore")]
 use crate::{
     error::{OscoreRecipientError, OscoreServerCreationError},
     OscoreConf, OscoreRecipient,
 };
-use libcoap_sys::coap_join_mcast_group_intf;
 
 static COAP_STARTUP_ONCE: Once = Once::new();
 
