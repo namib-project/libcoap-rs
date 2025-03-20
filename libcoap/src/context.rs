@@ -500,7 +500,7 @@ impl CoapContext<'_> {
 
         // Drop the raw struct if adding it failed (except for duplicate id)...
         // SAFETY: This should be safe to use here as 'coap_new_oscore_recipient()' would only
-        // free() the raw strcuct on failure due to a duplicate recipient_id, which is filtered
+        // free() the raw struct on failure due to a duplicate recipient_id, which is filtered
         // out above.
         if result == 0 {
             recipient.drop();
@@ -546,7 +546,7 @@ impl CoapContext<'_> {
 
             // SAFETY: If libcoap successfully removed the recipient_id from the raw_context
             // it's underlying raw struct is also freed. The recipients raw_struct should always be
-            // valid, as it would have been removed from the context onces deleting it succeeded.
+            // valid, as it would have been removed from the context once deleting it succeeded.
             unsafe {
                 result = coap_delete_oscore_recipient(inner_ref.raw_context, recipient.get_c_struct());
             };

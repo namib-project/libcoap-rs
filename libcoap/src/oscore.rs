@@ -61,8 +61,8 @@ impl OscoreConf {
     ///
     /// # Errors
     /// Will return a [OscoreConfigError] if trying to read the raw_config's C struct on an already
-    /// invalidated OscoreConf. Please make sure to only use the OscoreConf onces as connect_oscore
-    /// and oscore_server would free off the underlying C struct of this config and mark it as invalid.
+    /// invalidated OscoreConf. Please make sure to only use the OscoreConf once as connect_oscore
+    /// and oscore_server would free the underlying C struct of this config and mark it as invalid.
     ///
     /// WARNING: If you clear this pointer you have to mark the raw_conf as invalid by setting the
     /// raw_conf_valid to false to prevent a double free()!
@@ -127,7 +127,7 @@ impl OscoreRecipient {
     }
 
     /// Drops the recipient from memory.
-    /// This will trigger a double free uf coap_bin_const_t has already been freed!
+    /// This will trigger a double free if coap_bin_const_t has already been freed!
     /// WARNING: THIS SHOULD NEVER BE CALLED UNLESS YOU'RE SURE THE coap_bin_const_t HAS NOT BEEN FREED BEFORE!
     pub(crate) fn drop(&self) {
         // SAFETY: Currently, this is only used in 'add_new_oscore_recipient()' in case the recipient

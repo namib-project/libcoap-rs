@@ -211,7 +211,7 @@ impl CoapClientSession<'_> {
         addr: SocketAddr,
         mut oscore_conf: OscoreConf,
     ) -> Result<CoapClientSession<'a>, SessionCreationError> {
-        // SAFETY: self.raw_context is guaranteed to be valid, local if can be null.
+        // SAFETY: self.raw_context is guaranteed to be valid, local_if can be null.
         // OscoreConf raw_conf should be valid, else we return an error.
         //
         // coap_new_client_session_oscore should free the raw_conf:
@@ -227,7 +227,7 @@ impl CoapClientSession<'_> {
         };
 
         // Invalidate the OscoreConf raw_conf as it's freed by the call above, so we don't try to
-        // free it again the future, which would cause a double free().
+        // free it again in the future, which would cause a double free().
         oscore_conf.raw_conf_valid = false;
 
         if session.is_null() {
