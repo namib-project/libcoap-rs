@@ -38,7 +38,7 @@ use libcoap_sys::{coap_session_get_psk_hint, coap_session_get_psk_identity, coap
 use self::sealed::{CoapSessionCommonInternal, CoapSessionInnerProvider};
 pub use self::{client::CoapClientSession, server::CoapServerSession};
 use crate::{
-    error::{MessageConversionError, SessionGetAppDataError},
+    error::{MessageConversionError, MulticastHopLimitError, SessionGetAppDataError},
     message::{request::CoapRequest, response::CoapResponse, CoapMessage, CoapMessageCommon},
     protocol::CoapToken,
     types::{CoapAddress, CoapMessageId, CoapProtocol, IfIndex, MaxRetransmit},
@@ -297,10 +297,16 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     }
 
     /// Sets maximum number of hops for multicast request
-    fn set_mcast_hops_limit(&self, hops: usize) {
+    fn set_mcast_hops_limit(&self, hops: usize) -> Result<(), MulticastHopLimitError> {
         // In some cases the default hoplimit of 1 is not enough to reach the destination. Choose limit accordingly
         // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
-        unsafe { coap_mcast_set_hops(self.inner_mut().raw_session, hops) };
+        unsafe {
+            let ret = coap_mcast_set_hops(self.inner_mut().raw_session, hops);
+            if ret != 0 {
+                return Err(MulticastHopLimitError::Unknown);
+            }
+        };
+        Ok(())
     }
 
     /// Returns the next message ID that should be used for this session.
