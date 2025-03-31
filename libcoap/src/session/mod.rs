@@ -302,7 +302,7 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
         // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         unsafe {
             let ret = coap_mcast_set_hops(self.inner_mut().raw_session, hops);
-            if ret != 0 {
+            if ret == 0 {
                 return Err(MulticastHopLimitError::Unknown);
             }
         };
