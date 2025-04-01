@@ -19,8 +19,8 @@ use std::{
 };
 
 use libcoap_sys::{
-    coap_context_t, coap_fixed_point_t, coap_mid_t, coap_new_message_id, coap_pdu_get_token, coap_pdu_t,
-    coap_response_t, coap_response_t_COAP_RESPONSE_FAIL, coap_response_t_COAP_RESPONSE_OK, coap_send,
+    coap_context_t, coap_fixed_point_t, coap_mcast_set_hops, coap_mid_t, coap_new_message_id, coap_pdu_get_token,
+    coap_pdu_t, coap_response_t, coap_response_t_COAP_RESPONSE_FAIL, coap_response_t_COAP_RESPONSE_OK, coap_send,
     coap_session_get_ack_random_factor, coap_session_get_ack_timeout, coap_session_get_addr_local,
     coap_session_get_addr_remote, coap_session_get_ifindex, coap_session_get_max_retransmit, coap_session_get_proto,
     coap_session_get_state, coap_session_get_type, coap_session_init_token, coap_session_max_pdu_size,
@@ -38,7 +38,7 @@ use libcoap_sys::{coap_session_get_psk_hint, coap_session_get_psk_identity, coap
 use self::sealed::{CoapSessionCommonInternal, CoapSessionInnerProvider};
 pub use self::{client::CoapClientSession, server::CoapServerSession};
 use crate::{
-    error::{MessageConversionError, SessionGetAppDataError},
+    error::{MessageConversionError, MulticastHopLimitError, SessionGetAppDataError},
     message::{request::CoapRequest, response::CoapResponse, CoapMessage, CoapMessageCommon},
     protocol::CoapToken,
     types::{CoapAddress, CoapMessageId, CoapProtocol, IfIndex, MaxRetransmit},
@@ -294,6 +294,19 @@ pub trait CoapSessionCommon<'a>: CoapSessionCommonInternal<'a> {
     fn set_mtu(&self, mtu: u32) {
         // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
         unsafe { coap_session_set_mtu(self.inner_mut().raw_session, mtu) }
+    }
+
+    /// Sets maximum number of hops for multicast request
+    fn set_mcast_hops_limit(&self, hops: usize) -> Result<(), MulticastHopLimitError> {
+        // In some cases the default hoplimit of 1 is not enough to reach the destination. Choose limit accordingly
+        // SAFETY: Provided session pointer being valid is an invariant of CoapSessionInner
+        unsafe {
+            let ret = coap_mcast_set_hops(self.inner_mut().raw_session, hops);
+            if ret == 0 {
+                return Err(MulticastHopLimitError::Unknown);
+            }
+        };
+        Ok(())
     }
 
     /// Returns the next message ID that should be used for this session.
