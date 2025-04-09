@@ -36,7 +36,7 @@ impl OscoreConf {
             return Err(OscoreConfigError::Unknown);
         }
 
-        // Safe the initial recipient_id (if present). This needs to be added to the context when
+        // Save the initial recipient_id (if present). This needs to be added to the context when
         // calling oscore_server to prevent a double free when trying to add an identical
         // recipient_id later.
         let mut initial_recipient: Option<String> = None;
