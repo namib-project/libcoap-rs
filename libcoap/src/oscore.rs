@@ -1,3 +1,13 @@
+// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * Copyright © The libcoap-rs Contributors, all rights reserved.
+ * This file is part of the libcoap-rs project, see the README file for
+ * general information on this project and the NOTICE.md and LICENSE files
+ * for information regarding copyright ownership and terms of use.
+ *
+ * oscore.rs - Wrapper for libcoap OSCORE functionality.
+ */
+ 
 use core::{ffi::c_void, ptr};
 
 use libcoap_sys::{coap_bin_const_t, coap_new_oscore_conf, coap_oscore_conf_t, coap_str_const_t};
