@@ -7,10 +7,10 @@
  *
  * oscore.rs - Wrapper for libcoap OSCORE functionality.
  */
- 
+
 use core::{ffi::c_void, ptr};
 
-use libcoap_sys::{coap_bin_const_t, coap_new_oscore_conf, coap_oscore_conf_t, coap_str_const_t};
+use libcoap_sys::{coap_new_oscore_conf, coap_oscore_conf_t, coap_str_const_t};
 
 use crate::error::OscoreConfigError;
 
@@ -98,55 +98,6 @@ impl Drop for OscoreConf {
             unsafe {
                 let _ = Box::from_raw(self.raw_conf);
             }
-        }
-    }
-}
-
-/// OscoreRecipient represents a recipient with an ID, and its underlying C struct.
-#[derive(Debug)]
-pub(crate) struct OscoreRecipient {
-    recipient_id: String,
-    recipient: *mut coap_bin_const_t,
-}
-
-impl OscoreRecipient {
-    /// Returns a new OscoreRecipient with a given ID.
-    pub(crate) fn new(recipient_id: &str) -> OscoreRecipient {
-        // The user only supplies the recipients ID, we will build the recipients C struct here.
-        let recipient = coap_bin_const_t {
-            length: recipient_id.len(),
-            s: recipient_id.as_ptr(),
-        };
-
-        let recipient: *mut coap_bin_const_t = Box::into_raw(Box::new(recipient));
-
-        // And then return the newly created recipient.
-        OscoreRecipient {
-            recipient_id: recipient_id.to_string(),
-            recipient,
-        }
-    }
-
-    /// Returns the raw C struct of the recipient.
-    pub(crate) fn get_c_struct(&self) -> *mut coap_bin_const_t {
-        self.recipient
-    }
-
-    /// Returns the ID of the recipient.
-    pub(crate) fn get_recipient_id(&self) -> &str {
-        self.recipient_id.as_str()
-    }
-
-    /// Drops the recipient from memory.
-    /// This will trigger a double free if coap_bin_const_t has already been freed!
-    /// WARNING: THIS SHOULD NEVER BE CALLED UNLESS YOU'RE SURE THE coap_bin_const_t HAS NOT BEEN FREED BEFORE!
-    pub(crate) fn drop(&self) {
-        // SAFETY: Currently, this is only used in 'add_new_oscore_recipient()' in case the recipient
-        // is not added to the context. There is currently only one exception, which is filtered out,
-        // because trying to add a duplicate recipient to the oscore context would already trigger a
-        // free() in libcoap.
-        unsafe {
-            let _ = Box::from_raw(self.get_c_struct());
         }
     }
 }

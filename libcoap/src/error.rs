@@ -54,7 +54,7 @@ pub enum OscoreServerCreationError {
 }
 #[cfg(feature = "oscore")]
 impl From<OscoreConfigError> for OscoreServerCreationError {
-    fn from(error: OscoreConfigError) -> Self {
+    fn from(_error: OscoreConfigError) -> Self {
         OscoreServerCreationError::OscoreConfigInvalid
     }
 }
@@ -127,7 +127,7 @@ pub enum SessionCreationError {
 }
 #[cfg(feature = "oscore")]
 impl From<OscoreConfigError> for SessionCreationError {
-    fn from(error: OscoreConfigError) -> Self {
+    fn from(_error: OscoreConfigError) -> Self {
         SessionCreationError::OscoreConfigInvalid
     }
 }

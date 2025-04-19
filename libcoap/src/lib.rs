@@ -169,8 +169,6 @@ pub use context::CoapContext;
 pub use event::CoapEventHandler;
 #[cfg(feature = "oscore")]
 pub use oscore::OscoreConf;
-#[cfg(feature = "oscore")]
-use oscore::OscoreRecipient;
 pub use resource::{CoapRequestHandler, CoapResource};
 
 mod context;
