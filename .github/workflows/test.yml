@@ -37,11 +37,11 @@ jobs:
       LIBCOAP_RS_BUILD_SYSTEM: "vendored"
       DTLS_LIBRARY_FEATURES: |
         ${{ (matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'tinydtls' && 'tcp,dtls-psk,dtls-rpk,dtls-tinydtls-sys-vendored')
-            || (matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'mbedtls' && 'tcp,dtls-psk,dtls-pki,dtls-mbedtls-sys')
+            || (matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'mbedtls' && 'tcp,dtls-psk,dtls-pki')
             || (matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'openssl' && 'tcp,dtls-psk,dtls-pki,dtls-openssl-sys-vendored')
             || (matrix.crate == 'libcoap-rs' && matrix.dtls_backend == 'gnutls' && 'tcp,dtls-psk,dtls-pki,dtls-rpk')
             || (matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'tinydtls' && 'dtls,dtls-tinydtls-sys-vendored')
-            || (matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'mbedtls' && 'dtls,dtls-mbedtls-sys')
+            || (matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'mbedtls' && 'dtls')
             || (matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'openssl' && 'dtls,dtls-openssl-sys-vendored')
             || (matrix.crate == 'libcoap-sys' && matrix.dtls_backend == 'gnutls' && 'dtls')
             || 'vendored'
@@ -58,6 +58,11 @@ jobs:
         uses: awalsh128/cache-apt-pkgs-action@v1.4.3
         with:
           packages: libgnutls28-dev libgnutls30
+          version: 1.0
+      - if: matrix.dtls_backend == 'mbedtls'
+        uses: awalsh128/cache-apt-pkgs-action@v1.4.3
+        with:
+          packages: libmbedtls-dev
           version: 1.0
       - run: cargo test -p ${{ matrix.crate }} --no-default-features --features "$LIBRARY_FEATURES" --features "$DTLS_LIBRARY_FEATURES" --no-fail-fast
       - if: matrix.rust_version == 'nightly'
@@ -101,6 +106,8 @@ jobs:
 
   docs:
     runs-on: ubuntu-latest
+    env:
+      CMAKE_POLICY_VERSION_MINIMUM: 3.5
     steps:
       - uses: actions/checkout@v4
         with:

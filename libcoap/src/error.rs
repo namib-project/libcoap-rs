@@ -24,6 +24,13 @@ pub enum MulticastGroupJoinError {
 }
 
 #[derive(Error, Debug, Copy, Clone, Eq, PartialEq)]
+pub enum MulticastHopLimitError {
+    /// Unknown error inside of libcoap
+    #[error("CoAP multicast hop limit error: unable to set hop limit for multicast")]
+    Unknown,
+}
+
+#[derive(Error, Debug, Copy, Clone, Eq, PartialEq)]
 pub enum EndpointCreationError {
     /// Unknown error inside of libcoap
     #[error("CoAP endpoint creation error: unknown error in call to libcoap")]
