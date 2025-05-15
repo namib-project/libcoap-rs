@@ -10,7 +10,7 @@
 
 use core::{ffi::c_void, ptr};
 
-use libcoap_sys::{coap_new_oscore_conf, coap_oscore_conf_t, coap_str_const_t};
+use libcoap_sys::{coap_new_oscore_conf, coap_new_str_const, coap_oscore_conf_t};
 
 use crate::error::OscoreConfigError;
 
@@ -18,7 +18,6 @@ use crate::error::OscoreConfigError;
 /// coap_oscore_conf_t C struct.
 pub struct OscoreConf {
     raw_conf: *mut coap_oscore_conf_t,
-    pub(crate) raw_conf_valid: bool,
     pub(crate) initial_recipient: Option<String>,
 }
 
@@ -33,15 +32,23 @@ impl OscoreConf {
         oscore_conf_bytes: &[u8],
         save_seq_num_func: extern "C" fn(seq_num: u64, _param: *mut c_void) -> i32,
     ) -> Result<Self, OscoreConfigError> {
-        // Build the configs C struct from bytes.
-        let conf = coap_str_const_t {
-            length: oscore_conf_bytes.len(),
-            s: oscore_conf_bytes.as_ptr(),
-        };
+        // Creates the raw_struct containing the config provided by the caller.
+        // SAFETY: Provided pointer and length point to a valid byte string usable by
+        // coap_new_str_const().
+        let conf = unsafe { coap_new_str_const(oscore_conf_bytes.as_ptr(), oscore_conf_bytes.len()) };
+        if conf.is_null() {
+            return Err(OscoreConfigError::Unknown);
+        }
 
-        // SAFETY: It is expected, that the user provides valid oscore_conf bytes. In case of
-        // failure this will return null which will result in an error being thrown.
-        let oscore_conf = unsafe { coap_new_oscore_conf(conf, Some(save_seq_num_func), ptr::null_mut(), seq_initial) };
+        // SAFETY:
+        // The parts of the byte string referenced by conf are defensively copied if used
+        // by the newly created oscore_conf.
+        // Conf was just checked for invalidity, whether or not it containes all required fields.
+        // - save_seq_num_func is specifically designed to work as a callback for this
+        //   function.
+        // - save_seq_num_func_param may be a null pointer (save_seq_num_func does
+        //   not use it).
+        let oscore_conf = unsafe { coap_new_oscore_conf(*conf, Some(save_seq_num_func), ptr::null_mut(), seq_initial) };
         if oscore_conf.is_null() {
             return Err(OscoreConfigError::Unknown);
         }
@@ -62,42 +69,23 @@ impl OscoreConf {
         // Return the valid OscoreConf.
         Ok(Self {
             raw_conf: oscore_conf,
-            raw_conf_valid: true,
             initial_recipient,
         })
     }
 
-    /// Return the underlying C representation of the oscore config, if its still marked as valid.
-    /// Fails with an error otherwise.
-    ///
-    /// # Errors
-    /// Will return a [OscoreConfigError] if trying to read the raw_config's C struct on an already
-    /// invalidated OscoreConf. Please make sure to only use the OscoreConf once as connect_oscore
-    /// and oscore_server would free the underlying C struct of this config and mark it as invalid.
-    ///
-    /// WARNING: If you clear this pointer you have to mark the raw_conf as invalid by setting the
-    /// raw_conf_valid to false to prevent a double free()!
-    pub(crate) fn as_mut_raw_conf(&mut self) -> Result<*mut coap_oscore_conf_t, OscoreConfigError> {
-        if self.raw_conf_valid {
-            Ok(self.raw_conf)
-        } else {
-            Err(OscoreConfigError::Invalid)
-        }
+    /// Cosumes the OscoreConf and returns the contained raw_conf libcoap struct as well as an
+    /// optional initial recipient if set.
+    pub(crate) fn into_raw_conf(self) -> (*mut coap_oscore_conf_t, Option<String>) {
+        (self.raw_conf, self.initial_recipient.clone())
     }
 }
 
 impl Drop for OscoreConf {
-    /// Drop the OscoreConf.
-    /// The config will only be dropped, if the raw_struct hasn't been dropped already.
+    /// Drop the OscoreConf's raw_conf.
     fn drop(&mut self) {
-        // SAFETY: Drop the raw_conf if the raw_struct is still valid and hasn't been dropped by
-        // libcoap already. The raw_conf might be freed and invalidated already if connect_oscore
-        // or oscore_server have been called with it previously, in which case the raw_conf_valid
-        // has been set to false, to prevent a double free here.
-        if self.raw_conf_valid {
-            unsafe {
-                let _ = Box::from_raw(self.raw_conf);
-            }
+        // TODO: Howto handle this now?
+        unsafe {
+            let _ = Box::from_raw(self.raw_conf);
         }
     }
 }

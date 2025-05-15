@@ -430,9 +430,10 @@ impl CoapContext<'_> {
     /// # Errors
     /// Will return a [OscoreServerCreationError] if adding the oscore configuration fails.
     #[cfg(feature = "oscore")]
-    pub fn oscore_server(&mut self, mut oscore_conf: OscoreConf) -> Result<(), OscoreServerCreationError> {
+    pub fn oscore_server(&mut self, oscore_conf: OscoreConf) -> Result<(), OscoreServerCreationError> {
         let mut inner_ref = self.inner.borrow_mut();
         let result: i32;
+        let (raw_conf, initial_recipient) = oscore_conf.into_raw_conf();
 
         // SAFETY: Properly initialized CoapContext always has a valid raw_context that is not deleted until
         // the CoapContextInner is dropped. OscoreConf raw_conf should be valid, else return an error.
@@ -440,11 +441,8 @@ impl CoapContext<'_> {
         // coap_context_oscore_server will also always free the raw_conf, regardless of the result:
         // [libcoap docs](https://libcoap.net/doc/reference/4.3.5/group__oscore.html#ga71ddf56bcd6d6650f8235ee252fde47f)
         unsafe {
-            result = coap_context_oscore_server(inner_ref.raw_context, oscore_conf.as_mut_raw_conf()?);
+            result = coap_context_oscore_server(inner_ref.raw_context, raw_conf);
         };
-
-        // Invalidate the OscoreConf raw_conf as its freed by the call above.
-        oscore_conf.raw_conf_valid = false;
 
         // Check whether adding the config to the context failed.
         if result == 0 {
@@ -452,7 +450,7 @@ impl CoapContext<'_> {
         }
 
         // Add the initial_recipient (if present).
-        if let Some(initial_recipient) = oscore_conf.initial_recipient.clone() {
+        if let Some(initial_recipient) = initial_recipient {
             inner_ref.recipients.push(Box::new(initial_recipient));
         }
 

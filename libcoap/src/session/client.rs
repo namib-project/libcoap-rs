@@ -209,7 +209,7 @@ impl CoapClientSession<'_> {
     pub fn connect_oscore<'a>(
         ctx: &mut CoapContext<'a>,
         addr: SocketAddr,
-        mut oscore_conf: OscoreConf,
+        oscore_conf: OscoreConf,
     ) -> Result<CoapClientSession<'a>, SessionCreationError> {
         // SAFETY: self.raw_context is guaranteed to be valid, local_if can be null.
         // OscoreConf raw_conf should be valid, else we return an error.
@@ -222,13 +222,9 @@ impl CoapClientSession<'_> {
                 std::ptr::null(),
                 CoapAddress::from(addr).as_raw_address(),
                 coap_proto_t_COAP_PROTO_UDP,
-                oscore_conf.as_mut_raw_conf()?,
+                oscore_conf.into_raw_conf().0,
             )
         };
-
-        // Invalidate the OscoreConf raw_conf as it's freed by the call above, so we don't try to
-        // free it again in the future, which would cause a double free().
-        oscore_conf.raw_conf_valid = false;
 
         if session.is_null() {
             return Err(SessionCreationError::Unknown);
