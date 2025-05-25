@@ -37,6 +37,52 @@ pub enum EndpointCreationError {
     Unknown,
 }
 
+#[cfg(feature = "oscore")]
+#[derive(Error, Debug, Copy, Clone, Eq, PartialEq)]
+pub enum OscoreConfigError {
+    /// Tried to get oscore config as raw struct which has been invalidated before
+    #[error("Oscore config error: tried to get oscore config as raw struct which has been invalidated before")]
+    Invalid,
+    /// Unknown error inside of libcoap, probably due to missing/invalid entries in your oscore
+    /// config
+    #[error("Oscore config error: unknown error in call to libcoap, probably due to missing/invalid entries in your oscore config")]
+    Unknown,
+}
+
+#[cfg(feature = "oscore")]
+#[derive(Error, Debug, Copy, Clone, Eq, PartialEq)]
+pub enum OscoreServerCreationError {
+    /// Oscore config seems to be invalid, make sure to use it only once
+    #[error("Oscore server creation error: oscore config seems to be invalid, make sure to use it only once")]
+    OscoreConfigInvalid,
+    /// Unknown error inside of libcoap
+    #[error("Oscore server creation error: unknown error in call to libcoap")]
+    Unknown,
+}
+#[cfg(feature = "oscore")]
+impl From<OscoreConfigError> for OscoreServerCreationError {
+    fn from(_error: OscoreConfigError) -> Self {
+        OscoreServerCreationError::OscoreConfigInvalid
+    }
+}
+
+#[cfg(feature = "oscore")]
+#[derive(Error, Debug, Copy, Clone, Eq, PartialEq)]
+pub enum OscoreRecipientError {
+    /// Method is called on a context without appropriate oscore information
+    #[error("Oscore recipient error: context is missing appropriate oscore information")]
+    NoOscoreContext,
+    /// Tried adding duplicate recipient to context
+    #[error("Oscore recipient error: tried adding duplicate recipient to context")]
+    DuplicateId,
+    /// Tried removing a recipient that is not associated with the context
+    #[error("Oscore recipient error: tried removing a recipient that is not associated with the context")]
+    NotFound,
+    /// Unknown error inside of libcoap, adding/removing a recipient failed
+    #[error("Oscore recipient error: unknown error in call to libcoap, adding/removing the recipient failed")]
+    Unknown,
+}
+
 #[derive(Error, Debug, Copy, Clone, Eq, PartialEq)]
 pub enum ContextConfigurationError {
     /// Unknown error inside of libcoap
@@ -81,6 +127,16 @@ pub enum SessionCreationError {
     /// Unknown error inside of libcoap
     #[error("CoAP session creation error: unknown error in call to libcoap")]
     Unknown,
+    /// Oscore config seems to be invalid, make sure to use it only once
+    #[cfg(feature = "oscore")]
+    #[error("CoAP session creation error: oscore config seems to be invalid, make sure to use it only once")]
+    OscoreConfigInvalid,
+}
+#[cfg(feature = "oscore")]
+impl From<OscoreConfigError> for SessionCreationError {
+    fn from(_error: OscoreConfigError) -> Self {
+        SessionCreationError::OscoreConfigInvalid
+    }
 }
 
 #[derive(Error, Debug, Copy, Clone, Eq, PartialEq)]

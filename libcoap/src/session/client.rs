@@ -13,6 +13,8 @@ use std::{
     net::SocketAddr,
 };
 
+#[cfg(feature = "oscore")]
+use libcoap_sys::coap_new_client_session_oscore;
 use libcoap_sys::{
     coap_new_client_session, coap_proto_t_COAP_PROTO_DTLS, coap_proto_t_COAP_PROTO_TCP, coap_proto_t_COAP_PROTO_UDP,
     coap_register_event_handler, coap_session_get_app_data, coap_session_get_context, coap_session_get_type,
@@ -24,6 +26,8 @@ use libcoap_sys::{
 use super::{CoapSessionCommon, CoapSessionInner, CoapSessionInnerProvider};
 #[cfg(feature = "dtls")]
 use crate::crypto::ClientCryptoContext;
+#[cfg(feature = "oscore")]
+use crate::oscore::OscoreConf;
 use crate::{
     context::CoapContext,
     error::SessionCreationError,
@@ -187,6 +191,41 @@ impl CoapClientSession<'_> {
                 coap_proto_t_COAP_PROTO_TCP,
             )
         };
+        if session.is_null() {
+            return Err(SessionCreationError::Unknown);
+        }
+        // SAFETY: Session was just checked for validity.
+        Ok(CoapClientSession {
+            inner: unsafe { CoapClientSessionInner::new(session) },
+        })
+    }
+
+    /// Create an encrypted session with the given peer over UDP using OSCORE.
+    ///
+    /// # Errors
+    /// Will return a [SessionCreationError] if libcoap was unable to create a session
+    /// (most likely because it was not possible to bind to a port).
+    #[cfg(feature = "oscore")]
+    pub fn connect_oscore<'a>(
+        ctx: &mut CoapContext<'a>,
+        addr: SocketAddr,
+        oscore_conf: OscoreConf,
+    ) -> Result<CoapClientSession<'a>, SessionCreationError> {
+        // SAFETY: self.raw_context is guaranteed to be valid, local_if can be null.
+        // OscoreConf raw_conf should be valid, else we return an error.
+        //
+        // coap_new_client_session_oscore should free the raw_conf:
+        // [libcoap docs](https://libcoap.net/doc/reference/4.3.5/group__oscore.html#ga65ac1a57ebc037b4d14538c8e21c28a7)
+        let session = unsafe {
+            coap_new_client_session_oscore(
+                ctx.as_mut_raw_context(),
+                std::ptr::null(),
+                CoapAddress::from(addr).as_raw_address(),
+                coap_proto_t_COAP_PROTO_UDP,
+                oscore_conf.into_raw_conf().0,
+            )
+        };
+
         if session.is_null() {
             return Err(SessionCreationError::Unknown);
         }
