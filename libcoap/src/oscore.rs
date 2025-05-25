@@ -10,7 +10,7 @@
 
 use core::{ffi::c_void, ptr};
 
-use libcoap_sys::{coap_new_oscore_conf, coap_new_str_const, coap_oscore_conf_t};
+use libcoap_sys::{coap_delete_oscore_conf, coap_new_oscore_conf, coap_new_str_const, coap_oscore_conf_t};
 
 use crate::error::OscoreConfigError;
 
@@ -19,6 +19,7 @@ use crate::error::OscoreConfigError;
 pub struct OscoreConf {
     raw_conf: *mut coap_oscore_conf_t,
     pub(crate) initial_recipient: Option<String>,
+    drop: bool,
 }
 
 impl OscoreConf {
@@ -70,12 +71,16 @@ impl OscoreConf {
         Ok(Self {
             raw_conf: oscore_conf,
             initial_recipient,
+            drop: true,
         })
     }
 
     /// Cosumes the OscoreConf and returns the contained raw_conf libcoap struct as well as an
     /// optional initial recipient if set.
-    pub(crate) fn into_raw_conf(self) -> (*mut coap_oscore_conf_t, Option<String>) {
+    /// SAFETY: Caller must assure to free of the raw_conf returned by this function using
+    /// coap_delete_oscore_conf() to prevent leaking memory.
+    pub(crate) unsafe fn into_raw_conf(mut self) -> (*mut coap_oscore_conf_t, Option<String>) {
+        self.drop = false;
         (self.raw_conf, self.initial_recipient.clone())
     }
 }
@@ -83,9 +88,14 @@ impl OscoreConf {
 impl Drop for OscoreConf {
     /// Drop the OscoreConf's raw_conf.
     fn drop(&mut self) {
-        // TODO: Howto handle this now?
-        unsafe {
-            let _ = Box::from_raw(self.raw_conf);
+        if self.drop {
+            // SAFETY: If the CoapConf was consumed by calling the unsafe function into_raw_conf() the
+            // instance will be marked to not try to drop the raw_conf here as this should be handled
+            // by the caller. Only try to free the raw_conf if the instance was not consumed and
+            // therby not freed off before to prevent laeking memory.
+            unsafe {
+                coap_delete_oscore_conf(self.raw_conf);
+            }
         }
     }
 }

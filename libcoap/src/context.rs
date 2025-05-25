@@ -34,22 +34,23 @@ use libcoap_sys::{
     coap_context_get_max_handshake_sessions, coap_context_get_max_idle_sessions, coap_context_get_session_timeout,
     coap_context_set_block_mode, coap_context_set_csm_max_message_size, coap_context_set_csm_timeout,
     coap_context_set_keepalive, coap_context_set_max_handshake_sessions, coap_context_set_max_idle_sessions,
-    coap_context_set_session_timeout, coap_context_t, coap_event_t, coap_event_t_COAP_EVENT_BAD_PACKET,
-    coap_event_t_COAP_EVENT_DTLS_CLOSED, coap_event_t_COAP_EVENT_DTLS_CONNECTED, coap_event_t_COAP_EVENT_DTLS_ERROR,
-    coap_event_t_COAP_EVENT_DTLS_RENEGOTIATE, coap_event_t_COAP_EVENT_KEEPALIVE_FAILURE,
-    coap_event_t_COAP_EVENT_MSG_RETRANSMITTED, coap_event_t_COAP_EVENT_OSCORE_DECODE_ERROR,
-    coap_event_t_COAP_EVENT_OSCORE_DECRYPTION_FAILURE, coap_event_t_COAP_EVENT_OSCORE_INTERNAL_ERROR,
-    coap_event_t_COAP_EVENT_OSCORE_NOT_ENABLED, coap_event_t_COAP_EVENT_OSCORE_NO_PROTECTED_PAYLOAD,
-    coap_event_t_COAP_EVENT_OSCORE_NO_SECURITY, coap_event_t_COAP_EVENT_PARTIAL_BLOCK,
-    coap_event_t_COAP_EVENT_SERVER_SESSION_DEL, coap_event_t_COAP_EVENT_SERVER_SESSION_NEW,
-    coap_event_t_COAP_EVENT_SESSION_CLOSED, coap_event_t_COAP_EVENT_SESSION_CONNECTED,
-    coap_event_t_COAP_EVENT_SESSION_FAILED, coap_event_t_COAP_EVENT_TCP_CLOSED, coap_event_t_COAP_EVENT_TCP_CONNECTED,
-    coap_event_t_COAP_EVENT_TCP_FAILED, coap_event_t_COAP_EVENT_WS_CLOSED, coap_event_t_COAP_EVENT_WS_CONNECTED,
-    coap_event_t_COAP_EVENT_WS_PACKET_SIZE, coap_event_t_COAP_EVENT_XMIT_BLOCK_FAIL, coap_free_context,
-    coap_get_app_data, coap_io_process, coap_join_mcast_group_intf, coap_new_bin_const, coap_new_context, coap_proto_t,
-    coap_proto_t_COAP_PROTO_DTLS, coap_proto_t_COAP_PROTO_TCP, coap_proto_t_COAP_PROTO_UDP,
-    coap_register_event_handler, coap_register_response_handler, coap_set_app_data, coap_startup_with_feature_checks,
-    COAP_BLOCK_SINGLE_BODY, COAP_BLOCK_USE_LIBCOAP, COAP_IO_WAIT,
+    coap_context_set_session_timeout, coap_context_t, coap_delete_bin_const, coap_event_t,
+    coap_event_t_COAP_EVENT_BAD_PACKET, coap_event_t_COAP_EVENT_DTLS_CLOSED, coap_event_t_COAP_EVENT_DTLS_CONNECTED,
+    coap_event_t_COAP_EVENT_DTLS_ERROR, coap_event_t_COAP_EVENT_DTLS_RENEGOTIATE,
+    coap_event_t_COAP_EVENT_KEEPALIVE_FAILURE, coap_event_t_COAP_EVENT_MSG_RETRANSMITTED,
+    coap_event_t_COAP_EVENT_OSCORE_DECODE_ERROR, coap_event_t_COAP_EVENT_OSCORE_DECRYPTION_FAILURE,
+    coap_event_t_COAP_EVENT_OSCORE_INTERNAL_ERROR, coap_event_t_COAP_EVENT_OSCORE_NOT_ENABLED,
+    coap_event_t_COAP_EVENT_OSCORE_NO_PROTECTED_PAYLOAD, coap_event_t_COAP_EVENT_OSCORE_NO_SECURITY,
+    coap_event_t_COAP_EVENT_PARTIAL_BLOCK, coap_event_t_COAP_EVENT_SERVER_SESSION_DEL,
+    coap_event_t_COAP_EVENT_SERVER_SESSION_NEW, coap_event_t_COAP_EVENT_SESSION_CLOSED,
+    coap_event_t_COAP_EVENT_SESSION_CONNECTED, coap_event_t_COAP_EVENT_SESSION_FAILED,
+    coap_event_t_COAP_EVENT_TCP_CLOSED, coap_event_t_COAP_EVENT_TCP_CONNECTED, coap_event_t_COAP_EVENT_TCP_FAILED,
+    coap_event_t_COAP_EVENT_WS_CLOSED, coap_event_t_COAP_EVENT_WS_CONNECTED, coap_event_t_COAP_EVENT_WS_PACKET_SIZE,
+    coap_event_t_COAP_EVENT_XMIT_BLOCK_FAIL, coap_free_context, coap_get_app_data, coap_io_process,
+    coap_join_mcast_group_intf, coap_new_bin_const, coap_new_context, coap_proto_t, coap_proto_t_COAP_PROTO_DTLS,
+    coap_proto_t_COAP_PROTO_TCP, coap_proto_t_COAP_PROTO_UDP, coap_register_event_handler,
+    coap_register_response_handler, coap_set_app_data, coap_startup_with_feature_checks, COAP_BLOCK_SINGLE_BODY,
+    COAP_BLOCK_USE_LIBCOAP, COAP_IO_WAIT,
 };
 #[cfg(feature = "oscore")]
 use libcoap_sys::{coap_context_oscore_server, coap_delete_oscore_recipient, coap_new_oscore_recipient};
@@ -433,7 +434,8 @@ impl CoapContext<'_> {
     pub fn oscore_server(&mut self, oscore_conf: OscoreConf) -> Result<(), OscoreServerCreationError> {
         let mut inner_ref = self.inner.borrow_mut();
         let result: i32;
-        let (raw_conf, initial_recipient) = oscore_conf.into_raw_conf();
+        // SAFETY: The raw_conf is guranteed to be dropped by the call to coap_context_oscore_server() below.
+        let (raw_conf, initial_recipient) = unsafe { oscore_conf.into_raw_conf() };
 
         // SAFETY: Properly initialized CoapContext always has a valid raw_context that is not deleted until
         // the CoapContextInner is dropped. OscoreConf raw_conf should be valid, else return an error.
@@ -513,7 +515,7 @@ impl CoapContext<'_> {
             // out above because libcoap currently does not offer a proper way to determine the
             // cause of the failure as of version 4.3.5.
             unsafe {
-                let _ = Box::from_raw(raw_recipient);
+                coap_delete_bin_const(raw_recipient);
             }
             return Err(OscoreRecipientError::Unknown);
         }
@@ -561,7 +563,7 @@ impl CoapContext<'_> {
                     return Err(OscoreRecipientError::Unknown);
                 }
                 result = coap_delete_oscore_recipient(inner_ref.raw_context, raw_recipient);
-            };
+            }
 
             // Check whether removing the recipient from the CoapContext's raw_context failed.
             if result == 0 {
