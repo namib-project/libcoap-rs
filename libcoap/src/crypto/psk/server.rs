@@ -15,6 +15,7 @@ use std::{
     ffi::{c_void, CStr},
     fmt::Debug,
     hash::Hash,
+    mem::offset_of,
     os::raw::c_char,
     ptr::NonNull,
     rc::{Rc, Weak},
@@ -200,8 +201,14 @@ impl ServerPskContext<'_> {
             // TODO remove these entries prematurely if the underlying session is removed (would
             //      require modifications to the event handler).
             inner.provided_keys.push(boxed_key_ptr);
-            // SAFETY: Pointer is obviously valid.
-            &unsafe { *boxed_key_ptr }.key
+            // SAFETY: boxed_key_ptr is a valid pointer to a coap_dtls_spsk_info_t structure, which
+            // has been created from a call to Box::into_raw.
+            // We then apply the offset (determined using the offset_of! macro) of the key field inside of
+            // the coap_dtls_spsk_info_t structure to this pointer to access the field inside of the data structure,
+            // which in turn allows us to cast the pointer to the type of the field inside of the structure.
+            unsafe {
+                boxed_key_ptr.byte_offset(offset_of!(coap_dtls_spsk_info_t, key) as isize) as *const coap_bin_const_t
+            }
         } else {
             std::ptr::null()
         }
