@@ -147,7 +147,8 @@ dtls-rpk = ["dtls"]
 [dependencies]
 openssl-sys = { version = "^0.9.74", optional = true }
 mbedtls-sys-auto = { version = "^2.26", optional = true }
-wolfssl-sys = { version = "2.0.0", git = "https://github.com/namib-project/wolfssl-rs.git", branch = "add_sys_cargo_metadata", optional = true, features = ["aesccm", "hmac", "psk", "opensslall", "ex_data", "alpn", "dh"] }
+#wolfssl-sys = { version = "2.0.0", git = "https://github.com/namib-project/wolfssl-rs.git", branch = "add_sys_cargo_metadata", optional = true, features = ["aesccm", "psk", "opensslall", "ex_data", "alpn", "dh"] }
+wolfssl-sys = { version = "2.0.0", path = "../../wolfssl-rs/wolfssl-sys", optional = true, features = ["aesccm", "psk", "opensslall", "ex_data", "alpn", "dh"] }
 tinydtls-sys = { version = "^0.2.0", default-features = false, optional = true, features = ["ecc", "psk"] }
 
 [target.'cfg(target_os="espidf")'.dependencies]

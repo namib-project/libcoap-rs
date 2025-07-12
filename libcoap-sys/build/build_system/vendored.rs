@@ -162,7 +162,6 @@ impl VendoredBuildSystem {
                     dtls_libraries_linked_by_other_crates |= DtlsBackend::WolfSsl
                 }
             }
-            
 
             // Add libcoap's own build directory to the PKG_CONFIG_PATH (might be used later on to
             // find the generated .pc file to link against libcoap).
@@ -324,14 +323,12 @@ impl VendoredBuildSystem {
                 .expect("wolfssl-sys dependency has been added, but DEP_WOLFSSL_ROOT has not been set");
             let wolfssl_include = env::var_os("DEP_WOLFSSL_INCLUDE")
                 .expect("wolfssl-sys dependency has been added, but DEP_WOLFSSL_INCLUDE has not been set");
-            let wolfssl_libs = Path::new(wolfssl_root.as_os_str())
-                .join("lib");
-            
+            let wolfssl_libs = Path::new(wolfssl_root.as_os_str()).join("lib");
+
             // Set pkg-config path for version and library/include path determination.
             Ok((Some(wolfssl_libs.join("pkgconfig")), true))
         }
     }
-    
 
     #[cfg(feature = "dtls-openssl-sys")]
     fn configure_openssl_sys(_build_config: &mut autotools::Config) -> Result<(Option<PathBuf>, bool)> {
