@@ -62,7 +62,7 @@ use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
 
 use crate::error::MessageCodeError;
 
-pub type ETag = Box<[u8]>;
+pub type ETag = u64;
 pub type MaxAge = u32;
 pub type LocationPath = String;
 pub type LocationQuery = String;
@@ -252,7 +252,7 @@ impl CoapOptionType {
 /// See <https://www.iana.org/assignments/core-parameters/core-parameters.xhtml#content-formats> for
 /// values that are currently registered with the IANA.
 #[repr(u16)]
-#[derive(Copy, Clone, FromPrimitive, Eq, PartialEq, Hash, Debug)]
+#[derive(Copy, Clone, FromPrimitive, IntoPrimitive, Eq, PartialEq, Hash, Debug)]
 #[non_exhaustive]
 pub enum CoapContentFormat {
     Cbor = COAP_MEDIATYPE_APPLICATION_CBOR as u16,
@@ -300,6 +300,12 @@ pub enum CoapMessageCode {
     Empty,
     Request(CoapRequestCode),
     Response(CoapResponseCode),
+}
+
+impl Default for CoapMessageCode {
+    fn default() -> Self {
+        Self::Empty
+    }
 }
 
 impl Code for CoapMessageCode {
@@ -406,9 +412,8 @@ impl CoapRequestCode {
 
     /// Returns the raw [coap_pdu_code_t](coap_pdu_code_t) corresponding to this
     /// request code.
-    #[deprecated(note = "Use the provided Into<coap_request_t> implementation instead")]
     pub fn to_raw_pdu_code(self) -> coap_pdu_code_t {
-        self.into()
+        <Self as Into<u8>>::into(self) as coap_pdu_code_t
     }
 }
 
@@ -476,35 +481,7 @@ impl CoapResponseCode {
     /// Returns the raw [coap_pdu_code_t](coap_pdu_code_t) corresponding to this
     /// request code.
     pub fn to_raw_pdu_code(self) -> coap_pdu_code_t {
-        match self {
-            CoapResponseCode::Content => coap_pdu_code_t_COAP_RESPONSE_CODE_CONTENT,
-            CoapResponseCode::BadGateway => coap_pdu_code_t_COAP_RESPONSE_CODE_BAD_GATEWAY,
-            CoapResponseCode::Continue => coap_pdu_code_t_COAP_RESPONSE_CODE_CONTINUE,
-            CoapResponseCode::Conflict => coap_pdu_code_t_COAP_RESPONSE_CODE_CONFLICT,
-            CoapResponseCode::BadRequest => coap_pdu_code_t_COAP_RESPONSE_CODE_BAD_REQUEST,
-            CoapResponseCode::BadOption => coap_pdu_code_t_COAP_RESPONSE_CODE_BAD_OPTION,
-            CoapResponseCode::Changed => coap_pdu_code_t_COAP_RESPONSE_CODE_CHANGED,
-            CoapResponseCode::Created => coap_pdu_code_t_COAP_RESPONSE_CODE_CREATED,
-            CoapResponseCode::Deleted => coap_pdu_code_t_COAP_RESPONSE_CODE_DELETED,
-            CoapResponseCode::Forbidden => coap_pdu_code_t_COAP_RESPONSE_CODE_FORBIDDEN,
-            CoapResponseCode::GatewayTimeout => coap_pdu_code_t_COAP_RESPONSE_CODE_GATEWAY_TIMEOUT,
-            CoapResponseCode::HopLimitReached => coap_pdu_code_t_COAP_RESPONSE_CODE_HOP_LIMIT_REACHED,
-            CoapResponseCode::Incomplete => coap_pdu_code_t_COAP_RESPONSE_CODE_INCOMPLETE,
-            CoapResponseCode::InternalError => coap_pdu_code_t_COAP_RESPONSE_CODE_INTERNAL_ERROR,
-            CoapResponseCode::NotAcceptable => coap_pdu_code_t_COAP_RESPONSE_CODE_NOT_ACCEPTABLE,
-            CoapResponseCode::NotAllowed => coap_pdu_code_t_COAP_RESPONSE_CODE_NOT_ALLOWED,
-            CoapResponseCode::NotFound => coap_pdu_code_t_COAP_RESPONSE_CODE_NOT_FOUND,
-            CoapResponseCode::NotImplemented => coap_pdu_code_t_COAP_RESPONSE_CODE_NOT_IMPLEMENTED,
-            CoapResponseCode::PreconditionFailed => coap_pdu_code_t_COAP_RESPONSE_CODE_PRECONDITION_FAILED,
-            CoapResponseCode::ProxyingNotSupported => coap_pdu_code_t_COAP_RESPONSE_CODE_PROXYING_NOT_SUPPORTED,
-            CoapResponseCode::RequestTooLarge => coap_pdu_code_t_COAP_RESPONSE_CODE_REQUEST_TOO_LARGE,
-            CoapResponseCode::ServiceUnavailable => coap_pdu_code_t_COAP_RESPONSE_CODE_SERVICE_UNAVAILABLE,
-            CoapResponseCode::TooManyRequests => coap_pdu_code_t_COAP_RESPONSE_CODE_TOO_MANY_REQUESTS,
-            CoapResponseCode::Unauthorized => coap_pdu_code_t_COAP_RESPONSE_CODE_UNAUTHORIZED,
-            CoapResponseCode::Unprocessable => coap_pdu_code_t_COAP_RESPONSE_CODE_UNPROCESSABLE,
-            CoapResponseCode::UnsupportedContentFormat => coap_pdu_code_t_COAP_RESPONSE_CODE_UNSUPPORTED_CONTENT_FORMAT,
-            CoapResponseCode::Valid => coap_pdu_code_t_COAP_RESPONSE_CODE_VALID,
-        }
+        <Self as Into<u8>>::into(self) as coap_pdu_code_t
     }
 }
 
@@ -544,7 +521,7 @@ impl TryFrom<coap_pdu_code_t> for CoapResponseCode {
 /// CoAP message types as defined in [RFC 7252, Section 3](https://datatracker.ietf.org/doc/html/rfc7252#section-3)
 /// and described in [RFC 7252, Section 4.2 and 4.3](https://datatracker.ietf.org/doc/html/rfc7252#section-4.2).
 #[repr(u8)]
-#[derive(Copy, Clone, Hash, Eq, PartialEq, TryFromPrimitive, Debug)]
+#[derive(Copy, Clone, Hash, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug)]
 pub enum CoapMessageType {
     /// Confirmable message, i.e. a message whose reception should be confirmed by the peer.
     /// Note: This is also always set if a reliable transport (TCP, WebSockets) is used.
@@ -560,12 +537,57 @@ pub enum CoapMessageType {
 impl CoapMessageType {
     /// Returns the corresponding raw [coap_pdu_type_t](coap_pdu_type_t) instance for
     /// this message type.
-    pub fn to_raw_pdu_type(&self) -> coap_pdu_type_t {
-        match self {
-            CoapMessageType::Con => coap_pdu_type_t_COAP_MESSAGE_CON,
-            CoapMessageType::Non => coap_pdu_type_t_COAP_MESSAGE_NON,
-            CoapMessageType::Ack => coap_pdu_type_t_COAP_MESSAGE_ACK,
-            CoapMessageType::Rst => coap_pdu_type_t_COAP_MESSAGE_RST,
-        }
+    pub fn to_raw_pdu_type(self) -> coap_pdu_type_t {
+        <Self as Into<u8>>::into(self) as coap_pdu_type_t
     }
 }
+
+
+#[repr(u8)]
+#[derive(Copy, Clone, Hash, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug)]
+pub enum CoapRequestType {
+    Confirmable = CoapMessageType::Con as u8,
+    NonConfirmable = CoapMessageType::Non as u8,
+}
+
+impl CoapRequestType {
+    /// Returns the corresponding raw [coap_pdu_type_t](coap_pdu_type_t) instance for
+    /// this request message type.
+    pub fn to_raw_pdu_type(self) -> coap_pdu_type_t {
+        <Self as Into<u8>>::into(self) as coap_pdu_type_t
+    }
+}
+
+impl From<CoapRequestType> for CoapMessageType {
+    fn from(value: CoapRequestType) -> Self {
+        // All CoapRequestType variants are defined based on the representations of a
+        // corresponding CoapMessageValue variant, conversion will therefore always succeed.
+        CoapMessageType::try_from_primitive(value as u8).unwrap()
+    }
+}
+
+#[repr(u8)]
+#[derive(Copy, Clone, Hash, Eq, PartialEq, TryFromPrimitive, IntoPrimitive, Debug)]
+pub enum CoapResponseType {
+    Confirmable = CoapMessageType::Con as u8,
+    NonConfirmable = CoapMessageType::Non as u8,
+    Acknowledgement = CoapMessageType::Ack as u8,
+}
+
+impl CoapResponseType {
+    /// Returns the corresponding raw [coap_pdu_type_t](coap_pdu_type_t) instance for
+    /// this response message type.
+    pub fn to_raw_pdu_type(self) -> coap_pdu_type_t {
+        <Self as Into<u8>>::into(self) as coap_pdu_type_t
+    }
+}
+
+impl From<CoapResponseType> for CoapMessageType {
+    fn from(value: CoapResponseType) -> Self {
+        // All CoapRequestType variants are defined based on the representations of a
+        // corresponding CoapMessageValue variant, conversion will therefore always succeed.
+        CoapMessageType::try_from_primitive(value as u8).unwrap()
+    }
+}
+
+// TODO add TryFrom<CoapMessageType> for CoapRequestType and CoapResponseType

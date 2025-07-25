@@ -20,9 +20,10 @@ use std::{
     rc::{Rc, Weak},
 };
 
-pub(crate) struct OwnedCoapStructRef<'a, T>(Option<&'a mut T>, unsafe extern "C" fn(*mut T));
+/// Container for owned data structures with an associated destructor function.
+pub(crate) struct OwnedRef<'a, T>(Option<&'a mut T>, unsafe extern "C" fn(*mut T));
 
-impl<'a, T> OwnedCoapStructRef<'a, T> {
+impl<'a, T> OwnedRef<'a, T> {
     /// SAFETY: `destructor` must be safe to call with a `*mut T` instance once, implementations
     /// must assume that `destructor` has been called with `value` as a parameter when this wrapper
     /// is dropped.
@@ -34,19 +35,33 @@ impl<'a, T> OwnedCoapStructRef<'a, T> {
     }
 }
 
-impl<'a, T> Borrow<T> for OwnedCoapStructRef<'a, T> {
+impl<'a, T> Borrow<T> for OwnedRef<'a, T> {
     fn borrow(&self) -> &T {
         *self.0.as_ref().unwrap()
     }
 }
 
-impl<'a, T> BorrowMut<T> for OwnedCoapStructRef<'a, T> {
+impl<'a, T> BorrowMut<T> for OwnedRef<'a, T> {
     fn borrow_mut(&mut self) -> &mut T {
         *self.0.as_mut().unwrap()
     }
 }
 
-impl<'a, T> Drop for OwnedCoapStructRef<'a, T> {
+impl<'a, T> Deref for OwnedRef<'a, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        self.borrow()
+    }
+}
+
+impl<'a, T> DerefMut for OwnedRef<'a, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.borrow_mut()
+    }
+}
+
+impl<'a, T> Drop for OwnedRef<'a, T> {
     fn drop(&mut self) {
         let ptr = {
             let reference = self.0.take().unwrap();
