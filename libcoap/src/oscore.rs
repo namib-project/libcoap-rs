@@ -10,7 +10,9 @@
 
 use core::{ffi::c_void, ptr};
 
-use libcoap_sys::{coap_delete_oscore_conf, coap_new_oscore_conf, coap_new_str_const, coap_oscore_conf_t};
+use libcoap_sys::{
+    coap_delete_oscore_conf, coap_delete_str_const, coap_new_oscore_conf, coap_new_str_const, coap_oscore_conf_t,
+};
 
 use crate::error::OscoreConfigError;
 
@@ -49,6 +51,9 @@ impl OscoreConf {
         // - save_seq_num_func_param may be a null pointer (save_seq_num_func does
         //   not use it).
         let oscore_conf = unsafe { coap_new_oscore_conf(*conf, Some(save_seq_num_func), ptr::null_mut(), seq_initial) };
+        unsafe {
+            coap_delete_str_const(conf);
+        }
         if oscore_conf.is_null() {
             return Err(OscoreConfigError::Unknown);
         }
