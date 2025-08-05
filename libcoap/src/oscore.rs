@@ -18,7 +18,7 @@ use crate::error::OscoreConfigError;
 /// coap_oscore_conf_t C struct.
 pub struct OscoreConf {
     raw_conf: *mut coap_oscore_conf_t,
-    pub(crate) initial_recipient: Option<String>,
+    initial_recipient: Option<String>,
     drop: bool,
 }
 
@@ -77,22 +77,23 @@ impl OscoreConf {
 
     /// Cosumes the OscoreConf and returns the contained raw_conf libcoap struct as well as an
     /// optional initial recipient if set.
-    /// SAFETY: Caller must assure to free of the raw_conf returned by this function using
-    /// coap_delete_oscore_conf() to prevent leaking memory.
-    pub(crate) unsafe fn into_raw_conf(mut self) -> (*mut coap_oscore_conf_t, Option<String>) {
-        self.drop = false;
-        (self.raw_conf, self.initial_recipient.clone())
+    /// The caller is responsible for managing the memory of the raw_conf returned by this function,
+    /// e.g., by using coap_delete_oscore_conf() to free the returned memory after use.
+    pub(crate) fn into_raw_conf(mut self) -> (*mut coap_oscore_conf_t, Option<String>) {
+        // Replace pointer in structure with a null pointer, so the destructor knows that we know longer own
+        // the raw structure and must therefore not free it.
+        let raw_conf = std::mem::take(&mut self.raw_conf);
+        (raw_conf, self.initial_recipient.clone())
     }
 }
 
 impl Drop for OscoreConf {
     /// Drop the OscoreConf's raw_conf.
     fn drop(&mut self) {
-        if self.drop {
+        if !self.raw_conf.is_null() {
             // SAFETY: If the CoapConf was consumed by calling the unsafe function into_raw_conf() the
-            // instance will be marked to not try to drop the raw_conf here as this should be handled
-            // by the caller. Only try to free the raw_conf if the instance was not consumed and
-            // therby not freed off before to prevent laeking memory.
+            // pointer will be null, but we just checked that this is not the case.
+            // Therefore, we are still the owner of the raw config and can therefore free it.
             unsafe {
                 coap_delete_oscore_conf(self.raw_conf);
             }

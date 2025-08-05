@@ -130,13 +130,7 @@ pub enum SessionCreationError {
     /// Oscore config seems to be invalid, make sure to use it only once
     #[cfg(feature = "oscore")]
     #[error("CoAP session creation error: oscore config seems to be invalid, make sure to use it only once")]
-    OscoreConfigInvalid,
-}
-#[cfg(feature = "oscore")]
-impl From<OscoreConfigError> for SessionCreationError {
-    fn from(_error: OscoreConfigError) -> Self {
-        SessionCreationError::OscoreConfigInvalid
-    }
+    OscoreConfigInvalid(#[from] OscoreConfigError),
 }
 
 #[derive(Error, Debug, Copy, Clone, Eq, PartialEq)]

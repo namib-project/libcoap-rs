@@ -509,7 +509,7 @@ impl CoapContext<'_> {
 
         // If adding the recipient failed...
         if result == 0 {
-            // ...box the raw_pointer of the recipient to free it.
+            // ...manually call coap_delete_bin_const to get rid of the created instance.
             // SAFETY: The raw_recipient's raw_pointer has to be valid here because libcoap does
             // only free the recipient if adding it failed due to a duplicate, which is filtered
             // out above because libcoap currently does not offer a proper way to determine the
@@ -558,11 +558,11 @@ impl CoapContext<'_> {
             // CoapContext should always have a valid raw_context until CoapContextInner is
             // dropped.
             unsafe {
-                let raw_recipient = coap_new_bin_const(recipient.as_ptr(), recipient.len());
-                if raw_recipient.is_null() {
-                    return Err(OscoreRecipientError::Unknown);
-                }
-                result = coap_delete_oscore_recipient(inner_ref.raw_context, raw_recipient);
+                let mut raw_recipient = coap_bin_const_t {
+                    length: recipient.len(),
+                    s: recipient.as_ptr()
+                };
+                result = coap_delete_oscore_recipient(inner_ref.raw_context, &mut raw_recipient);
             }
 
             // Check whether removing the recipient from the CoapContext's raw_context failed.
