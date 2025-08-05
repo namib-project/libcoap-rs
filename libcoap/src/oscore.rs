@@ -19,7 +19,6 @@ use crate::error::OscoreConfigError;
 pub struct OscoreConf {
     raw_conf: *mut coap_oscore_conf_t,
     initial_recipient: Option<String>,
-    drop: bool,
 }
 
 impl OscoreConf {
@@ -71,7 +70,6 @@ impl OscoreConf {
         Ok(Self {
             raw_conf: oscore_conf,
             initial_recipient,
-            drop: true,
         })
     }
 
@@ -82,7 +80,7 @@ impl OscoreConf {
     pub(crate) fn into_raw_conf(mut self) -> (*mut coap_oscore_conf_t, Option<String>) {
         // Replace pointer in structure with a null pointer, so the destructor knows that we know longer own
         // the raw structure and must therefore not free it.
-        let raw_conf = std::mem::take(&mut self.raw_conf);
+        let raw_conf = std::mem::replace(&mut self.raw_conf, ptr::null_mut());
         (raw_conf, self.initial_recipient.clone())
     }
 }

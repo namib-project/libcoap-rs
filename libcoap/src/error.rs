@@ -54,16 +54,10 @@ pub enum OscoreConfigError {
 pub enum OscoreServerCreationError {
     /// Oscore config seems to be invalid, make sure to use it only once
     #[error("Oscore server creation error: oscore config seems to be invalid, make sure to use it only once")]
-    OscoreConfigInvalid,
+    OscoreConfigInvalid(#[from] OscoreConfigError),
     /// Unknown error inside of libcoap
     #[error("Oscore server creation error: unknown error in call to libcoap")]
     Unknown,
-}
-#[cfg(feature = "oscore")]
-impl From<OscoreConfigError> for OscoreServerCreationError {
-    fn from(_error: OscoreConfigError) -> Self {
-        OscoreServerCreationError::OscoreConfigInvalid
-    }
 }
 
 #[cfg(feature = "oscore")]
