@@ -12,14 +12,31 @@
 
 use core::ffi::c_uint;
 #[cfg(feature = "dtls-pki")]
+use std::ffi::CString;
+#[cfg(feature = "dtls")]
+use std::ptr::NonNull;
+use std::{
+    any::Any,
+    ffi::{c_void, CStr},
+    fmt::Debug,
+    net::SocketAddr,
+    ops::Sub,
+    sync::Once,
+    time::Duration,
+};
+#[cfg(all(feature = "dtls-pki", unix))]
+use std::{os::unix::ffi::OsStrExt, path::Path};
+
+#[cfg(feature = "dtls-pki")]
 use libcoap_sys::coap_context_set_pki_root_cas;
 use libcoap_sys::{
-    coap_add_resource, coap_can_exit, coap_context_get_csm_max_message_size, coap_context_get_csm_timeout,
-    coap_context_get_max_handshake_sessions, coap_context_get_max_idle_sessions, coap_context_get_session_timeout,
-    coap_context_set_block_mode, coap_context_set_csm_max_message_size, coap_context_set_csm_timeout,
-    coap_context_set_keepalive, coap_context_set_max_handshake_sessions, coap_context_set_max_idle_sessions,
-    coap_context_set_session_timeout, coap_context_t, coap_event_t, coap_event_t_COAP_EVENT_BAD_PACKET,
-    coap_event_t_COAP_EVENT_DTLS_CLOSED, coap_event_t_COAP_EVENT_DTLS_CONNECTED, coap_event_t_COAP_EVENT_DTLS_ERROR,
+    coap_add_resource, coap_bin_const_t, coap_can_exit, coap_context_get_csm_max_message_size,
+    coap_context_get_csm_timeout, coap_context_get_max_handshake_sessions, coap_context_get_max_idle_sessions,
+    coap_context_get_session_timeout, coap_context_set_block_mode, coap_context_set_csm_max_message_size,
+    coap_context_set_csm_timeout, coap_context_set_keepalive, coap_context_set_max_handshake_sessions,
+    coap_context_set_max_idle_sessions, coap_context_set_session_timeout, coap_context_t, coap_delete_bin_const,
+    coap_event_t, coap_event_t_COAP_EVENT_BAD_PACKET, coap_event_t_COAP_EVENT_DTLS_CLOSED,
+    coap_event_t_COAP_EVENT_DTLS_CONNECTED, coap_event_t_COAP_EVENT_DTLS_ERROR,
     coap_event_t_COAP_EVENT_DTLS_RENEGOTIATE, coap_event_t_COAP_EVENT_KEEPALIVE_FAILURE,
     coap_event_t_COAP_EVENT_MSG_RETRANSMITTED, coap_event_t_COAP_EVENT_OSCORE_DECODE_ERROR,
     coap_event_t_COAP_EVENT_OSCORE_DECRYPTION_FAILURE, coap_event_t_COAP_EVENT_OSCORE_INTERNAL_ERROR,
@@ -30,19 +47,13 @@ use libcoap_sys::{
     coap_event_t_COAP_EVENT_SESSION_FAILED, coap_event_t_COAP_EVENT_TCP_CLOSED, coap_event_t_COAP_EVENT_TCP_CONNECTED,
     coap_event_t_COAP_EVENT_TCP_FAILED, coap_event_t_COAP_EVENT_WS_CLOSED, coap_event_t_COAP_EVENT_WS_CONNECTED,
     coap_event_t_COAP_EVENT_WS_PACKET_SIZE, coap_event_t_COAP_EVENT_XMIT_BLOCK_FAIL, coap_free_context,
-    coap_get_app_data, coap_io_process, coap_new_context, coap_proto_t, coap_proto_t_COAP_PROTO_DTLS,
-    coap_proto_t_COAP_PROTO_TCP, coap_proto_t_COAP_PROTO_UDP, coap_register_event_handler,
-    coap_register_response_handler, coap_set_app_data, coap_startup_with_feature_checks, COAP_BLOCK_SINGLE_BODY,
-    COAP_BLOCK_USE_LIBCOAP, COAP_IO_WAIT,
+    coap_get_app_data, coap_io_process, coap_join_mcast_group_intf, coap_new_bin_const, coap_new_context, coap_proto_t,
+    coap_proto_t_COAP_PROTO_DTLS, coap_proto_t_COAP_PROTO_TCP, coap_proto_t_COAP_PROTO_UDP,
+    coap_register_event_handler, coap_register_response_handler, coap_set_app_data, coap_startup_with_feature_checks,
+    COAP_BLOCK_SINGLE_BODY, COAP_BLOCK_USE_LIBCOAP, COAP_IO_WAIT,
 };
-use std::ffi::CStr;
-#[cfg(feature = "dtls-pki")]
-use std::ffi::CString;
-#[cfg(feature = "dtls")]
-use std::ptr::NonNull;
-use std::{any::Any, ffi::c_void, fmt::Debug, net::SocketAddr, ops::Sub, sync::Once, time::Duration};
-#[cfg(all(feature = "dtls-pki", unix))]
-use std::{os::unix::ffi::OsStrExt, path::Path};
+#[cfg(feature = "oscore")]
+use libcoap_sys::{coap_context_oscore_server, coap_delete_oscore_recipient, coap_new_oscore_recipient};
 
 #[cfg(any(feature = "dtls-rpk", feature = "dtls-pki"))]
 use crate::crypto::pki_rpk::ServerPkiRpkCryptoContext;
@@ -56,9 +67,12 @@ use crate::{
     session::{session_response_handler, CoapServerSession, CoapSession},
     transport::CoapEndpoint,
 };
-
 //TODO: New feature?
-use libcoap_sys::coap_join_mcast_group_intf;
+#[cfg(feature = "oscore")]
+use crate::{
+    error::{OscoreRecipientError, OscoreServerCreationError},
+    OscoreConf,
+};
 
 static COAP_STARTUP_ONCE: Once = Once::new();
 
@@ -85,6 +99,13 @@ struct CoapContextInner<'a> {
     /// PKI context for encrypted server-side sessions.
     #[cfg(any(feature = "dtls-pki", feature = "dtls-rpk"))]
     pki_rpk_context: Option<ServerPkiRpkCryptoContext<'a>>,
+    /// Saves if appropriate oscore information has been added to the raw_context as stated by
+    /// libcoap to assume before adding/removing additional recipient_id's to it.
+    #[cfg(feature = "oscore")]
+    provided_oscore_information: bool,
+    /// A list of recipients associated with this context.
+    #[cfg(feature = "oscore")]
+    recipients: Vec<Box<String>>,
 }
 
 /// A CoAP Context — container for general state and configuration information relating to CoAP
@@ -133,6 +154,10 @@ impl<'a> CoapContext<'a> {
             psk_context: None,
             #[cfg(any(feature = "dtls-pki", feature = "dtls-rpk"))]
             pki_rpk_context: None,
+            #[cfg(feature = "oscore")]
+            provided_oscore_information: false,
+            #[cfg(feature = "oscore")]
+            recipients: Vec::new(),
         });
 
         // SAFETY: We checked that the raw context is not null, the provided function is valid and
@@ -399,6 +424,159 @@ impl CoapContext<'_> {
     #[cfg(feature = "tcp")]
     pub fn add_endpoint_tcp(&mut self, addr: SocketAddr) -> Result<(), EndpointCreationError> {
         self.add_endpoint(addr, coap_proto_t_COAP_PROTO_TCP)
+    }
+
+    /// Set the context's default OSCORE configuration for a server.
+    ///
+    /// # Errors
+    /// Will return a [OscoreServerCreationError] if adding the oscore configuration fails.
+    #[cfg(feature = "oscore")]
+    pub fn oscore_server(&mut self, oscore_conf: OscoreConf) -> Result<(), OscoreServerCreationError> {
+        let mut inner_ref = self.inner.borrow_mut();
+        let result: i32;
+        // SAFETY: The raw_conf is guranteed to be dropped by the call to coap_context_oscore_server() below.
+        let (raw_conf, initial_recipient) = oscore_conf.into_raw_conf();
+
+        // SAFETY: Properly initialized CoapContext always has a valid raw_context that is not deleted until
+        // the CoapContextInner is dropped. OscoreConf raw_conf should be valid, else return an error.
+        //
+        // coap_context_oscore_server will also always free the raw_conf, regardless of the result:
+        // [libcoap docs](https://libcoap.net/doc/reference/4.3.5/group__oscore.html#ga71ddf56bcd6d6650f8235ee252fde47f)
+        unsafe {
+            result = coap_context_oscore_server(inner_ref.raw_context, raw_conf);
+        };
+
+        // Check whether adding the config to the context failed.
+        if result == 0 {
+            return Err(OscoreServerCreationError::Unknown);
+        }
+
+        // Add the initial_recipient (if present).
+        if let Some(initial_recipient) = initial_recipient {
+            inner_ref.recipients.push(Box::new(initial_recipient));
+        }
+
+        // Mark context as valid oscore server.
+        inner_ref.provided_oscore_information = true;
+        Ok(())
+    }
+
+    /// Adds a recipient_id to the OscoreContext.
+    ///
+    /// # Errors
+    /// Will return a [OscoreRecipientError] if adding the recipient failed.
+    /// You might want to check the error to determine if adding the recipient failed
+    /// due to the recipient_id beeing already added to the context.
+    /// Trying to call this on a CoapContext without appropriate oscore information will
+    /// also result in an error.
+    #[cfg(feature = "oscore")]
+    pub fn new_oscore_recipient(&mut self, recipient_id: &str) -> Result<(), OscoreRecipientError> {
+        let mut inner_ref = self.inner.borrow_mut();
+
+        // Return if context has no appropriate oscore information.
+        if !inner_ref.provided_oscore_information {
+            #[cfg(debug_assertions)]
+            eprintln!("tried adding recipient to context with no appropriate oscore information");
+            return Err(OscoreRecipientError::NoOscoreContext);
+        }
+
+        let recipient = recipient_id.to_string();
+
+        // Return if the recipient is already added as the coap_new_oscore_recipient
+        // would free the raw struct for duplicate recipients.
+        // As we can't check why adding the recipient failed we have to filter this
+        // case to prevent a double free.
+        if inner_ref.recipients.iter().any(|elem| *elem.as_ref() == recipient) {
+            return Err(OscoreRecipientError::DuplicateId);
+        }
+
+        let raw_recipient;
+        let result;
+
+        // SAFETY: If adding the recipient to the context fails we drop its underlying raw
+        // struct manually as it's not handled by libcoap except for when trying to add a duplicate
+        // recipient, which is filtered out above because libcoap does not offer a proper way to
+        // determine the cause of the failure.
+        // The raw_recipient is checked for validity before use and properly initialized
+        // CoapContext should always have a valid raw_context until CoapContextInner is dropped.
+        unsafe {
+            raw_recipient = coap_new_bin_const(recipient.as_ptr(), recipient.len());
+            if raw_recipient.is_null() {
+                return Err(OscoreRecipientError::Unknown);
+            }
+            result = coap_new_oscore_recipient(inner_ref.raw_context, raw_recipient);
+        };
+
+        // If adding the recipient failed...
+        if result == 0 {
+            // ...manually call coap_delete_bin_const to get rid of the created instance.
+            // SAFETY: The raw_recipient's raw_pointer has to be valid here because libcoap does
+            // only free the recipient if adding it failed due to a duplicate, which is filtered
+            // out above because libcoap currently does not offer a proper way to determine the
+            // cause of the failure as of version 4.3.5.
+            unsafe {
+                coap_delete_bin_const(raw_recipient);
+            }
+            return Err(OscoreRecipientError::Unknown);
+        }
+
+        // Else box the recipient and add it to the CoapContext to keep its raw_pointer valid.
+        inner_ref.recipients.push(Box::new(recipient));
+
+        Ok(())
+    }
+
+    /// Removes a recipient_id from the OscoreContext.
+    ///
+    /// # Errors
+    /// Will return a [OscoreRecipientError] if removing the recipient failed.
+    /// You might want to check the error to determine if removing the recipient failed
+    /// due to the recipient_id beeing not present within the context.
+    /// Trying to call this on a CoapContext without appropriate oscore information will
+    /// also result in an error.
+    #[cfg(feature = "oscore")]
+    pub fn delete_oscore_recipient(&mut self, recipient_id: &str) -> Result<(), OscoreRecipientError> {
+        let mut inner_ref = self.inner.borrow_mut();
+
+        // Return if context has no appropriate oscore information.
+        if !inner_ref.provided_oscore_information {
+            #[cfg(debug_assertions)]
+            eprintln!("tried removing recipient from context with no appropriate oscore information");
+            return Err(OscoreRecipientError::NoOscoreContext);
+        }
+
+        let recipient = recipient_id.to_string();
+
+        // Search for the recipient and try to remove it if present.
+        if let Some(index) = inner_ref.recipients.iter().position(|elem| *elem.as_ref() == recipient) {
+            let result: i32;
+
+            // SAFETY: If libcoap successfully removed the raw_recipient from the raw_context
+            // it is also freed. The recipient's raw_struct should always be valid, as it would
+            // have been removed from the context once deleting it succeeded.
+            // The raw_recipient is checked for validity before use and properly initialized
+            // CoapContext should always have a valid raw_context until CoapContextInner is
+            // dropped.
+            unsafe {
+                let mut raw_recipient = coap_bin_const_t {
+                    length: recipient.len(),
+                    s: recipient.as_ptr(),
+                };
+                result = coap_delete_oscore_recipient(inner_ref.raw_context, &mut raw_recipient);
+            }
+
+            // Check whether removing the recipient from the CoapContext's raw_context failed.
+            if result == 0 {
+                return Err(OscoreRecipientError::Unknown);
+            }
+
+            // Remove the recipient from the CoapContext if it has been successfully removed
+            // from the CoapContext's raw_context. At this point the raw_recipient has been dropped
+            // by libcoap.
+            inner_ref.recipients.remove(index);
+            return Ok(());
+        }
+        Err(OscoreRecipientError::NotFound)
     }
 
     /// Creates a new DTLS endpoint that is bound to the given address.
@@ -719,5 +897,9 @@ impl Drop for CoapContextInner<'_> {
         unsafe {
             coap_free_context(self.raw_context);
         }
+
+        // Drop all recipients as coap_free_context() has dropped all associated raw_recipients.
+        #[cfg(feature = "oscore")]
+        self.recipients.clear();
     }
 }
