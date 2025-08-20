@@ -34,7 +34,7 @@ fn main() -> Result<()> {
     println!("cargo::rustc-check-cfg=cfg(esp_idf_comp_espressif__coap_enabled)");
     // Indicates the DTLS library crate that was linked against, if a library version vendored by
     // another crate was used.
-    println!("cargo:rustc-check-cfg=cfg(used_dtls_crate, values(\"mbedtls\", \"tinydtls\", \"openssl\"))");
+    println!("cargo:rustc-check-cfg=cfg(used_dtls_crate, values(\"mbedtls\", \"tinydtls\", \"openssl\", \"wolfssl\"))");
     // Indicates the DTLS backend used, if any.
     println!("cargo:rustc-check-cfg=cfg(dtls_backend, values(\"mbedtls\", \"tinydtls\", \"openssl\", \"gnutls\", \"wolfssl\"))");
     // The detected libcoap version, if any.

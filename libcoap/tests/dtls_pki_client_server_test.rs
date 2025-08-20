@@ -79,9 +79,9 @@ pub fn dtls_pki_asn1_file_client_server_request() {
         // For some inexplicable reason, setting the CA cert fails _only_ with ASN1 files using the
         // OpenSSL library.
         // I'm pretty sure this is a libcoap issue, so we'll not set the CA cert there for now.
-        #[cfg(not(dtls_backend = "openssl"))]
+        #[cfg(not(any(dtls_backend = "openssl", dtls_backend = "wolfssl")))]
         Some(key_storage.join("./ca/ca.crt.der")),
-        #[cfg(dtls_backend = "openssl")]
+        #[cfg(any(dtls_backend = "openssl", dtls_backend = "wolfssl"))]
         None::<DerFileKeyComponent>,
         key_storage.join("./server/server.crt.der"),
         key_storage.join("./server/server.key.der"),
