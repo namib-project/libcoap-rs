@@ -1,8 +1,11 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="Test" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
-    <option name="command" value="test -p libcoap-rs --features vendored,dtls_openssl,dtls-pki --no-default-features" />
+  <configuration default="false" name="Test libcoap-sys (wolfSSL)" type="CargoCommandRunConfiguration" factoryName="Cargo Command" folderName="libcoap-sys">
+    <option name="buildProfileId" value="test" />
+    <option name="command" value="test -p libcoap-sys --features vendored,dtls-psk,dtls-pki" />
     <option name="workingDirectory" value="file://$PROJECT_DIR$" />
-    <envs />
+    <envs>
+      <env name="LIBCOAP_RS_DTLS_BACKEND" value="wolfssl" />
+    </envs>
     <option name="emulateTerminal" value="false" />
     <option name="channel" value="DEFAULT" />
     <option name="requiredFeatures" value="true" />
