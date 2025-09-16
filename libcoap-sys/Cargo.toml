@@ -23,10 +23,9 @@ keywords = ["coap", "libcoap"]
 exclude = ["src/libcoap/ext/"]
 resolver = "2"
 build = "build/main.rs"
-# Current reason for MSRV (please update when increasing MSRV): bindgen generates unsafe extern "C" blocks, which are
-# not supported on Rust < 1.82.
-# See also: https://doc.rust-lang.org/nightly/edition-guide/rust-2024/unsafe-extern.html
-rust-version = "1.82.0"
+# Current reason for MSRV (please update when increasing MSRV): embuild depends
+# on the home crate, which requires rustc 1.88.0.
+rust-version = "1.88.0"
 
 [features]
 # The default features match those of libcoap's configure script for

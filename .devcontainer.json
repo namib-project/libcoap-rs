@@ -1,0 +1,35 @@
+{
+  "containerEnv": {
+    "HOME": "/home/vscode"
+  },
+  "containerUser": "vscode",
+  "customizations": {
+    "jetbrains": {
+      "plugins": [
+        "com.jetbrains.rust",
+        "systems.fehn.intellijdirenv"
+      ]
+    },
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "ms-vscode.cpptools",
+        "mkhl.direnv",
+        "vadimcn.vscode-lldb",
+        "tamasfe.even-better-toml"
+      ],
+      "settings": {
+        "rust-analyzer.cargo.features": [
+          "vendored"
+        ]
+      }
+    }
+  },
+  "image": "ghcr.io/cachix/devenv/devcontainer:latest",
+  "overrideCommand": false,
+  "runArgs": [
+    "--userns=keep-id:uid=1000,gid=1000"
+  ],
+  "updateContentCommand": "devenv test",
+  "updateRemoteUserUID": true
+}
