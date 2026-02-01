@@ -1,0 +1,156 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'libcoap_rs'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=libcoap-rs",
+                    "--features=vendored,default,dtls-rpk,dtls-pki"
+                ],
+                "filter": {
+                    "name": "libcoap_rs",
+                    "kind": "lib"
+                }
+            },
+            "initCommands":["settings set target.disable-aslr false"],
+            "args": [],
+            "cwd": "${workspaceFolder}/libcoap"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug integration test 'dtls_pki_client_server_test'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--test=dtls_pki_client_server_test",
+                    "--package=libcoap-rs",
+                    "--features=vendored,default,dtls-pki"
+                ],
+                "filter": {
+                    "name": "dtls_pki_client_server_test",
+                    "kind": "test"
+                }
+            },
+            "initCommands":["settings set target.disable-aslr false"],
+            "args": [],
+            "cwd": "${workspaceFolder}/libcoap"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug integration test 'dtls_psk_client_server_test'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--test=dtls_psk_client_server_test",
+                    "--package=libcoap-rs",
+                    "--features=vendored,default,dtls-psk,dtls-cid"
+                ],
+                "filter": {
+                    "name": "dtls_psk_client_server_test",
+                    "kind": "test"
+                }
+            },
+            "initCommands":["settings set target.disable-aslr false"],
+            "args": [],
+            "cwd": "${workspaceFolder}/libcoap"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug integration test 'dtls_rpk_client_server_test'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--test=dtls_rpk_client_server_test",
+                    "--package=libcoap-rs",
+                    "--features=vendored,default,dtls-rpk"
+                ],
+                "filter": {
+                    "name": "dtls_rpk_client_server_test",
+                    "kind": "test"
+                }
+            },
+            "initCommands":["settings set target.disable-aslr false"],
+            "args": [],
+            "cwd": "${workspaceFolder}/libcoap"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug integration test 'tcp_client_server_test'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--test=tcp_client_server_test",
+                    "--package=libcoap-rs",
+                    "--features=vendored,default"
+                ],
+                "filter": {
+                    "name": "tcp_client_server_test",
+                    "kind": "test"
+                }
+            },
+            "initCommands":["settings set target.disable-aslr false"],
+            "args": [],
+            "cwd": "${workspaceFolder}/libcoap"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug integration test 'udp_client_server_test'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--test=udp_client_server_test",
+                    "--package=libcoap-rs",
+                    "--features=vendored,default"
+                ],
+                "filter": {
+                    "name": "udp_client_server_test",
+                    "kind": "test"
+                }
+            },
+            "initCommands":["settings set target.disable-aslr false"],
+            "args": [],
+            "cwd": "${workspaceFolder}/libcoap"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'libcoap_sys'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=libcoap-sys",
+                    "--features=vendored,default,dtls-rpk,dtls-pki"
+                ],
+                "filter": {
+                    "name": "libcoap_sys",
+                    "kind": "lib"
+                }
+            },
+            "initCommands":["settings set target.disable-aslr false"],
+            "args": [],,
+            "cwd": "${workspaceFolder}/libcoap-sys"
+        }
+    ]
+}

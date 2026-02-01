@@ -201,7 +201,8 @@ let cn_validator = |
 // PKI certificate validation should be performed using the context builder's generics.
 let crypto_ctx = PkiRpkContextBuilder::<_, CertVerifying>::new(client_key_def)
                  // Provide the server with a Server Name Indication (might be required by
-                 // some servers to use the right certificate).
+                 // some servers to use the right certificate and by mbedTLS for certificate
+                 // validation).
                  .client_sni(server_name).unwrap()
                  // Use the CN validator we defined earlier.
                  .cn_validator(cn_validator)

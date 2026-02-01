@@ -13,7 +13,7 @@ of supported features.
 
 ## License
 
-Copyright © 2021-2025 Hugo Hakim Damer, the NAMIB Project Members, and the other libcoap-rs Contributors.
+Copyright © 2021-2026 Hugo Hakim Damer, the NAMIB Project Members, and the other libcoap-rs Contributors.
 All rights reserved.
 
 Matching the license of the libcoap C library, the libcoap-sys and the libcoap-rs crates are licensed under
