@@ -18,7 +18,7 @@ This repository is currently maintained by the following developers:
 
 ## Copyright Information
 
-Copyright © 2021-2025 Hugo Hakim Damer, the NAMIB Project Members, and the other libcoap-rs Contributors.
+Copyright © 2021-2026 Hugo Hakim Damer, the NAMIB Project Members, and the other libcoap-rs Contributors.
 All rights reserved.
 
 The libcoap-rs project (including both the libcoap-rs and libcoap-sys crates) is licensed under the
