@@ -61,7 +61,12 @@ pub fn dtls_client_server_request_common<KTY: KeyType, FC, FS>(
     );
 
     let server_address = common::get_unused_server_addr();
-    let client_crypto_ctx = client_ctx_setup(PkiRpkContextBuilder::<'static, KTY, NonCertVerifying>::new(client_key));
+    // Only returns error if provided vector for client_sni contains null bytes, which is impossible
+    // here. We can therefore unwrap.
+    let client_crypto_ctx_builder = PkiRpkContextBuilder::<'static, KTY, NonCertVerifying>::new(client_key)
+        .client_sni("server.example.com")
+        .unwrap();
+    let client_crypto_ctx = client_ctx_setup(client_crypto_ctx_builder);
     let server_handle = common::spawn_test_server(move |mut context: CoapContext| {
         let server_crypto_ctx =
             server_ctx_setup(PkiRpkContextBuilder::<'static, KTY, NonCertVerifying>::new(server_key));
