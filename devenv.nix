@@ -41,10 +41,10 @@ in {
         # Generic dependencies. We want LLDB for the VS Code dev container (gdb is also
         # provided by setting languages.c.enable = true).
         [ autoconf automake libtool pkg-config lldb rustPlatform.bindgenHook ]
-        # DTLS library specific dependencies
-        ++ (if config.dtls-library == "all" then [ openssl mbedtls gnutls wolfssl-libcoap ]
+        # DTLS library specific dependencies (mbedtls also needs zlib).
+        ++ (if config.dtls-library == "all" then [ openssl mbedtls gnutls wolfssl-libcoap zlib ]
            else if config.dtls-library == "openssl" then [ openssl ]
-           else if config.dtls-library == "mbedtls" then [ mbedtls ]
+           else if config.dtls-library == "mbedtls" then [ mbedtls zlib ]
            else if config.dtls-library == "gnutls" then [ gnutls ]
            else if config.dtls-library == "wolfssl" then [ wolfssl-libcoap ]
            else [])
@@ -154,12 +154,20 @@ in {
       clippy = {
         enable = true;
         settings.allFeatures = true;
+        packageOverrides = {
+            cargo = config.languages.rust.toolchainPackage;
+            clippy = config.languages.rust.toolchainPackage;
+        };
       };
       rustfmt = {
         enable = true;
         # Set to check mode so that we don't automatically make changes to the
         # code.
         settings.check = true;
+        packageOverrides = {
+            cargo = config.languages.rust.toolchainPackage;
+            rustfmt = config.languages.rust.toolchainPackage;
+        };
       };
     };
 
