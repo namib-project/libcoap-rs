@@ -142,6 +142,9 @@ pub enum RngError {
     /// RNG mutex is poisoned (panic in another thread while calling RNG function).
     #[error("CoAP RNG configuration error: global RNG mutex is poisoned")]
     GlobalMutexPoisonError,
+    /// Attempted to set CoapRng as RNG provided to libcoap.
+    #[error("CoAP RNG configuration error: attempted to provide libcoap's own RNG wrapper to itself")]
+    CoapRngAsCustomRng,
 }
 
 impl<T> From<PoisonError<T>> for RngError {
